@@ -1,5 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const VERIFY_SECRET = process.env.VERIFY_SECRET || "univibe-hk-verify-2026-secret";
+const VERIFY_SECRET = process.env.VERIFY_SECRET || "";
 const TEST_EMAILS = ["hokhimtang@gmail.com"];
 
 async function createHmac(secret, message) {

@@ -1,4 +1,4 @@
-const VERIFY_SECRET = process.env.VERIFY_SECRET || "univibe-hk-verify-2026-secret";
+const VERIFY_SECRET = process.env.VERIFY_SECRET || "";
 
 async function createHmac(secret, message) {
   const encoder = new TextEncoder();
