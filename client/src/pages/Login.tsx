@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Auth mode: 'choose' | 'login' | 'register-email' | 'register-verify' | 'register-setup'
@@ -8,7 +7,6 @@ type AuthMode = 'choose' | 'login' | 'register-email' | 'register-verify' | 'reg
 const TEST_EMAIL = 'hokhimtang@gmail.com';
 
 export default function Login() {
-  const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>('choose');
   
   // Login state
@@ -39,9 +37,9 @@ export default function Login() {
     const token = localStorage.getItem('univibe_token');
     const user = localStorage.getItem('univibe_user');
     if (token && user) {
-      navigate('/feed');
+      window.location.href = '/feed';
     }
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -140,7 +138,7 @@ export default function Login() {
       localStorage.setItem('univibe_user', JSON.stringify(data.user));
       
       setSuccess('註冊成功！歡迎加入 UniVibe HK 🎉');
-      setTimeout(() => navigate('/feed'), 1500);
+      setTimeout(() => window.location.href = '/feed', 1500);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -170,7 +168,7 @@ export default function Login() {
       localStorage.setItem('univibe_user', JSON.stringify(data.user));
       
       setSuccess('登入成功！');
-      setTimeout(() => navigate('/feed'), 800);
+      setTimeout(() => window.location.href = '/feed', 800);
     } catch (err: any) {
       setError(err.message);
     } finally {
