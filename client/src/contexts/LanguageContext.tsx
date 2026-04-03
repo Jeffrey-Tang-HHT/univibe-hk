@@ -175,13 +175,13 @@ const translations: Record<Language, Record<string, string>> = {
     "login.verify.subtitle": "我們已發送6位數驗證碼至",
     "login.verify.detected": "已偵測",
     "login.verify.cta": "驗證並加入",
-    "login.verify.hint": "Demo 模式：輸入任意6位數即可",
+    "login.verify.hint": "驗證碼已發送至你的電郵，10分鐘內有效",
     "login.success.title": "歡迎加入 UniVibe！",
     "login.success.subtitle": "你的身份已驗證。正在進入社群...",
     "login.success.redirect": "正在跳轉至動態牆...",
     "login.error.invalid_email": "請使用有效的 .edu.hk 電郵地址",
     "login.error.invalid_code": "請輸入完整的6位數驗證碼",
-    "login.toast.code_sent": "驗證碼已發送！（Demo 模式：輸入任意6位數）",
+    "login.toast.code_sent": "驗證碼已發送！請檢查你的電郵",
     "login.toast.verified": "驗證成功！",
 
     // Feed page
@@ -396,13 +396,13 @@ const translations: Record<Language, Record<string, string>> = {
     "login.verify.subtitle": "We sent a 6-digit code to",
     "login.verify.detected": "detected",
     "login.verify.cta": "Verify & Join",
-    "login.verify.hint": "Demo mode: enter any 6 digits",
+    "login.verify.hint": "Code sent to your email. Valid for 10 minutes.",
     "login.success.title": "Welcome to UniVibe!",
     "login.success.subtitle": "Your identity is verified. Entering the community...",
     "login.success.redirect": "Redirecting to feed...",
     "login.error.invalid_email": "Please use a valid .edu.hk email address",
     "login.error.invalid_code": "Please enter the full 6-digit code",
-    "login.toast.code_sent": "Code sent! (Demo mode: enter any 6 digits)",
+    "login.toast.code_sent": "Verification code sent! Check your email.",
     "login.toast.verified": "Verified successfully!",
 
     // Feed page

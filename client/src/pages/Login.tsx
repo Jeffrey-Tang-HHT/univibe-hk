@@ -300,16 +300,34 @@ export default function Login() {
                         onChange={(e) => {
                           const val = e.target.value.replace(/\D/g, "");
                           if (val) {
-                            const newCode = code.slice(0, i) + val + code.slice(i + 1);
+                            const newCode = code.slice(0, i) + val[0] + code.slice(i + 1);
                             setCode(newCode.slice(0, 6));
                             const next = e.target.nextElementSibling as HTMLInputElement;
-                            if (next && val) next.focus();
+                            if (next) next.focus();
                           }
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === "Backspace" && !code[i]) {
+                          if (e.key === "Backspace") {
+                            e.preventDefault();
+                            if (code[i]) {
+                              // Clear current digit
+                              const newCode = code.slice(0, i) + code.slice(i + 1);
+                              setCode(newCode);
+                            } else {
+                              // Move to previous and clear it
+                              const prev = (e.target as HTMLInputElement).previousElementSibling as HTMLInputElement;
+                              if (prev) {
+                                prev.focus();
+                                const newCode = code.slice(0, i - 1) + code.slice(i);
+                                setCode(newCode);
+                              }
+                            }
+                          } else if (e.key === "ArrowLeft") {
                             const prev = (e.target as HTMLInputElement).previousElementSibling as HTMLInputElement;
-                            if (prev) { prev.focus(); setCode(code.slice(0, i - 1) + code.slice(i)); }
+                            if (prev) prev.focus();
+                          } else if (e.key === "ArrowRight") {
+                            const next = (e.target as HTMLInputElement).nextElementSibling as HTMLInputElement;
+                            if (next) next.focus();
                           }
                         }}
                         disabled={loading}
