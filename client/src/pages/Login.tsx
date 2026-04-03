@@ -8,6 +8,7 @@ const TEST_EMAIL = 'hokhimtang@gmail.com';
 
 export default function Login() {
   const [mode, setMode] = useState<AuthMode>('choose');
+  const [isDark, setIsDark] = useState(false);
   
   // Login state
   const [loginUsername, setLoginUsername] = useState('');
@@ -39,6 +40,28 @@ export default function Login() {
     if (token && user) {
       window.location.href = '/feed';
     }
+  }, []);
+
+  useEffect(() => {
+    // Detect theme: check localStorage, document class, or system preference
+    const checkTheme = () => {
+      const stored = localStorage.getItem('theme') || localStorage.getItem('univibe_theme');
+      if (stored === 'dark') return true;
+      if (stored === 'light') return false;
+      if (document.documentElement.classList.contains('dark')) return true;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    };
+    setIsDark(checkTheme());
+    
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => setIsDark(checkTheme());
+    mediaQuery.addEventListener('change', handler);
+    
+    // Also observe class changes on html element
+    const observer = new MutationObserver(() => setIsDark(checkTheme()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    
+    return () => { mediaQuery.removeEventListener('change', handler); observer.disconnect(); };
   }, []);
 
   useEffect(() => {
@@ -216,12 +239,14 @@ export default function Login() {
   };
 
   // ============ SHARED UI COMPONENTS ============
-  const inputClass = "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all";
+  const inputClass = isDark
+    ? "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"
+    : "w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all";
   
   const buttonClass = (disabled = false) =>
     `w-full py-3 rounded-xl font-semibold text-white transition-all ${
       disabled
-        ? 'bg-white/10 cursor-not-allowed opacity-50'
+        ? isDark ? 'bg-white/10 cursor-not-allowed opacity-50' : 'bg-gray-200 cursor-not-allowed opacity-50'
         : 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98]'
     }`;
 
@@ -236,11 +261,11 @@ export default function Login() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a1625] via-[#1e1a2e] to-[#251e35] flex items-center justify-center p-4">
+    <div className={`min-h-screen flex items-center justify-center p-4 transition-colors ${isDark ? 'bg-gradient-to-br from-[#1a1625] via-[#1e1a2e] to-[#251e35]' : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'}`}>
       {/* Background decoration */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-rose-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-pink-500/10 rounded-full blur-3xl" />
+        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl ${isDark ? 'bg-rose-500/10' : 'bg-rose-500/5'}`} />
+        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full blur-3xl ${isDark ? 'bg-pink-500/10' : 'bg-pink-500/5'}`} />
       </div>
 
       <motion.div
@@ -253,17 +278,17 @@ export default function Login() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
             UniVibe HK
           </h1>
-          <p className="text-white/50 mt-1 text-sm">香港大學生社交平台</p>
+          <p className={isDark ? "text-white/50 mt-1 text-sm" : "text-gray-500 mt-1 text-sm"}>香港大學生社交平台</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <div className={isDark ? "bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl" : "bg-white border border-gray-200 rounded-2xl p-6 shadow-xl"}>
           <AnimatePresence mode="wait">
             
             {/* ========== CHOOSE: Login or Register ========== */}
             {mode === 'choose' && (
               <motion.div key="choose" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                <h2 className="text-xl font-bold text-white text-center mb-6">歡迎來到 UniVibe</h2>
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} text-center mb-6`}>歡迎來到 UniVibe</h2>
                 
                 <div className="space-y-3">
                   <button
@@ -278,7 +303,7 @@ export default function Login() {
                   
                   <button
                     onClick={() => { setMode('register-email'); setError(''); }}
-                    className="w-full py-4 rounded-xl font-semibold text-white bg-white/10 border border-white/20 hover:bg-white/15 active:scale-[0.98] transition-all"
+                    className={isDark ? "w-full py-4 rounded-xl font-semibold text-white bg-white/10 border border-white/20 hover:bg-white/15 active:scale-[0.98] transition-all" : "w-full py-4 rounded-xl font-semibold text-gray-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 active:scale-[0.98] transition-all"}
                   >
                     <div className="flex items-center justify-center gap-2">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
@@ -293,7 +318,7 @@ export default function Login() {
             {mode === 'login' && (
               <motion.div key="login" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
                 {backButton('choose')}
-                <h2 className="text-xl font-bold text-white mb-5">登入你的帳號</h2>
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} mb-5`}>登入你的帳號</h2>
                 
                 <div className="space-y-4">
                   <div>
@@ -352,7 +377,7 @@ export default function Login() {
                   </button>
                 </div>
 
-                <p className="text-center text-white/40 text-sm mt-4">
+                <p className={isDark ? "text-center text-white/40 text-sm mt-4" : "text-center text-gray-500 text-sm mt-4"}>
                   還沒有帳號？{' '}
                   <button onClick={() => { setMode('register-email'); setError(''); setSuccess(''); }} className="text-rose-400 hover:text-rose-300">
                     立即註冊
@@ -365,8 +390,8 @@ export default function Login() {
             {mode === 'register-email' && (
               <motion.div key="reg-email" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
                 {backButton('choose')}
-                <h2 className="text-xl font-bold text-white mb-1">建立帳號</h2>
-                <p className="text-white/40 text-sm mb-5">第 1 步：驗證你的學校電郵</p>
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} mb-1`}>建立帳號</h2>
+                <p className={isDark ? "text-white/40 text-sm mb-5" : "text-gray-500 text-sm mb-5"}>第 1 步：驗證你的學校電郵</p>
                 
                 <div className="space-y-4">
                   <div>
@@ -379,7 +404,7 @@ export default function Login() {
                       className={inputClass}
                       onKeyDown={e => e.key === 'Enter' && handleSendCode()}
                     />
-                    <p className="text-white/30 text-xs mt-1">需要 .edu.hk 學校電郵地址</p>
+                    <p className={isDark ? "text-white/30 text-xs mt-1" : "text-gray-400 text-xs mt-1"}>需要 .edu.hk 學校電郵地址</p>
                   </div>
 
                   {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -399,7 +424,7 @@ export default function Login() {
                   </button>
                 </div>
 
-                <p className="text-center text-white/40 text-sm mt-4">
+                <p className={isDark ? "text-center text-white/40 text-sm mt-4" : "text-center text-gray-500 text-sm mt-4"}>
                   已有帳號？{' '}
                   <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-rose-400 hover:text-rose-300">
                     登入
@@ -412,8 +437,8 @@ export default function Login() {
             {mode === 'register-verify' && (
               <motion.div key="reg-verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
                 {backButton('register-email')}
-                <h2 className="text-xl font-bold text-white mb-1">輸入驗證碼</h2>
-                <p className="text-white/40 text-sm mb-5">已發送至 {email}</p>
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} mb-1`}>輸入驗證碼</h2>
+                <p className={isDark ? "text-white/40 text-sm mb-5" : "text-gray-500 text-sm mb-5"}>已發送至 {email}</p>
 
                 <div className="flex justify-center gap-2 mb-4" onPaste={handleCodePaste}>
                   {code.map((digit, i) => (
@@ -426,7 +451,7 @@ export default function Login() {
                       value={digit}
                       onChange={e => handleCodeChange(i, e.target.value)}
                       onKeyDown={e => handleCodeKeyDown(i, e)}
-                      className="w-12 h-14 text-center text-xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"
+                      className={isDark ? "w-12 h-14 text-center text-xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all" : "w-12 h-14 text-center text-xl font-bold bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"}
                     />
                   ))}
                 </div>
@@ -447,7 +472,7 @@ export default function Login() {
                   ) : '驗證 Verify'}
                 </button>
 
-                <p className="text-center text-white/40 text-sm mt-3">
+                <p className={isDark ? "text-center text-white/40 text-sm mt-3" : "text-center text-gray-500 text-sm mt-3"}>
                   {cooldown > 0 ? `${cooldown}秒後可重新發送` : (
                     <button onClick={handleSendCode} className="text-rose-400 hover:text-rose-300">重新發送驗證碼</button>
                   )}
@@ -458,8 +483,8 @@ export default function Login() {
             {/* ========== REGISTER STEP 3: Set Username & Password ========== */}
             {mode === 'register-setup' && (
               <motion.div key="reg-setup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                <h2 className="text-xl font-bold text-white mb-1">設定你的帳號</h2>
-                <p className="text-white/40 text-sm mb-5">第 2 步：建立用戶名和密碼</p>
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} mb-1`}>設定你的帳號</h2>
+                <p className={isDark ? "text-white/40 text-sm mb-5" : "text-gray-500 text-sm mb-5"}>第 2 步：建立用戶名和密碼</p>
 
                 <div className="space-y-4">
                   <div>
@@ -473,7 +498,7 @@ export default function Login() {
                       maxLength={20}
                       autoComplete="username"
                     />
-                    <p className="text-white/30 text-xs mt-1">3-20個字符，字母、數字、底線</p>
+                    <p className={isDark ? "text-white/30 text-xs mt-1" : "text-gray-400 text-xs mt-1"}>3-20個字符，字母、數字、底線</p>
                   </div>
 
                   <div>
