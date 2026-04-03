@@ -1,4 +1,4 @@
-const VERIFY_SECRET = "univibe-hk-verify-2026-secret";
+const VERIFY_SECRET = Netlify.env.get("VERIFY_SECRET") || "univibe-hk-verify-2026-secret";
 
 async function createHmac(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();

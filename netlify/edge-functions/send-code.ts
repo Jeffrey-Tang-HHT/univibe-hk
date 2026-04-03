@@ -1,6 +1,6 @@
-const RESEND_API_KEY = "re_FzHDkjNY_GjAdczYVCvYr9qvAPvzCREk2";
-const VERIFY_SECRET = "univibe-hk-verify-2026-secret";
-const TEST_EMAILS = ["hokhimtang@gmail.com"]; // Allowed for testing
+const VERIFY_SECRET = Netlify.env.get("VERIFY_SECRET") || "univibe-hk-verify-2026-secret";
+const RESEND_API_KEY = Netlify.env.get("RESEND_API_KEY") || "";
+const TEST_EMAILS = ["hokhimtang@gmail.com"];
 
 async function createHmac(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -12,6 +12,8 @@ async function createHmac(secret: string, message: string): Promise<string> {
 export default async (req: Request) => {
   const h = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
   if (req.method === "OPTIONS") return new Response("", { status: 200, headers: h });
+
+  if (!RESEND_API_KEY) return new Response(JSON.stringify({ error: "Email service not configured" }), { status: 500, headers: h });
 
   try {
     const { email } = await req.json();
