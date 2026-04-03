@@ -27,7 +27,11 @@ const INSTITUTIONS: Record<string, string> = {
   "edu.hk": "HK Institution",
 };
 
+const TEST_EMAILS: Record<string, string> = { "hokhimtang@gmail.com": "Test Account" };
+
 function detectInstitution(email: string): string | null {
+  const testInst = TEST_EMAILS[email.toLowerCase()];
+  if (testInst) return testInst;
   const domain = email.split("@")[1]?.toLowerCase();
   if (!domain) return null;
   for (const [key, val] of Object.entries(INSTITUTIONS)) {
