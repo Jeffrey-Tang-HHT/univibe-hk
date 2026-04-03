@@ -10,6 +10,8 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Feed from "./pages/Feed";
 import Dating from "./pages/Dating";
+import Tools from "./pages/Tools";
+import Profile from "./pages/Profile";
 
 function Router() {
   return (
@@ -18,6 +20,8 @@ function Router() {
       <Route path={"/login"} component={Login} />
       <Route path={"/feed"} component={Feed} />
       <Route path={"/dating"} component={Dating} />
+      <Route path={"/tools"} component={Tools} />
+      <Route path={"/profile"} component={Profile} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

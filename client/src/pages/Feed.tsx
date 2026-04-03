@@ -39,17 +39,6 @@ const MOCK_POSTS_ZH: Post[] = [
   { id: "8", author: "HKUST · ENFJ", authorTag: "HKUST · ENFJ", privacyMode: "campus", category: "mbti", content: "MBTI 測試話我係 ENFJ 但我覺得自己好 introverted 🤔 有冇人都係咁？", likes: 134, comments: 78, timeAgo: "6小時前", liked: false },
 ];
 
-const MOCK_POSTS_EN: Post[] = [
-  { id: "1", author: "Anonymous", authorTag: "Anonymous", privacyMode: "ghost", category: "trending", content: "Does anyone feel like this semester's workload is way heavier than last year? I've been pulling all-nighters for 3 days straight 😭", likes: 142, comments: 38, timeAgo: "2h ago", liked: false },
-  { id: "2", author: "HKU · ENFP", authorTag: "HKU · ENFP", privacyMode: "campus", category: "non-jupas", content: "Got into HKU BBA via Non-JUPAS! GPA 3.7, prepped for interviews for 2 months. AMA 🎉", likes: 287, comments: 94, timeAgo: "5h ago", liked: false },
-  { id: "3", author: "PolyU · Design · INFJ", authorTag: "PolyU · Design · INFJ", privacyMode: "major", category: "mbti", content: "Are INFJs and ENTPs really a perfect match? My project partner and I argue all the time but produce great work 😂", likes: 203, comments: 67, timeAgo: "8h ago", liked: false },
-  { id: "4", author: "Anonymous", authorTag: "Anonymous", privacyMode: "ghost", category: "missed", content: "To the guy in the black cap at HKCC library 2/F at 3PM today — you dropped your student ID, I left it at the counter 🫣", likes: 89, comments: 23, timeAgo: "1h ago", liked: false },
-  { id: "5", author: "CityU · ISTJ", authorTag: "CityU · ISTJ", privacyMode: "campus", category: "salary", content: "Big 4 summer intern salary HK$18,000/mo, no OT pay but learned a lot. Worth it?", likes: 356, comments: 112, timeAgo: "12h ago", liked: false },
-  { id: "6", author: "Anonymous", authorTag: "Anonymous", privacyMode: "ghost", category: "trending", content: "School canteen raised prices AGAIN 😤 $48 for a roast meat rice is robbery", likes: 521, comments: 156, timeAgo: "3h ago", liked: false },
-  { id: "7", author: "CUHK · CS · INTP", authorTag: "CUHK · CS · INTP", privacyMode: "major", category: "non-jupas", content: "My experience transferring to CUHK CS from Associate Degree: Portfolio matters more than GPA, interview focused on projects", likes: 178, comments: 45, timeAgo: "1d ago", liked: false },
-  { id: "8", author: "HKUST · ENFJ", authorTag: "HKUST · ENFJ", privacyMode: "campus", category: "mbti", content: "MBTI says I'm ENFJ but I feel so introverted 🤔 Anyone else relate?", likes: 134, comments: 78, timeAgo: "6h ago", liked: false },
-];
-
 const privacyIcons: Record<PrivacyMode, typeof Ghost> = {
   ghost: Ghost,
   campus: School,
@@ -75,9 +64,7 @@ export default function Feed() {
   const [, setLocation] = useLocation();
 
   const currentPosts = useMemo(() => {
-    // Always show posts in their original language — user content stays authentic
     const source = MOCK_POSTS_ZH;
-    // Merge liked state from current posts
     const merged = source.map(p => {
       const existing = posts.find(ep => ep.id === p.id);
       return existing ? { ...p, liked: existing.liked, likes: existing.likes } : p;
@@ -131,7 +118,6 @@ export default function Feed() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar + Main layout */}
       <div className="flex">
         {/* Desktop Sidebar */}
         <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 border-r border-border bg-card/50 p-4">
@@ -151,12 +137,12 @@ export default function Feed() {
             <a href="/dating" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm">
               <HeartHandshake className="w-4 h-4" /> {t("feed.nav.dating")}
             </a>
-            <button onClick={() => toast(t("common.coming_soon"))} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm w-full text-left">
+            <a href="/tools" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm">
               <Wrench className="w-4 h-4" /> {t("feed.nav.tools")}
-            </button>
-            <button onClick={() => toast(t("common.coming_soon"))} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm w-full text-left">
+            </a>
+            <a href="/profile" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm">
               <User className="w-4 h-4" /> {t("feed.nav.profile")}
-            </button>
+            </a>
           </nav>
 
           <div className="space-y-2 pt-4 border-t border-border">
@@ -178,7 +164,7 @@ export default function Feed() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 min-h-screen">
+        <main className="flex-1 min-h-screen pb-20 lg:pb-0">
           {/* Mobile top bar */}
           <div className="lg:hidden sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 px-4 py-3 flex items-center justify-between">
             <a href="/" className="flex items-center gap-2">
@@ -266,7 +252,6 @@ export default function Feed() {
                       </button>
                     </div>
 
-                    {/* Privacy mode selector */}
                     <div className="flex gap-2 mb-4">
                       {(["ghost", "campus", "major"] as PrivacyMode[]).map((mode) => {
                         const Icon = privacyIcons[mode];
@@ -320,7 +305,6 @@ export default function Feed() {
                     transition={{ delay: i * 0.05 }}
                     className="p-5 rounded-xl border border-border bg-card hover:border-border/80 transition-all"
                   >
-                    {/* Author row */}
                     <div className="flex items-center gap-2.5 mb-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${privacyColors[post.privacyMode]}`}>
                         <Icon className="w-3.5 h-3.5" />
@@ -331,10 +315,8 @@ export default function Feed() {
                       </div>
                     </div>
 
-                    {/* Content */}
                     <p className="text-sm text-foreground leading-relaxed mb-4">{post.content}</p>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-4">
                       <button
                         onClick={() => handleLike(post.id)}
@@ -378,14 +360,14 @@ export default function Feed() {
             <HeartHandshake className="w-5 h-5" />
             <span className="text-[10px]">{t("feed.nav.dating")}</span>
           </a>
-          <button onClick={() => toast(t("common.coming_soon"))} className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
+          <a href="/tools" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
             <Wrench className="w-5 h-5" />
             <span className="text-[10px]">{t("feed.nav.tools")}</span>
-          </button>
-          <button onClick={() => toast(t("common.coming_soon"))} className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
+          </a>
+          <a href="/profile" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
             <User className="w-5 h-5" />
             <span className="text-[10px]">{t("feed.nav.profile")}</span>
-          </button>
+          </a>
         </div>
       </div>
     </div>
