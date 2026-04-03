@@ -1,10 +1,7 @@
 [build]
-  command = "pnpm install --no-frozen-lockfile && pnpm run build"
+  command = "npm install --legacy-peer-deps && npx vite build"
   publish = "dist/public"
   functions = "netlify/functions"
-
-[build.environment]
-  NPM_FLAGS = "--legacy-peer-deps"
 
 [functions]
   node_bundler = "esbuild"
