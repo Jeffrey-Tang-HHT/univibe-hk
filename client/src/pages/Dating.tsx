@@ -19,9 +19,14 @@ type DatingTab = "discover" | "matches" | "profile";
 interface MatchProfile {
   id: string;
   gender: "male" | "female" | "nonbinary";
+  age: number;
   mbti: string;
   institution: string;
+  faculty: string;
   major: string;
+  district: string;
+  relationshipType: string;
+  religion: string;
   interests: string[];
   bio: string;
   blurLevel: number;
@@ -41,19 +46,98 @@ const SEXUALITY_OPTIONS = [
   { key: "pansexual", zh: "泛性戀", en: "Pansexual" },
   { key: "asexual", zh: "無性戀", en: "Asexual" },
   { key: "queer", zh: "酷兒", en: "Queer" },
-  { key: "questioning", zh: "探索中", en: "Questioning" },
-  { key: "prefer_not_to_say", zh: "不願透露", en: "Prefer not to say" },
+  { key: "other_s", zh: "其他", en: "Other" },
+  { key: "unsure", zh: "未確定", en: "Unsure" },
+];
+
+const INSTITUTION_OPTIONS = [
+  { key: "HKU", zh: "香港大學", en: "HKU" },
+  { key: "CUHK", zh: "中文大學", en: "CUHK" },
+  { key: "HKUST", zh: "科技大學", en: "HKUST" },
+  { key: "PolyU", zh: "理工大學", en: "PolyU" },
+  { key: "CityU", zh: "城市大學", en: "CityU" },
+  { key: "HKBU", zh: "浸會大學", en: "HKBU" },
+  { key: "LingU", zh: "嶺南大學", en: "LU" },
+  { key: "EdUHK", zh: "教育大學", en: "EdUHK" },
+  { key: "other_i", zh: "其他", en: "Others" },
+];
+
+const FACULTY_OPTIONS = [
+  { key: "Architecture", zh: "建築", en: "Architecture" },
+  { key: "Arts", zh: "文學", en: "Arts" },
+  { key: "Business", zh: "商學", en: "Business" },
+  { key: "Dentistry", zh: "牙醫", en: "Dentistry" },
+  { key: "Education", zh: "教育", en: "Education" },
+  { key: "Engineering", zh: "工程", en: "Engineering" },
+  { key: "Law", zh: "法律", en: "Law" },
+  { key: "Medicine", zh: "醫學", en: "Medicine" },
+  { key: "Science", zh: "理學", en: "Science" },
+  { key: "Social Sciences", zh: "社會科學", en: "Social Sciences" },
+  { key: "Creative Media", zh: "創意媒體", en: "Creative Media" },
+  { key: "Design", zh: "設計", en: "Design" },
+  { key: "Journalism", zh: "新聞", en: "Journalism" },
+  { key: "Translation", zh: "翻譯", en: "Translation" },
+  { key: "other_f", zh: "其他", en: "Other" },
+];
+
+const DISTRICT_OPTIONS = [
+  { key: "central_western", zh: "中西區", en: "Central & Western" },
+  { key: "eastern", zh: "東區", en: "Eastern" },
+  { key: "southern", zh: "南區", en: "Southern" },
+  { key: "wan_chai", zh: "灣仔區", en: "Wan Chai" },
+  { key: "kowloon_city", zh: "九龍城區", en: "Kowloon City" },
+  { key: "kwun_tong", zh: "觀塘區", en: "Kwun Tong" },
+  { key: "sham_shui_po", zh: "深水埗區", en: "Sham Shui Po" },
+  { key: "wong_tai_sin", zh: "黃大仙區", en: "Wong Tai Sin" },
+  { key: "yau_tsim_mong", zh: "油尖旺區", en: "Yau Tsim Mong" },
+  { key: "kwai_tsing", zh: "葵青區", en: "Kwai Tsing" },
+  { key: "north", zh: "北區", en: "North" },
+  { key: "sai_kung", zh: "西貢區", en: "Sai Kung" },
+  { key: "sha_tin", zh: "沙田區", en: "Sha Tin" },
+  { key: "tai_po", zh: "大埔區", en: "Tai Po" },
+  { key: "tsuen_wan", zh: "荃灣區", en: "Tsuen Wan" },
+  { key: "tuen_mun", zh: "屯門區", en: "Tuen Mun" },
+  { key: "yuen_long", zh: "元朗區", en: "Yuen Long" },
+  { key: "islands", zh: "離島區", en: "Islands" },
+];
+
+const RELATIONSHIP_OPTIONS = [
+  { key: "long_term", zh: "長期關係", en: "Long-term" },
+  { key: "short_term", zh: "短期關係", en: "Short-term" },
+  { key: "casual", zh: "隨意交往", en: "Casual" },
+  { key: "friends_first", zh: "先做朋友", en: "Friends first" },
+  { key: "not_sure", zh: "未確定", en: "Not sure yet" },
+];
+
+const RELIGION_OPTIONS = [
+  { key: "none", zh: "無宗教", en: "None" },
+  { key: "christian", zh: "基督教", en: "Christian" },
+  { key: "catholic", zh: "天主教", en: "Catholic" },
+  { key: "buddhist", zh: "佛教", en: "Buddhist" },
+  { key: "taoist", zh: "道教", en: "Taoist" },
+  { key: "muslim", zh: "伊斯蘭教", en: "Muslim" },
+  { key: "hindu", zh: "印度教", en: "Hindu" },
+  { key: "spiritual", zh: "有靈性信仰", en: "Spiritual" },
+  { key: "other_r", zh: "其他", en: "Other" },
+  { key: "prefer_not_to_say_r", zh: "不願透露", en: "Prefer not to say" },
+];
+
+const AGE_OPTIONS = [
+  { key: "18-20", zh: "18-20歲", en: "18-20" },
+  { key: "21-23", zh: "21-23歲", en: "21-23" },
+  { key: "24-26", zh: "24-26歲", en: "24-26" },
+  { key: "27+", zh: "27歲以上", en: "27+" },
 ];
 
 const MOCK_PROFILES: MatchProfile[] = [
-  { id: "m1", gender: "female", mbti: "INFJ", institution: "HKU", major: "Psychology", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92 },
-  { id: "m2", gender: "male", mbti: "ENTP", institution: "CUHK", major: "Business", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87 },
-  { id: "m3", gender: "female", mbti: "ISFP", institution: "PolyU", major: "Design", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2 },
-  { id: "m4", gender: "male", mbti: "ENTJ", institution: "HKUST", major: "Engineering", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1 },
-  { id: "m5", gender: "nonbinary", mbti: "INFP", institution: "CityU", major: "Creative Media", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0 },
-  { id: "m6", gender: "female", mbti: "ESTJ", institution: "HKBU", major: "Journalism", interests: ["News", "Running", "Karaoke"], bio: "新聞系，鍾意跑步同唱K 🎤", blurLevel: 45, messages: 8, sexuality: "straight", compatibility: 71, lastMessage: "下次一齊去唱K！", lastMessageTime: "1日前", unread: 0 },
-  { id: "m7", gender: "male", mbti: "ENFJ", institution: "EdUHK", major: "Education", interests: ["Music", "Cooking", "Travel"], bio: "未來老師一個，鍾意彈結他同煮嘢食 🎸", blurLevel: 20, messages: 0, sexuality: "straight", compatibility: 88 },
-  { id: "m8", gender: "male", mbti: "ISTP", institution: "LingU", major: "Translation", interests: ["Gaming", "Coffee", "Film"], bio: "翻譯系，安靜但打機好認真 🎮", blurLevel: 0, messages: 0, sexuality: "bisexual", compatibility: 75 },
+  { id: "m1", gender: "female", age: 21, mbti: "INFJ", institution: "HKU", faculty: "Social Sciences", major: "Psychology", district: "central_western", relationshipType: "long_term", religion: "none", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92 },
+  { id: "m2", gender: "male", age: 22, mbti: "ENTP", institution: "CUHK", faculty: "Business", major: "Business", district: "sha_tin", relationshipType: "casual", religion: "christian", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87 },
+  { id: "m3", gender: "female", age: 20, mbti: "ISFP", institution: "PolyU", faculty: "Design", major: "Design", district: "kowloon_city", relationshipType: "friends_first", religion: "buddhist", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2 },
+  { id: "m4", gender: "male", age: 24, mbti: "ENTJ", institution: "HKUST", faculty: "Engineering", major: "Engineering", district: "sai_kung", relationshipType: "long_term", religion: "none", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1 },
+  { id: "m5", gender: "nonbinary", age: 23, mbti: "INFP", institution: "CityU", faculty: "Creative Media", major: "Creative Media", district: "kowloon_city", relationshipType: "not_sure", religion: "spiritual", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0 },
+  { id: "m6", gender: "female", age: 21, mbti: "ESTJ", institution: "HKBU", faculty: "Journalism", major: "Journalism", district: "kowloon_city", relationshipType: "short_term", religion: "catholic", interests: ["News", "Running", "Karaoke"], bio: "新聞系，鍾意跑步同唱K 🎤", blurLevel: 45, messages: 8, sexuality: "straight", compatibility: 71, lastMessage: "下次一齊去唱K！", lastMessageTime: "1日前", unread: 0 },
+  { id: "m7", gender: "male", age: 22, mbti: "ENFJ", institution: "EdUHK", faculty: "Education", major: "Education", district: "tai_po", relationshipType: "long_term", religion: "christian", interests: ["Music", "Cooking", "Travel"], bio: "未來老師一個，鍾意彈結他同煮嘢食 🎸", blurLevel: 20, messages: 0, sexuality: "straight", compatibility: 88 },
+  { id: "m8", gender: "male", age: 25, mbti: "ISTP", institution: "LingU", faculty: "Translation", major: "Translation", district: "tuen_mun", relationshipType: "casual", religion: "none", interests: ["Gaming", "Coffee", "Film"], bio: "翻譯系，安靜但打機好認真 🎮", blurLevel: 0, messages: 0, sexuality: "bisexual", compatibility: 75 },
 ];
 
 const INTEREST_OPTIONS = [
@@ -133,6 +217,13 @@ export default function Dating() {
   const [selectedMbti, setSelectedMbti] = useState("");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [filterSexuality, setFilterSexuality] = useState("all");
+  const [filterInstitution, setFilterInstitution] = useState("all");
+  const [filterFaculty, setFilterFaculty] = useState("all");
+  const [filterDistrict, setFilterDistrict] = useState("all");
+  const [filterRelationship, setFilterRelationship] = useState("all");
+  const [filterAge, setFilterAge] = useState("all");
+  const [filterReligion, setFilterReligion] = useState("all");
+  const [filterGender, setFilterGender] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState("");
@@ -164,10 +255,27 @@ export default function Dating() {
   const [, setLocation] = useLocation();
 
   const filteredProfiles = useMemo(() => {
-    const available = MOCK_PROFILES.filter(p => p.messages === 0);
-    if (filterSexuality === "all") return available;
-    return available.filter(p => p.sexuality === filterSexuality);
-  }, [filterSexuality]);
+    let available = MOCK_PROFILES.filter(p => p.messages === 0);
+    if (filterSexuality !== "all") available = available.filter(p => p.sexuality === filterSexuality);
+    if (filterInstitution !== "all") available = available.filter(p => p.institution === filterInstitution);
+    if (filterFaculty !== "all") available = available.filter(p => p.faculty === filterFaculty);
+    if (filterDistrict !== "all") available = available.filter(p => p.district === filterDistrict);
+    if (filterRelationship !== "all") available = available.filter(p => p.relationshipType === filterRelationship);
+    if (filterReligion !== "all") available = available.filter(p => p.religion === filterReligion);
+    if (filterGender !== "all") available = available.filter(p => p.gender === filterGender);
+    if (filterAge !== "all") {
+      available = available.filter(p => {
+        if (filterAge === "18-20") return p.age >= 18 && p.age <= 20;
+        if (filterAge === "21-23") return p.age >= 21 && p.age <= 23;
+        if (filterAge === "24-26") return p.age >= 24 && p.age <= 26;
+        if (filterAge === "27+") return p.age >= 27;
+        return true;
+      });
+    }
+    return available;
+  }, [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterAge, filterReligion, filterGender]);
+
+  const activeFilterCount = [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterAge, filterReligion, filterGender].filter(f => f !== "all").length;
 
   const matchedProfiles = useMemo(() => {
     return MOCK_PROFILES.filter(p => p.messages > 0).sort((a, b) => (b.unread || 0) - (a.unread || 0));
@@ -285,16 +393,85 @@ export default function Dating() {
                   <motion.div key="discover" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                     <div className="flex items-center justify-between mb-5">
                       <div><h2 className="font-display text-lg font-bold text-foreground">探索配對</h2><p className="text-xs text-muted-foreground mt-0.5">個性優先，外貌其後 ✨</p></div>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setShowFilters(!showFilters)}><Settings className="w-4 h-4 mr-1" /> 篩選</Button>
+                      <Button variant="ghost" size="sm" className="text-muted-foreground relative" onClick={() => setShowFilters(!showFilters)}>
+                        <Settings className="w-4 h-4 mr-1" /> 篩選
+                        {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-neon-coral text-white text-[10px] flex items-center justify-center">{activeFilterCount}</span>}
+                      </Button>
                     </div>
                     <AnimatePresence>{showFilters && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-5">
-                        <div className="p-4 rounded-xl border border-border bg-card">
-                          <p className="text-xs font-medium text-muted-foreground mb-2.5">性取向篩選</p>
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setFilterSexuality("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground"}`}>全部</button>
-                            {SEXUALITY_OPTIONS.map((opt) => (<button key={opt.key} onClick={() => setFilterSexuality(opt.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === opt.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground"}`}>{lang === "zh" ? opt.zh : opt.en}</button>))}
+                        <div className="p-4 rounded-xl border border-border bg-card space-y-4 max-h-[60vh] overflow-y-auto">
+                          {/* Gender */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">性別 Gender</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {[{key:"all",zh:"全部"},{key:"male",zh:"♂ 男"},{key:"female",zh:"♀ 女"},{key:"nonbinary",zh:"⚧ 非二元"}].map(o => (
+                                <button key={o.key} onClick={() => setFilterGender(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterGender === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{o.zh}</button>
+                              ))}
+                            </div>
                           </div>
+                          {/* Sexuality */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">性取向 Sexuality</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterSexuality("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {SEXUALITY_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterSexuality(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* Age */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">年齡 Age</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterAge("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterAge === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {AGE_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterAge(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterAge === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* Institution */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">院校 School</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterInstitution("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterInstitution === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {INSTITUTION_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterInstitution(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterInstitution === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* Faculty */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">學院 Faculty</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterFaculty("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFaculty === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {FACULTY_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterFaculty(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFaculty === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* District */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">地區 District</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterDistrict("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterDistrict === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {DISTRICT_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterDistrict(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterDistrict === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* Relationship Type */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">關係類型 Relationship</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterRelationship("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterRelationship === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {RELATIONSHIP_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterRelationship(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterRelationship === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* Religion */}
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">宗教 Religion</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <button onClick={() => setFilterReligion("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterReligion === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              {RELIGION_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterReligion(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterReligion === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            </div>
+                          </div>
+                          {/* Reset filters */}
+                          {activeFilterCount > 0 && (
+                            <button onClick={() => { setFilterSexuality("all"); setFilterInstitution("all"); setFilterFaculty("all"); setFilterDistrict("all"); setFilterRelationship("all"); setFilterAge("all"); setFilterReligion("all"); setFilterGender("all"); }} className="w-full py-2 rounded-lg text-xs font-medium text-neon-coral hover:bg-neon-coral/10 transition-all">
+                              清除所有篩選 ({activeFilterCount})
+                            </button>
+                          )}
                         </div>
                       </motion.div>
                     )}</AnimatePresence>
