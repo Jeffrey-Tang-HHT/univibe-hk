@@ -216,13 +216,13 @@ export default function Login() {
   };
 
   // ============ SHARED UI COMPONENTS ============
-  const inputClass = "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400/50 transition-all";
+  const inputClass = "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all";
   
   const buttonClass = (disabled = false) =>
     `w-full py-3 rounded-xl font-semibold text-white transition-all ${
       disabled
         ? 'bg-white/10 cursor-not-allowed opacity-50'
-        : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-lg shadow-orange-500/25 active:scale-[0.98]'
+        : 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98]'
     }`;
 
   const backButton = (target: AuthMode) => (
@@ -236,11 +236,11 @@ export default function Login() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#1a1625] via-[#1e1a2e] to-[#251e35] flex items-center justify-center p-4">
       {/* Background decoration */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-rose-500/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-pink-500/10 rounded-full blur-3xl" />
       </div>
 
       <motion.div
@@ -250,7 +250,7 @@ export default function Login() {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
             UniVibe HK
           </h1>
           <p className="text-white/50 mt-1 text-sm">香港大學生社交平台</p>
@@ -268,7 +268,7 @@ export default function Login() {
                 <div className="space-y-3">
                   <button
                     onClick={() => { setMode('login'); setError(''); }}
-                    className="w-full py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-lg shadow-orange-500/25 active:scale-[0.98] transition-all"
+                    className="w-full py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all"
                   >
                     <div className="flex items-center justify-center gap-2">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
@@ -354,7 +354,7 @@ export default function Login() {
 
                 <p className="text-center text-white/40 text-sm mt-4">
                   還沒有帳號？{' '}
-                  <button onClick={() => { setMode('register-email'); setError(''); setSuccess(''); }} className="text-orange-400 hover:text-orange-300">
+                  <button onClick={() => { setMode('register-email'); setError(''); setSuccess(''); }} className="text-rose-400 hover:text-rose-300">
                     立即註冊
                   </button>
                 </p>
@@ -401,7 +401,7 @@ export default function Login() {
 
                 <p className="text-center text-white/40 text-sm mt-4">
                   已有帳號？{' '}
-                  <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-orange-400 hover:text-orange-300">
+                  <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-rose-400 hover:text-rose-300">
                     登入
                   </button>
                 </p>
@@ -426,7 +426,7 @@ export default function Login() {
                       value={digit}
                       onChange={e => handleCodeChange(i, e.target.value)}
                       onKeyDown={e => handleCodeKeyDown(i, e)}
-                      className="w-12 h-14 text-center text-xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-orange-400 focus:ring-1 focus:ring-orange-400/50 transition-all"
+                      className="w-12 h-14 text-center text-xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"
                     />
                   ))}
                 </div>
@@ -449,7 +449,7 @@ export default function Login() {
 
                 <p className="text-center text-white/40 text-sm mt-3">
                   {cooldown > 0 ? `${cooldown}秒後可重新發送` : (
-                    <button onClick={handleSendCode} className="text-orange-400 hover:text-orange-300">重新發送驗證碼</button>
+                    <button onClick={handleSendCode} className="text-rose-400 hover:text-rose-300">重新發送驗證碼</button>
                   )}
                 </p>
               </motion.div>

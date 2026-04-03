@@ -1,26 +1,75 @@
-const VERIFY_SECRET = process.env.VERIFY_SECRET || "";
+// Verify email code
+// POST /api/verify-code
+// Body: { email, code }
 
-async function createHmac(secret, message) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+import { createHmac } from 'crypto';
+
+const VERIFY_SECRET = process.env.VERIFY_SECRET;
+if (!VERIFY_SECRET) throw new Error('VERIFY_SECRET env var not set');
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+
+function generateExpectedCode(email, windowMinutes = 10) {
+  // Try current and recent time windows
+  const now = Date.now();
+  const codes = [];
+  
+  for (let i = 0; i <= windowMinutes; i++) {
+    const windowTime = Math.floor((now - i * 60 * 1000) / (60 * 1000));
+    const hmac = createHmac('sha256', VERIFY_SECRET)
+      .update(`${email}:${windowTime}`)
+      .digest('hex');
+    const code = hmac.substring(0, 6).replace(/[a-f]/g, c => 
+      String(c.charCodeAt(0) - 87)
+    ).substring(0, 6).padStart(6, '0');
+    codes.push(code);
+  }
+  
+  return codes;
 }
 
-export default async (req) => {
-  const h = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
-  if (req.method === "OPTIONS") return new Response("", { status: 200, headers: h });
+export default async (request) => {
+  if (request.method === 'OPTIONS') {
+    return new Response('', { headers: corsHeaders });
+  }
+
   try {
-    const { email, code, token } = await req.json();
-    if (!email || !code || !token) return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400, headers: h });
-    const [receivedHmac, expiryStr] = token.split(":");
-    const expiry = parseInt(expiryStr, 10);
-    if (Date.now() > expiry) return new Response(JSON.stringify({ error: "Code expired" }), { status: 400, headers: h });
-    const expected = await createHmac(VERIFY_SECRET, `${email.toLowerCase()}:${code}:${expiry}`);
-    if (receivedHmac !== expected) return new Response(JSON.stringify({ error: "Invalid code" }), { status: 400, headers: h });
-    return new Response(JSON.stringify({ success: true, verified: true }), { status: 200, headers: h });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: "Server error" }), { status: 500, headers: h });
+    const body = await request.json();
+    const { email, code } = body;
+
+    if (!email || !code) {
+      return Response.json(
+        { error: '請提供電郵和驗證碼 / Missing email or code' },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Generate all valid codes for the time window
+    const validCodes = generateExpectedCode(email);
+    
+    if (validCodes.includes(code)) {
+      return Response.json(
+        { success: true, message: '驗證成功 / Verification successful' },
+        { headers: corsHeaders }
+      );
+    } else {
+      return Response.json(
+        { error: '驗證碼錯誤或已過期 / Invalid or expired code' },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+  } catch (err) {
+    console.error('Verify error:', err);
+    return Response.json(
+      { error: '驗證失敗 / Verification failed' },
+      { status: 500, headers: corsHeaders }
+    );
   }
 };
-export const config = { path: "/api/verify-code" };
+
+export const config = { path: '/api/verify-code' };
