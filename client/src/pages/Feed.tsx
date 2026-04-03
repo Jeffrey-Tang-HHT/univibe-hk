@@ -75,7 +75,8 @@ export default function Feed() {
   const [, setLocation] = useLocation();
 
   const currentPosts = useMemo(() => {
-    const source = lang === "zh" ? MOCK_POSTS_ZH : MOCK_POSTS_EN;
+    // Always show posts in their original language — user content stays authentic
+    const source = MOCK_POSTS_ZH;
     // Merge liked state from current posts
     const merged = source.map(p => {
       const existing = posts.find(ep => ep.id === p.id);
@@ -86,7 +87,7 @@ export default function Feed() {
       filtered = filtered.filter(p => p.content.toLowerCase().includes(searchQuery.toLowerCase()));
     }
     return filtered;
-  }, [category, lang, posts, searchQuery]);
+  }, [category, posts, searchQuery]);
 
   const categories = [
     { key: "all" as Category, label: t("feed.cat.all"), icon: TrendingUp },
