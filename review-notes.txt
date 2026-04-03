@@ -1,0 +1,29 @@
+Visual Review Notes - UniVibe HK Landing Page
+==============================================
+
+Light Mode (Default):
+- Hero section: Clean white/cream background with coral/pink gradient accents. Text is dark and readable.
+- Institutions marquee: Scrolling school names visible
+- Verification section: 3 privacy mode cards with green/coral/pink accent badges
+- Features section: 4 feature cards in 2x2 grid with subtle colored icons
+- Dating section: Numbered steps (01-04) with coral accent numbers
+- Campus Tools: 3 tool cards with colored icons
+- Pricing: Free vs Pro cards, Pro has coral gradient CTA button, "Popular" badge
+- B2B section: Recruitment seats + Hyper-local ads cards
+- Tech section: 4 tech cards in 2x2 grid
+- CTA section: Clean with coral gradient CTA button
+- Footer: Clean with links organized in columns
+
+Dark Mode:
+- Properly switches to dark backgrounds with light text
+- All accent colors (coral/pink/cyan) remain vibrant against dark bg
+- Cards have dark background with subtle borders
+
+Language Toggle:
+- Chinese (default): All text properly in Traditional Chinese
+- English: All text properly switches to English
+- Toggle button shows globe icon with correct hint text
+
+Issues Found:
+- None critical. Both toggles work correctly.
+- Light theme is now properly the default (fixed next-themes conflict).
