@@ -1,15 +1,14 @@
 [build]
   command = "npm install --legacy-peer-deps && npx vite build"
   publish = "dist/public"
-  functions = "netlify/functions"
 
-[functions]
-  node_bundler = "esbuild"
+[[edge_functions]]
+  function = "send-code"
+  path = "/api/send-code"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+[[edge_functions]]
+  function = "verify-code"
+  path = "/api/verify-code"
 
 [[redirects]]
   from = "/*"
