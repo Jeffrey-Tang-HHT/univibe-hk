@@ -221,7 +221,7 @@ export default function Dating() {
   const [filterFaculty, setFilterFaculty] = useState("all");
   const [filterDistrict, setFilterDistrict] = useState("all");
   const [filterRelationship, setFilterRelationship] = useState("all");
-  const [filterAge, setFilterAge] = useState("all");
+  const [filterAge, setFilterAge] = useState<[number, number]>([18, 30]);
   const [filterReligion, setFilterReligion] = useState("all");
   const [filterGender, setFilterGender] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -263,19 +263,13 @@ export default function Dating() {
     if (filterRelationship !== "all") available = available.filter(p => p.relationshipType === filterRelationship);
     if (filterReligion !== "all") available = available.filter(p => p.religion === filterReligion);
     if (filterGender !== "all") available = available.filter(p => p.gender === filterGender);
-    if (filterAge !== "all") {
-      available = available.filter(p => {
-        if (filterAge === "18-20") return p.age >= 18 && p.age <= 20;
-        if (filterAge === "21-23") return p.age >= 21 && p.age <= 23;
-        if (filterAge === "24-26") return p.age >= 24 && p.age <= 26;
-        if (filterAge === "27+") return p.age >= 27;
-        return true;
-      });
+    if (filterAge[0] !== 18 || filterAge[1] !== 30) {
+      available = available.filter(p => p.age >= filterAge[0] && p.age <= filterAge[1]);
     }
     return available;
   }, [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterAge, filterReligion, filterGender]);
 
-  const activeFilterCount = [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterAge, filterReligion, filterGender].filter(f => f !== "all").length;
+  const activeFilterCount = [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterReligion, filterGender].filter(f => f !== "all").length + ((filterAge[0] !== 18 || filterAge[1] !== 30) ? 1 : 0);
 
   const matchedProfiles = useMemo(() => {
     return MOCK_PROFILES.filter(p => p.messages > 0).sort((a, b) => (b.unread || 0) - (a.unread || 0));
@@ -418,12 +412,30 @@ export default function Dating() {
                               {SEXUALITY_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterSexuality(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
-                          {/* Age */}
+                          {/* Age Range Slider */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">年齡 Age</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterAge("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterAge === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
-                              {AGE_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterAge(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterAge === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-medium text-muted-foreground">年齡 Age</p>
+                              <span className="text-xs font-semibold text-foreground">{filterAge[0]} – {filterAge[1]}{filterAge[1] >= 30 ? "+" : ""}</span>
+                            </div>
+                            <div className="px-1">
+                              <div className="relative h-10 flex items-center">
+                                {/* Track background */}
+                                <div className="absolute w-full h-1.5 rounded-full bg-muted" />
+                                {/* Active range */}
+                                <div className="absolute h-1.5 rounded-full bg-neon-coral" style={{ left: `${((filterAge[0] - 18) / 12) * 100}%`, right: `${100 - ((filterAge[1] - 18) / 12) * 100}%` }} />
+                                {/* Min thumb */}
+                                <input type="range" min={18} max={30} value={filterAge[0]}
+                                  onChange={(e) => { const v = Math.min(Number(e.target.value), filterAge[1] - 1); setFilterAge([v, filterAge[1]]); }}
+                                  className="absolute w-full h-1.5 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-neon-coral [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-neon-coral [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer" style={{ zIndex: 3 }} />
+                                {/* Max thumb */}
+                                <input type="range" min={18} max={30} value={filterAge[1]}
+                                  onChange={(e) => { const v = Math.max(Number(e.target.value), filterAge[0] + 1); setFilterAge([filterAge[0], v]); }}
+                                  className="absolute w-full h-1.5 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-neon-coral [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-neon-coral [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:cursor-pointer" style={{ zIndex: 4 }} />
+                              </div>
+                              <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+                                <span>18</span><span>21</span><span>24</span><span>27</span><span>30+</span>
+                              </div>
                             </div>
                           </div>
                           {/* Institution */}
@@ -468,7 +480,7 @@ export default function Dating() {
                           </div>
                           {/* Reset filters */}
                           {activeFilterCount > 0 && (
-                            <button onClick={() => { setFilterSexuality("all"); setFilterInstitution("all"); setFilterFaculty("all"); setFilterDistrict("all"); setFilterRelationship("all"); setFilterAge("all"); setFilterReligion("all"); setFilterGender("all"); }} className="w-full py-2 rounded-lg text-xs font-medium text-neon-coral hover:bg-neon-coral/10 transition-all">
+                            <button onClick={() => { setFilterSexuality("all"); setFilterInstitution("all"); setFilterFaculty("all"); setFilterDistrict("all"); setFilterRelationship("all"); setFilterAge([18, 30]); setFilterReligion("all"); setFilterGender("all"); }} className="w-full py-2 rounded-lg text-xs font-medium text-neon-coral hover:bg-neon-coral/10 transition-all">
                               清除所有篩選 ({activeFilterCount})
                             </button>
                           )}
