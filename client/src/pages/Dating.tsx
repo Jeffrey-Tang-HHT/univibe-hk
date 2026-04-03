@@ -18,6 +18,7 @@ type DatingTab = "discover" | "matches" | "profile";
 
 interface MatchProfile {
   id: string;
+  gender: "male" | "female" | "nonbinary";
   mbti: string;
   institution: string;
   major: string;
@@ -45,14 +46,14 @@ const SEXUALITY_OPTIONS = [
 ];
 
 const MOCK_PROFILES: MatchProfile[] = [
-  { id: "m1", mbti: "INFJ", institution: "HKU", major: "Psychology", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92 },
-  { id: "m2", mbti: "ENTP", institution: "CUHK", major: "Business", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87 },
-  { id: "m3", mbti: "ISFP", institution: "PolyU", major: "Design", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2 },
-  { id: "m4", mbti: "ENTJ", institution: "HKUST", major: "Engineering", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1 },
-  { id: "m5", mbti: "INFP", institution: "CityU", major: "Creative Media", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0 },
-  { id: "m6", mbti: "ESTJ", institution: "HKBU", major: "Journalism", interests: ["News", "Running", "Karaoke"], bio: "新聞系，鍾意跑步同唱K 🎤", blurLevel: 45, messages: 8, sexuality: "straight", compatibility: 71, lastMessage: "下次一齊去唱K！", lastMessageTime: "1日前", unread: 0 },
-  { id: "m7", mbti: "ENFJ", institution: "EdUHK", major: "Education", interests: ["Music", "Cooking", "Travel"], bio: "未來老師一個，鍾意彈結他同煮嘢食 🎸", blurLevel: 20, messages: 0, sexuality: "straight", compatibility: 88 },
-  { id: "m8", mbti: "ISTP", institution: "LingU", major: "Translation", interests: ["Gaming", "Coffee", "Film"], bio: "翻譯系，安靜但打機好認真 🎮", blurLevel: 0, messages: 0, sexuality: "bisexual", compatibility: 75 },
+  { id: "m1", gender: "female", mbti: "INFJ", institution: "HKU", major: "Psychology", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92 },
+  { id: "m2", gender: "male", mbti: "ENTP", institution: "CUHK", major: "Business", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87 },
+  { id: "m3", gender: "female", mbti: "ISFP", institution: "PolyU", major: "Design", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2 },
+  { id: "m4", gender: "male", mbti: "ENTJ", institution: "HKUST", major: "Engineering", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1 },
+  { id: "m5", gender: "nonbinary", mbti: "INFP", institution: "CityU", major: "Creative Media", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0 },
+  { id: "m6", gender: "female", mbti: "ESTJ", institution: "HKBU", major: "Journalism", interests: ["News", "Running", "Karaoke"], bio: "新聞系，鍾意跑步同唱K 🎤", blurLevel: 45, messages: 8, sexuality: "straight", compatibility: 71, lastMessage: "下次一齊去唱K！", lastMessageTime: "1日前", unread: 0 },
+  { id: "m7", gender: "male", mbti: "ENFJ", institution: "EdUHK", major: "Education", interests: ["Music", "Cooking", "Travel"], bio: "未來老師一個，鍾意彈結他同煮嘢食 🎸", blurLevel: 20, messages: 0, sexuality: "straight", compatibility: 88 },
+  { id: "m8", gender: "male", mbti: "ISTP", institution: "LingU", major: "Translation", interests: ["Gaming", "Coffee", "Film"], bio: "翻譯系，安靜但打機好認真 🎮", blurLevel: 0, messages: 0, sexuality: "bisexual", compatibility: 75 },
 ];
 
 const INTEREST_OPTIONS = [
@@ -78,6 +79,12 @@ const MBTI_TYPES = [
   "ISTJ", "ISFJ", "ESTJ", "ESFJ",
   "ISTP", "ISFP", "ESTP", "ESFP"
 ];
+
+function genderSign(g: "male" | "female" | "nonbinary") {
+  if (g === "male") return <span className="text-blue-400">♂</span>;
+  if (g === "female") return <span className="text-pink-400">♀</span>;
+  return <span className="text-purple-400">⚧</span>;
+}
 
 function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mbti: string; size?: "sm" | "md" | "lg" }) {
   const clarity = blurLevel / 100;
@@ -222,7 +229,7 @@ export default function Dating() {
             {activeChatId ? (
               <>
                 <button onClick={() => setActiveChatId(null)} className="flex items-center gap-2 text-foreground"><ChevronLeft className="w-5 h-5" /><span className="font-medium text-sm">返回</span></button>
-                {activeChat && <span className="font-display font-bold text-sm">{activeChat.mbti} · {activeChat.institution}</span>}
+                {activeChat && <span className="font-display font-bold text-sm">{activeChat.mbti} {genderSign(activeChat.gender)} · {activeChat.institution}</span>}
                 <div className="w-10" />
               </>
             ) : (
@@ -243,7 +250,7 @@ export default function Dating() {
                 <button onClick={() => setActiveChatId(null)} className="text-muted-foreground hover:text-foreground"><ChevronLeft className="w-5 h-5" /></button>
                 <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="sm" />
                 <div>
-                  <div className="flex items-center gap-2"><span className="font-display font-bold text-foreground">{activeChat.mbti}</span><span className="text-sm text-muted-foreground">· {activeChat.institution} · {activeChat.major}</span></div>
+                  <div className="flex items-center gap-2"><span className="font-display font-bold text-foreground">{activeChat.mbti} {genderSign(activeChat.gender)}</span><span className="text-sm text-muted-foreground">· {activeChat.institution} · {activeChat.major}</span></div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <div className="h-1 w-16 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${activeChat.blurLevel}%` }} /></div>
                     <span className="text-[10px] text-muted-foreground">{activeChat.messages}/20 訊息解鎖</span>
@@ -301,7 +308,7 @@ export default function Dating() {
                           <BlurredAvatar blurLevel={currentProfile.blurLevel} mbti={currentProfile.mbti} size="lg" />
                           <div className="p-5">
                             <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{currentProfile.mbti}</span><span className="text-sm text-muted-foreground">· {currentProfile.institution}</span></div>
+                              <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{currentProfile.mbti} {genderSign(currentProfile.gender)}</span><span className="text-sm text-muted-foreground">· {currentProfile.institution}</span></div>
                               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neon-emerald/10 text-neon-emerald text-xs font-semibold"><Sparkles className="w-3 h-3" />{currentProfile.compatibility}%</div>
                             </div>
                             <p className="text-sm text-muted-foreground mb-3">{currentProfile.major}</p>
@@ -355,7 +362,7 @@ export default function Dating() {
                             {(profile.unread || 0) > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center">{profile.unread}</div>}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="font-display font-bold text-sm text-foreground">{profile.mbti}</span><span className="text-xs text-muted-foreground">· {profile.institution}</span></div><span className="text-[10px] text-muted-foreground">{profile.lastMessageTime}</span></div>
+                            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="font-display font-bold text-sm text-foreground">{profile.mbti} {genderSign(profile.gender)}</span><span className="text-xs text-muted-foreground">· {profile.institution}</span></div><span className="text-[10px] text-muted-foreground">{profile.lastMessageTime}</span></div>
                             <p className="text-xs text-muted-foreground mt-0.5">{profile.major}</p>
                             {profile.lastMessage && <p className={`text-sm mt-1.5 truncate ${(profile.unread || 0) > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>{profile.lastMessage}</p>}
                             <div className="flex items-center gap-3 mt-2">
