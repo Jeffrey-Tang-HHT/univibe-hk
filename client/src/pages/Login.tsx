@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
+import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Auth mode: 'choose' | 'login' | 'register-email' | 'register-verify' | 'register-setup'
@@ -33,14 +33,8 @@ export default function Login() {
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval>>();
 
-  useEffect(() => {
-    // Check if already logged in
-    const token = localStorage.getItem('univibe_token');
-    const user = localStorage.getItem('univibe_user');
-    if (token && user) {
-      window.location.href = '/feed';
-    }
-  }, []);
+  // FIXED: Removed auto-redirect useEffect that caused infinite loop.
+  // If user is already logged in they can navigate to /feed themselves via the app nav.
 
   useEffect(() => {
     // Detect theme: check localStorage, document class, or system preference
@@ -242,22 +236,36 @@ export default function Login() {
   const inputClass = isDark
     ? "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"
     : "w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all";
+
+  // FIXED: eye button color — dark text in light mode, light text in dark mode
+  const eyeButtonClass = isDark
+    ? "absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+    : "absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors";
+
+  const labelClass = isDark ? "block text-white/60 text-sm mb-1.5" : "block text-gray-500 text-sm mb-1.5";
   
   const buttonClass = (disabled = false) =>
     `w-full py-3 rounded-xl font-semibold text-white transition-all ${
       disabled
-        ? isDark ? 'bg-white/10 cursor-not-allowed opacity-50' : 'bg-gray-200 cursor-not-allowed opacity-50'
+        ? isDark ? 'bg-white/10 cursor-not-allowed opacity-50' : 'bg-gray-200 cursor-not-allowed opacity-50 text-gray-400'
         : 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98]'
     }`;
 
   const backButton = (target: AuthMode) => (
     <button
       onClick={() => { setMode(target); setError(''); setSuccess(''); }}
-      className="flex items-center gap-1 text-white/50 hover:text-white/80 transition-colors text-sm mb-4"
+      className={isDark ? "flex items-center gap-1 text-white/50 hover:text-white/80 transition-colors text-sm mb-4" : "flex items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors text-sm mb-4"}
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       返回
     </button>
+  );
+
+  const eyeOpenIcon = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+  );
+  const eyeClosedIcon = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
   );
 
   return (
@@ -275,9 +283,11 @@ export default function Login() {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
-            UniVibe HK
-          </h1>
+          <a href="/" className="inline-block">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+              UniVibe HK
+            </h1>
+          </a>
           <p className={isDark ? "text-white/50 mt-1 text-sm" : "text-gray-500 mt-1 text-sm"}>香港大學生社交平台</p>
         </div>
 
@@ -322,7 +332,7 @@ export default function Login() {
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">用戶名 Username</label>
+                    <label className={labelClass}>用戶名 Username</label>
                     <input
                       type="text"
                       value={loginUsername}
@@ -335,7 +345,7 @@ export default function Login() {
                   </div>
                   
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">密碼 Password</label>
+                    <label className={labelClass}>密碼 Password</label>
                     <div className="relative">
                       <input
                         type={showLoginPassword ? 'text' : 'password'}
@@ -349,13 +359,9 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
+                        className={eyeButtonClass}
                       >
-                        {showLoginPassword ? (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                        ) : (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        )}
+                        {showLoginPassword ? eyeClosedIcon : eyeOpenIcon}
                       </button>
                     </div>
                   </div>
@@ -395,7 +401,7 @@ export default function Login() {
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">學校電郵 School Email</label>
+                    <label className={labelClass}>學校電郵 School Email</label>
                     <input
                       type="email"
                       value={email}
@@ -488,7 +494,7 @@ export default function Login() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">用戶名 Username *</label>
+                    <label className={labelClass}>用戶名 Username *</label>
                     <input
                       type="text"
                       value={regUsername}
@@ -502,7 +508,7 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">顯示名稱 Display Name</label>
+                    <label className={labelClass}>顯示名稱 Display Name</label>
                     <input
                       type="text"
                       value={displayName}
@@ -514,7 +520,7 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">密碼 Password *</label>
+                    <label className={labelClass}>密碼 Password *</label>
                     <div className="relative">
                       <input
                         type={showRegPassword ? 'text' : 'password'}
@@ -527,19 +533,15 @@ export default function Login() {
                       <button
                         type="button"
                         onClick={() => setShowRegPassword(!showRegPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
+                        className={eyeButtonClass}
                       >
-                        {showRegPassword ? (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                        ) : (
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        )}
+                        {showRegPassword ? eyeClosedIcon : eyeOpenIcon}
                       </button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-white/60 text-sm mb-1.5">確認密碼 Confirm Password *</label>
+                    <label className={labelClass}>確認密碼 Confirm Password *</label>
                     <input
                       type="password"
                       value={regConfirmPassword}
@@ -577,7 +579,7 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-white/20 text-xs mt-6">
+        <p className={isDark ? "text-center text-white/20 text-xs mt-6" : "text-center text-gray-300 text-xs mt-6"}>
           UniVibe HK © 2026 · 保護你的隱私
         </p>
       </motion.div>

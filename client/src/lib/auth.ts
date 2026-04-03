@@ -1,5 +1,4 @@
 // Auth helper — use this across pages to check login state
-
 export interface User {
   id: string;
   email: string;
@@ -29,7 +28,10 @@ export function isLoggedIn(): boolean {
 export function logout() {
   localStorage.removeItem('univibe_token');
   localStorage.removeItem('univibe_user');
-  window.location.href = '/login';
+  // Only redirect if NOT already on login page (prevents infinite loop)
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
 }
 
 export function updateStoredUser(updates: Partial<User>) {
@@ -44,11 +46,16 @@ export async function fetchProfile(): Promise<User | null> {
   if (!token) return null;
   
   try {
-    const res = await fetch('/api/profile', {
+    // FIXED: correct endpoint is /api/get-profile (not /api/profile)
+    const res = await fetch('/api/get-profile', {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
-      if (res.status === 401) logout();
+      if (res.status === 401) {
+        // Token is invalid — clear it but don't force redirect here
+        localStorage.removeItem('univibe_token');
+        localStorage.removeItem('univibe_user');
+      }
       return null;
     }
     const data = await res.json();
@@ -63,7 +70,6 @@ export async function fetchProfile(): Promise<User | null> {
 export async function updateProfile(updates: Record<string, any>): Promise<User | null> {
   const token = getToken();
   if (!token) return null;
-
   try {
     const res = await fetch('/api/update-profile', {
       method: 'PATCH',
@@ -74,7 +80,10 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
       body: JSON.stringify(updates)
     });
     if (!res.ok) {
-      if (res.status === 401) logout();
+      if (res.status === 401) {
+        localStorage.removeItem('univibe_token');
+        localStorage.removeItem('univibe_user');
+      }
       return null;
     }
     const data = await res.json();
