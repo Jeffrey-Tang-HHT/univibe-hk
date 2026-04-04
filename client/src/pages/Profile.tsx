@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { getUser, updateStoredUser, type User as UserType } from "@/lib/auth";
+import { getUser, updateStoredUser, updateProfile, type User as UserType } from "@/lib/auth";
 
 const SCHOOLS = ["HKU", "CUHK", "HKUST", "PolyU", "CityU", "HKBU", "LU", "EdUHK", "Others"];
 const FACULTIES = ["建築 Architecture", "文學 Arts", "商學 Business", "牙醫 Dentistry", "教育 Education", "工程 Engineering", "法律 Law", "醫學 Medicine", "理學 Science", "社會科學 Social Sciences", "創意媒體 Creative Media", "設計 Design", "新聞 Journalism", "翻譯 Translation", "其他 Others"];
@@ -79,6 +79,7 @@ export default function Profile() {
   const { theme, toggleTheme } = useTheme();
   const [, setLocation] = useLocation();
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Profile form state
   const [displayName, setDisplayName] = useState("");
@@ -97,7 +98,8 @@ export default function Profile() {
   useEffect(() => {
     if (user) {
       const stored = getUser() as any;
-      setDisplayName(stored?.displayName || stored?.display_name || user.username || "");
+      // FIX: handle both display_name and displayName keys
+      setDisplayName(stored?.display_name || stored?.displayName || user.username || "");
       setGender(stored?.gender || "");
       setSexuality(stored?.sexuality || "");
       setSchool(stored?.school || "");
@@ -118,37 +120,44 @@ export default function Profile() {
   }
 
   const handleSave = async () => {
+    setSaving(true);
+
     const updates: Record<string, any> = {
       display_name: displayName,
-      gender, sexuality, school, faculty, district, mbti,
+      gender,
+      sexuality,
+      school,
+      faculty,
+      district,
+      mbti,
       age: age ? parseInt(age) : null,
-      bio, relationship_type: relationshipType, religion, interests,
+      bio,
+      relationship_type: relationshipType,
+      religion,
+      interests,
     };
 
-    // Try API update
     try {
-      const token = localStorage.getItem("univibe_token");
-      if (token) {
-        const res = await fetch("/api/update-profile", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-          body: JSON.stringify(updates),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          localStorage.setItem("univibe_user", JSON.stringify(data.user));
-        }
+      // FIX: Use the centralized updateProfile from auth.ts
+      const result = await updateProfile(updates);
+
+      if (result) {
+        // API succeeded — localStorage already updated by updateProfile()
+        toast.success(lang === "zh" ? "個人資料已更新！" : "Profile updated!");
+      } else {
+        // API failed — save locally as fallback
+        updateStoredUser(updates as any);
+        toast.success(lang === "zh" ? "個人資料已本地儲存！" : "Profile saved locally!");
       }
     } catch {
-      // Fallback: save locally
-      const stored = getUser() as any;
-      const updated = { ...stored, ...updates, displayName };
-      localStorage.setItem("univibe_user", JSON.stringify(updated));
+      // Network error — save locally as fallback
+      updateStoredUser(updates as any);
+      toast.success(lang === "zh" ? "個人資料已本地儲存！" : "Profile saved locally!");
     }
 
     refreshUser();
     setEditing(false);
-    toast.success(lang === "zh" ? "個人資料已更新！" : "Profile updated!");
+    setSaving(false);
   };
 
   const toggleInterest = (key: string) => {
@@ -340,10 +349,10 @@ export default function Profile() {
                   </div>
 
                   {/* Save */}
-                  <button onClick={handleSave}
-                    className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  <button onClick={handleSave} disabled={saving}
+                    className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    <Save className="w-4 h-4" /> {lang === "zh" ? "儲存" : "Save"}
+                    <Save className="w-4 h-4" /> {saving ? (lang === "zh" ? "儲存中..." : "Saving...") : (lang === "zh" ? "儲存" : "Save")}
                   </button>
                 </div>
               ) : (

@@ -3,12 +3,20 @@ export interface User {
   id: string;
   email: string;
   username: string;
-  displayName: string;
+  displayName?: string;
+  display_name?: string;
   avatar_url?: string;
   gender?: string;
+  sexuality?: string;
   school?: string;
   faculty?: string;
+  district?: string;
   mbti?: string;
+  age?: number;
+  bio?: string;
+  relationship_type?: string;
+  religion?: string;
+  interests?: string[];
 }
 
 export function getToken(): string | null {
@@ -28,7 +36,6 @@ export function isLoggedIn(): boolean {
 export function logout() {
   localStorage.removeItem('univibe_token');
   localStorage.removeItem('univibe_user');
-  // Only redirect if NOT already on login page (prevents infinite loop)
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
   }
@@ -44,22 +51,19 @@ export function updateStoredUser(updates: Partial<User>) {
 export async function fetchProfile(): Promise<User | null> {
   const token = getToken();
   if (!token) return null;
-  
+
   try {
-    // FIXED: correct endpoint is /api/get-profile (not /api/profile)
     const res = await fetch('/api/get-profile', {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
       if (res.status === 401) {
-        // Token is invalid — clear it but don't force redirect here
         localStorage.removeItem('univibe_token');
         localStorage.removeItem('univibe_user');
       }
       return null;
     }
     const data = await res.json();
-    // Update local storage with fresh data
     localStorage.setItem('univibe_user', JSON.stringify(data.user));
     return data.user;
   } catch {
@@ -70,6 +74,7 @@ export async function fetchProfile(): Promise<User | null> {
 export async function updateProfile(updates: Record<string, any>): Promise<User | null> {
   const token = getToken();
   if (!token) return null;
+
   try {
     const res = await fetch('/api/update-profile', {
       method: 'PATCH',
@@ -79,6 +84,7 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
       },
       body: JSON.stringify(updates)
     });
+
     if (!res.ok) {
       if (res.status === 401) {
         localStorage.removeItem('univibe_token');
@@ -86,7 +92,9 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
       }
       return null;
     }
+
     const data = await res.json();
+    // API now returns { success: true, user: {...} }
     localStorage.setItem('univibe_user', JSON.stringify(data.user));
     return data.user;
   } catch {
