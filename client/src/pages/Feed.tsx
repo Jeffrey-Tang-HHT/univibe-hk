@@ -24,19 +24,31 @@ interface Post {
   content: string;
   likes: number;
   comments: number;
-  timeAgo: string;
+  timeMinutes: number; // store as minutes ago instead of hardcoded string
   liked: boolean;
 }
 
-const MOCK_POSTS_ZH: Post[] = [
-  { id: "1", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "trending", content: "有冇人覺得今個sem嘅 workload 比上年重好多？我已經連續三日通宵做 assignment 😭", likes: 142, comments: 38, timeAgo: "2小時前", liked: false },
-  { id: "2", author: "HKU · ENFP", authorTag: "HKU · ENFP", privacyMode: "campus", category: "non-jupas", content: "Non-JUPAS 入到 HKU BBA！GPA 3.7，面試準備咗兩個月。有咩想問都可以留言 🎉", likes: 287, comments: 94, timeAgo: "5小時前", liked: false },
-  { id: "3", author: "PolyU · Design · INFJ", authorTag: "PolyU · Design · INFJ", privacyMode: "major", category: "mbti", content: "INFJ 同 ENTP 真係天生一對？我同我 project partner 成日嗌交但又做到好嘢出嚟 😂", likes: 203, comments: 67, timeAgo: "8小時前", liked: false },
-  { id: "4", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "missed", content: "今日下午3點喺 HKCC 圖書館 2/F 戴黑色 cap 嘅男仔，你跌咗張學生證，我幫你放咗喺 counter 🫣", likes: 89, comments: 23, timeAgo: "1小時前", liked: false },
-  { id: "5", author: "CityU · ISTJ", authorTag: "CityU · ISTJ", privacyMode: "campus", category: "salary", content: "Big 4 summer intern 月薪 HK$18,000，OT 冇補水但學到好多嘢。值唔值得去？", likes: 356, comments: 112, timeAgo: "12小時前", liked: false },
-  { id: "6", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "trending", content: "學校飯堂又加價 😤 一碟燒味飯要 $48 係咪搶錢", likes: 521, comments: 156, timeAgo: "3小時前", liked: false },
-  { id: "7", author: "CUHK · CS · INTP", authorTag: "CUHK · CS · INTP", privacyMode: "major", category: "non-jupas", content: "副學士轉 CUHK CS 嘅經驗分享：Portfolio 比 GPA 更重要，面試問咗好多 project 嘅嘢", likes: 178, comments: 45, timeAgo: "1日前", liked: false },
-  { id: "8", author: "HKUST · ENFJ", authorTag: "HKUST · ENFJ", privacyMode: "campus", category: "mbti", content: "MBTI 測試話我係 ENFJ 但我覺得自己好 introverted 🤔 有冇人都係咁？", likes: 134, comments: 78, timeAgo: "6小時前", liked: false },
+// Helper: convert minutes to localized "time ago" string
+function formatTimeAgo(minutes: number, lang: string): string {
+  if (minutes < 1) return lang === "zh" ? "剛剛" : "Just now";
+  if (minutes < 60) return lang === "zh" ? `${minutes}分鐘前` : `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return lang === "zh" ? `${hours}小時前` : `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return lang === "zh" ? `${days}日前` : `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  return lang === "zh" ? `${weeks}週前` : `${weeks}w ago`;
+}
+
+const MOCK_POSTS: Post[] = [
+  { id: "1", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "trending", content: "有冇人覺得今個sem嘅 workload 比上年重好多？我已經連續三日通宵做 assignment 😭", likes: 142, comments: 38, timeMinutes: 120, liked: false },
+  { id: "2", author: "HKU · ENFP", authorTag: "HKU · ENFP", privacyMode: "campus", category: "non-jupas", content: "Non-JUPAS 入到 HKU BBA！GPA 3.7，面試準備咗兩個月。有咩想問都可以留言 🎉", likes: 287, comments: 94, timeMinutes: 300, liked: false },
+  { id: "3", author: "PolyU · Design · INFJ", authorTag: "PolyU · Design · INFJ", privacyMode: "major", category: "mbti", content: "INFJ 同 ENTP 真係天生一對？我同我 project partner 成日嗌交但又做到好嘢出嚟 😂", likes: 203, comments: 67, timeMinutes: 480, liked: false },
+  { id: "4", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "missed", content: "今日下午3點喺 HKCC 圖書館 2/F 戴黑色 cap 嘅男仔，你跌咗張學生證，我幫你放咗喺 counter 🫣", likes: 89, comments: 23, timeMinutes: 60, liked: false },
+  { id: "5", author: "CityU · ISTJ", authorTag: "CityU · ISTJ", privacyMode: "campus", category: "salary", content: "Big 4 summer intern 月薪 HK$18,000，OT 冇補水但學到好多嘢。值唔值得去？", likes: 356, comments: 112, timeMinutes: 720, liked: false },
+  { id: "6", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "trending", content: "學校飯堂又加價 😤 一碟燒味飯要 $48 係咪搶錢", likes: 521, comments: 156, timeMinutes: 180, liked: false },
+  { id: "7", author: "CUHK · CS · INTP", authorTag: "CUHK · CS · INTP", privacyMode: "major", category: "non-jupas", content: "副學士轉 CUHK CS 嘅經驗分享：Portfolio 比 GPA 更重要，面試問咗好多 project 嘅嘢", likes: 178, comments: 45, timeMinutes: 1440, liked: false },
+  { id: "8", author: "HKUST · ENFJ", authorTag: "HKUST · ENFJ", privacyMode: "campus", category: "mbti", content: "MBTI 測試話我係 ENFJ 但我覺得自己好 introverted 🤔 有冇人都係咁？", likes: 134, comments: 78, timeMinutes: 360, liked: false },
 ];
 
 const privacyIcons: Record<PrivacyMode, typeof Ghost> = {
@@ -53,7 +65,7 @@ const privacyColors: Record<PrivacyMode, string> = {
 
 export default function Feed() {
   const [category, setCategory] = useState<Category>("all");
-  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS_ZH);
+  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
   const [newPost, setNewPost] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerPrivacy, setComposerPrivacy] = useState<PrivacyMode>("ghost");
@@ -64,8 +76,7 @@ export default function Feed() {
   const [, setLocation] = useLocation();
 
   const currentPosts = useMemo(() => {
-    const source = MOCK_POSTS_ZH;
-    const merged = source.map(p => {
+    const merged = MOCK_POSTS.map(p => {
       const existing = posts.find(ep => ep.id === p.id);
       return existing ? { ...p, liked: existing.liked, likes: existing.likes } : p;
     });
@@ -102,7 +113,7 @@ export default function Feed() {
       content: newPost,
       likes: 0,
       comments: 0,
-      timeAgo: lang === "zh" ? "剛剛" : "Just now",
+      timeMinutes: 0,
       liked: false,
     };
     setPosts(prev => [newPostObj, ...prev]);
@@ -311,7 +322,7 @@ export default function Feed() {
                       </div>
                       <div>
                         <span className="text-sm font-medium text-foreground">{post.authorTag}</span>
-                        <span className="text-xs text-muted-foreground ml-2">· {post.timeAgo}</span>
+                        <span className="text-xs text-muted-foreground ml-2">· {formatTimeAgo(post.timeMinutes, lang)}</span>
                       </div>
                     </div>
 

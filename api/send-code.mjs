@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import { getUserByEmail } from './utils/supabase.mjs';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const VERIFY_SECRET = process.env.VERIFY_SECRET;
@@ -24,19 +25,30 @@ export default async function handler(req, res) {
 
   try {
     const { email } = req.body;
-
     if (!email) return res.status(400).json({ error: '請提供電郵地址' });
+
     if (!email.endsWith('.edu.hk') && email !== TEST_EMAIL) {
       return res.status(400).json({ error: '請使用 .edu.hk 學校電郵' });
     }
 
+    // FIX: Check if email is already registered — prevent duplicate accounts
+    const existingUser = await getUserByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({ error: '此電郵已被註冊，請直接登入' });
+    }
+
     const code = generateCode(email);
 
-    if (!RESEND_API_KEY) return res.status(500).json({ error: 'Email service not configured' });
+    if (!RESEND_API_KEY) {
+      return res.status(500).json({ error: 'Email service not configured' });
+    }
 
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({
         from: 'UniVibe HK <onboarding@resend.dev>',
         to: [email],
@@ -55,7 +67,8 @@ export default async function handler(req, res) {
     });
 
     if (!emailRes.ok) {
-      console.error('Resend error:', await emailRes.text());
+      const errText = await emailRes.text();
+      console.error('Resend error:', errText);
       return res.status(500).json({ error: '發送失敗，請稍後再試' });
     }
 
