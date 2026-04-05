@@ -17,6 +17,7 @@ export interface User {
   relationship_type?: string;
   religion?: string;
   interests?: string[];
+  language?: string;
 }
 
 export function getToken(): string | null {
@@ -77,7 +78,7 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
 
   try {
     const res = await fetch('/api/update-profile', {
-      method: 'PATCH',
+      method: 'POST',  // FIXED: was PATCH, but API only accepts POST
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
@@ -94,9 +95,12 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
     }
 
     const data = await res.json();
-    // API now returns { success: true, user: {...} }
-    localStorage.setItem('univibe_user', JSON.stringify(data.user));
-    return data.user;
+    // API returns { success: true, profile: {...} }
+    const profile = data.user || data.profile;
+    if (profile) {
+      localStorage.setItem('univibe_user', JSON.stringify(profile));
+    }
+    return profile;
   } catch {
     return null;
   }

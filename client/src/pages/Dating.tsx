@@ -171,6 +171,7 @@ function genderSign(g: "male" | "female" | "nonbinary") {
 }
 
 function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mbti: string; size?: "sm" | "md" | "lg" }) {
+  const { t } = useLanguage();
   const clarity = blurLevel / 100;
   const blurPx = Math.max(0, 20 * (1 - clarity));
   const dim = size === "lg" ? "w-full aspect-[4/3]" : size === "md" ? "w-16 h-16" : "w-12 h-12";
@@ -191,7 +192,7 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mb
       {size === "lg" && (
         <div className={`absolute bottom-3 right-3 px-2.5 py-1 rounded-full text-white text-xs font-medium backdrop-blur-sm flex items-center gap-1.5 ${blurLevel >= 100 ? "bg-neon-emerald/80" : "bg-black/50"}`}>
           {blurLevel < 100 ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-          {blurLevel >= 100 ? "已解鎖" : `${blurLevel}%`}
+          {blurLevel >= 100 ? t("dating.unlocked") : `${blurLevel}%`}
         </div>
       )}
     </div>
@@ -280,7 +281,7 @@ export default function Dating() {
 
   const handleVibeCheck = () => {
     setSwipeDirection("right");
-    setTimeout(() => { toast.success("氛圍檢測已發送！等待對方回應 💫"); setCurrentIndex(prev => prev + 1); setSwipeDirection(null); }, 300);
+    setTimeout(() => { toast.success(t("dating.vibe_sent")); setCurrentIndex(prev => prev + 1); setSwipeDirection(null); }, 300);
   };
   const handleSkip = () => {
     setSwipeDirection("left");
@@ -288,15 +289,15 @@ export default function Dating() {
   };
   const handleSendMessage = () => {
     if (!chatMessage.trim() || !activeChatId) return;
-    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), { text: chatMessage, isMe: true, time: "剛剛" }] }));
+    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), { text: chatMessage, isMe: true, time: lang === "zh" ? "剛剛" : "Just now" }] }));
     setChatMessage("");
   };
   const handleSaveProfile = () => {
-    if (!selectedMbti) { toast.error("請選擇你的 MBTI 類型"); return; }
-    if (selectedInterests.length < 3) { toast.error("請至少選擇3個興趣"); return; }
+    if (!selectedMbti) { toast.error(t("dating.error.mbti")); return; }
+    if (selectedInterests.length < 3) { toast.error(t("dating.error.interests")); return; }
     updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality, interests: selectedInterests });
     setProfileSetup(true);
-    toast.success("交友檔案已儲存！");
+    toast.success(t("dating.profile_saved"));
   };
 
   if (!isLoggedIn) { setLocation("/login"); return null; }
@@ -313,8 +314,8 @@ export default function Dating() {
           <nav className="flex-1 space-y-1">
             <a href="/feed" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Home className="w-4 h-4" /> {t("feed.nav.feed")}</a>
             <a href="/dating" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-neon-coral/10 text-neon-coral font-medium text-sm"><HeartHandshake className="w-4 h-4" /> {t("feed.nav.dating")}</a>
-            <button onClick={() => toast(t("common.coming_soon"))} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm w-full text-left"><Wrench className="w-4 h-4" /> {t("feed.nav.tools")}</button>
-            <button onClick={() => toast(t("common.coming_soon"))} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm w-full text-left"><User className="w-4 h-4" /> {t("feed.nav.profile")}</button>
+            <a href="/tools" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Wrench className="w-4 h-4" /> {t("feed.nav.tools")}</a>
+            <a href="/profile" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><User className="w-4 h-4" /> {t("feed.nav.profile")}</a>
           </nav>
           <div className="space-y-2 pt-4 border-t border-border">
             <div className="flex items-center gap-2 px-2">
@@ -330,7 +331,7 @@ export default function Dating() {
           <div className="lg:hidden sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 px-4 py-3 flex items-center justify-between">
             {activeChatId ? (
               <>
-                <button onClick={() => setActiveChatId(null)} className="flex items-center gap-2 text-foreground"><ChevronLeft className="w-5 h-5" /><span className="font-medium text-sm">返回</span></button>
+                <button onClick={() => setActiveChatId(null)} className="flex items-center gap-2 text-foreground"><ChevronLeft className="w-5 h-5" /><span className="font-medium text-sm">{t("dating.back")}</span></button>
                 {activeChat && <span className="font-display font-bold text-sm">{activeChat.mbti} {genderSign(activeChat.gender)} · {activeChat.institution}</span>}
                 <div className="w-10" />
               </>
@@ -355,17 +356,17 @@ export default function Dating() {
                   <div className="flex items-center gap-2"><span className="font-display font-bold text-foreground">{activeChat.mbti} {genderSign(activeChat.gender)}</span><span className="text-sm text-muted-foreground">· {activeChat.institution} · {activeChat.major}</span></div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <div className="h-1 w-16 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${activeChat.blurLevel}%` }} /></div>
-                    <span className="text-[10px] text-muted-foreground">{activeChat.messages}/20 訊息解鎖</span>
+                    <span className="text-[10px] text-muted-foreground">{activeChat.messages}/20 {t("dating.msg_unlock")}</span>
                   </div>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
-                <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />照片清晰度 {activeChat.blurLevel}% · 再發 {20 - activeChat.messages} 條訊息即可完全解鎖</div></div>
+                <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />{t("dating.photo_clarity")} {activeChat.blurLevel}% · {t("dating.send_more")} {20 - activeChat.messages} {t("dating.to_fully_unlock")}</div></div>
                 {(chatMessages[activeChatId] || []).map((msg, idx) => (<ChatBubble key={idx} message={msg.text} isMe={msg.isMe} time={msg.time} />))}
               </div>
               <div className="p-4 border-t border-border bg-card/50">
                 <div className="flex items-center gap-3">
-                  <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder="輸入訊息..." className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-neon-coral/30" />
+                  <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder={t("dating.msg_input")} className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-neon-coral/30" />
                   <Button onClick={handleSendMessage} disabled={!chatMessage.trim()} className="bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl px-4" size="sm"><Send className="w-4 h-4" /></Button>
                 </div>
               </div>
@@ -376,7 +377,7 @@ export default function Dating() {
               <div className="flex gap-1 mb-6 bg-muted rounded-xl p-1">
                 {(["discover", "matches", "profile"] as DatingTab[]).map((t_) => (
                   <button key={t_} onClick={() => setTab(t_)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t_ ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                    {t_ === "discover" ? "探索" : t_ === "matches" ? `配對 (${matchedProfiles.length})` : "交友檔案"}
+                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "matches" ? `${t("dating.tab.matches")} (${matchedProfiles.length})` : t("dating.tab.profile")}
                   </button>
                 ))}
               </div>
@@ -386,9 +387,9 @@ export default function Dating() {
                 {tab === "discover" && (
                   <motion.div key="discover" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                     <div className="flex items-center justify-between mb-5">
-                      <div><h2 className="font-display text-lg font-bold text-foreground">探索配對</h2><p className="text-xs text-muted-foreground mt-0.5">個性優先，外貌其後 ✨</p></div>
+                      <div><h2 className="font-display text-lg font-bold text-foreground">{t("dating.discover.title")}</h2><p className="text-xs text-muted-foreground mt-0.5">{t("dating.discover.subtitle")}</p></div>
                       <Button variant="ghost" size="sm" className="text-muted-foreground relative" onClick={() => setShowFilters(!showFilters)}>
-                        <Settings className="w-4 h-4 mr-1" /> 篩選
+                        <Settings className="w-4 h-4 mr-1" /> {t("dating.filter")}
                         {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-neon-coral text-white text-[10px] flex items-center justify-center">{activeFilterCount}</span>}
                       </Button>
                     </div>
@@ -397,25 +398,25 @@ export default function Dating() {
                         <div className="p-4 rounded-xl border border-border bg-card space-y-4 max-h-[60vh] overflow-y-auto">
                           {/* Gender */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">性別 Gender</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.filter.gender")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              {[{key:"all",zh:"全部"},{key:"male",zh:"♂ 男"},{key:"female",zh:"♀ 女"},{key:"nonbinary",zh:"⚧ 非二元"}].map(o => (
+                              {[{key:"all",zh:t("dating.filter.gender.all")},{key:"male",zh:t("dating.filter.gender.male")},{key:"female",zh:t("dating.filter.gender.female")},{key:"nonbinary",zh:t("dating.filter.gender.nonbinary")}].map(o => (
                                 <button key={o.key} onClick={() => setFilterGender(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterGender === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{o.zh}</button>
                               ))}
                             </div>
                           </div>
                           {/* Sexuality */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">性取向 Sexuality</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.profile.sexuality")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterSexuality("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              <button onClick={() => setFilterSexuality("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{t("dating.filter.all")}</button>
                               {SEXUALITY_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterSexuality(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterSexuality === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
                           {/* Age Range Slider */}
                           <div>
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-medium text-muted-foreground">年齡 Age</p>
+                              <p className="text-xs font-medium text-muted-foreground">{t("dating.filter.age")}</p>
                               <span className="text-xs font-semibold text-foreground">{filterAge[0]} – {filterAge[1]}{filterAge[1] >= 30 ? "+" : ""}</span>
                             </div>
                             <div className="px-1">
@@ -440,48 +441,48 @@ export default function Dating() {
                           </div>
                           {/* Institution */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">院校 School</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.filter.school")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterInstitution("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterInstitution === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              <button onClick={() => setFilterInstitution("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterInstitution === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{t("dating.filter.all")}</button>
                               {INSTITUTION_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterInstitution(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterInstitution === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
                           {/* Faculty */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">學院 Faculty</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.filter.faculty")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterFaculty("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFaculty === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              <button onClick={() => setFilterFaculty("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFaculty === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{t("dating.filter.all")}</button>
                               {FACULTY_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterFaculty(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterFaculty === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
                           {/* District */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">地區 District</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.filter.district")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterDistrict("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterDistrict === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              <button onClick={() => setFilterDistrict("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterDistrict === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{t("dating.filter.all")}</button>
                               {DISTRICT_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterDistrict(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterDistrict === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
                           {/* Relationship Type */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">關係類型 Relationship</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.filter.relationship")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterRelationship("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterRelationship === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              <button onClick={() => setFilterRelationship("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterRelationship === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{t("dating.filter.all")}</button>
                               {RELATIONSHIP_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterRelationship(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterRelationship === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
                           {/* Religion */}
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-2">宗教 Religion</p>
+                            <p className="text-xs font-medium text-muted-foreground mb-2">{t("dating.filter.religion")}</p>
                             <div className="flex flex-wrap gap-1.5">
-                              <button onClick={() => setFilterReligion("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterReligion === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>全部</button>
+                              <button onClick={() => setFilterReligion("all")} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterReligion === "all" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{t("dating.filter.all")}</button>
                               {RELIGION_OPTIONS.map(o => (<button key={o.key} onClick={() => setFilterReligion(o.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${filterReligion === o.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? o.zh : o.en}</button>))}
                             </div>
                           </div>
                           {/* Reset filters */}
                           {activeFilterCount > 0 && (
                             <button onClick={() => { setFilterSexuality("all"); setFilterInstitution("all"); setFilterFaculty("all"); setFilterDistrict("all"); setFilterRelationship("all"); setFilterAge([18, 30]); setFilterReligion("all"); setFilterGender("all"); }} className="w-full py-2 rounded-lg text-xs font-medium text-neon-coral hover:bg-neon-coral/10 transition-all">
-                              清除所有篩選 ({activeFilterCount})
+                              {t("dating.filter.clear")} ({activeFilterCount})
                             </button>
                           )}
                         </div>
@@ -509,25 +510,25 @@ export default function Dating() {
                               {currentProfile.interests.map((interest) => (<span key={interest} className="px-2.5 py-1 rounded-full bg-muted text-xs text-muted-foreground font-medium">{interest}</span>))}
                             </div>
                             <div className="p-3 rounded-xl bg-muted/50 mb-5">
-                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-2"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> 照片清晰度</span><span className="font-medium">{currentProfile.blurLevel}%</span></div>
+                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-2"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> {t("dating.photo_clarity")}</span><span className="font-medium">{currentProfile.blurLevel}%</span></div>
                               <div className="h-2 rounded-full bg-background overflow-hidden"><motion.div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" initial={{ width: 0 }} animate={{ width: `${currentProfile.blurLevel}%` }} transition={{ duration: 0.8, ease: "easeOut" }} /></div>
-                              <p className="text-[10px] text-muted-foreground mt-1.5">配對後透過訊息逐步解鎖，20條訊息後完全揭示 🔓</p>
+                              <p className="text-[10px] text-muted-foreground mt-1.5">{t("dating.reveal_desc")}</p>
                             </div>
                             <div className="flex gap-3">
-                              <Button variant="outline" className="flex-1 h-12 rounded-xl text-base" onClick={handleSkip}><X className="w-5 h-5 mr-2 text-muted-foreground" />跳過</Button>
-                              <Button className="flex-1 h-12 bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl text-base" onClick={handleVibeCheck}><Zap className="w-5 h-5 mr-2" />氛圍檢測</Button>
+                              <Button variant="outline" className="flex-1 h-12 rounded-xl text-base" onClick={handleSkip}><X className="w-5 h-5 mr-2 text-muted-foreground" />{t("dating.skip")}</Button>
+                              <Button className="flex-1 h-12 bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl text-base" onClick={handleVibeCheck}><Zap className="w-5 h-5 mr-2" />{t("dating.vibe_check")}</Button>
                             </div>
                           </div>
                         </motion.div>
                       </div>
                     ) : (
-                      <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">暫時冇更多配對</p><p className="text-sm text-muted-foreground">稍後再返嚟睇吓 💫</p></div>
+                      <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">{t("dating.no_more")}</p><p className="text-sm text-muted-foreground">{t("dating.no_more_sub")}</p></div>
                     )}
 
                     <div className="mt-8 p-5 rounded-2xl border border-border bg-card/50">
-                      <h3 className="font-display font-bold text-foreground mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4 text-neon-coral" />慢揭示交友點樣運作？</h3>
+                      <h3 className="font-display font-bold text-foreground mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4 text-neon-coral" />{t("dating.how_it_works")}</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {[{ icon: Zap, title: "氛圍檢測", desc: "喺論壇有好嘅交流？發送氛圍檢測開始私聊" }, { icon: ImageOff, title: "模糊照片", desc: "一開始只見到 MBTI 同學科，照片係模糊嘅" }, { icon: MessageCircle, title: "20條訊息", desc: "每發一條訊息，照片就會清晰少少" }, { icon: Users, title: "組隊配對", desc: "同朋友一齊配對，低壓力嘅群組聚會" }].map((step, i) => (
+                        {[{ icon: Zap, title: t("dating.how.vibe.title"), desc: t("dating.how.vibe.desc") }, { icon: ImageOff, title: t("dating.how.blur.title"), desc: t("dating.how.blur.desc") }, { icon: MessageCircle, title: t("dating.how.msg.title"), desc: t("dating.how.msg.desc") }, { icon: Users, title: t("dating.how.group.title"), desc: t("dating.how.group.desc") }].map((step, i) => (
                           <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/30">
                             <div className="w-8 h-8 rounded-lg bg-neon-coral/10 flex items-center justify-center flex-shrink-0"><step.icon className="w-4 h-4 text-neon-coral" /></div>
                             <div><p className="text-sm font-medium text-foreground">{step.title}</p><p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p></div>
@@ -541,8 +542,8 @@ export default function Dating() {
                 {/* MATCHES */}
                 {tab === "matches" && (
                   <motion.div key="matches" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                    <h2 className="font-display text-lg font-bold text-foreground mb-2">你的配對</h2>
-                    <p className="text-xs text-muted-foreground mb-5">繼續傾偈解鎖對方嘅照片 🔓</p>
+                    <h2 className="font-display text-lg font-bold text-foreground mb-2">{t("dating.matches.title")}</h2>
+                    <p className="text-xs text-muted-foreground mb-5">{t("dating.matches.subtitle")}</p>
                     <div className="space-y-2">
                       {matchedProfiles.map((profile) => (
                         <button key={profile.id} onClick={() => setActiveChatId(profile.id)} className="w-full flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-all text-left group">
@@ -556,14 +557,14 @@ export default function Dating() {
                             {profile.lastMessage && <p className={`text-sm mt-1.5 truncate ${(profile.unread || 0) > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>{profile.lastMessage}</p>}
                             <div className="flex items-center gap-3 mt-2">
                               <div className="flex items-center gap-1.5"><div className="h-1 w-12 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${profile.blurLevel}%` }} /></div><span className="text-[10px] text-muted-foreground">{profile.blurLevel}%</span></div>
-                              <span className="text-[10px] text-neon-coral font-medium">{profile.messages}/20 訊息</span>
+                              <span className="text-[10px] text-neon-coral font-medium">{profile.messages}/20 {t("dating.messages_short")}</span>
                             </div>
                           </div>
                           <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </button>
                       ))}
                       {matchedProfiles.length === 0 && (
-                        <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">仲未有配對</p><p className="text-sm text-muted-foreground mb-4">去「探索」頁面發送氛圍檢測開始配對！</p><Button onClick={() => setTab("discover")} className="bg-neon-coral hover:bg-neon-coral/90 text-white">開始探索</Button></div>
+                        <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">{t("dating.matches.no_matches")}</p><p className="text-sm text-muted-foreground mb-4">{t("dating.matches.go_discover")}</p><Button onClick={() => setTab("discover")} className="bg-neon-coral hover:bg-neon-coral/90 text-white">{t("dating.matches.start")}</Button></div>
                       )}
                     </div>
                   </motion.div>
@@ -572,24 +573,24 @@ export default function Dating() {
                 {/* PROFILE */}
                 {tab === "profile" && (
                   <motion.div key="profile" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                    <h2 className="font-display text-lg font-bold text-foreground mb-2">設定交友檔案</h2>
-                    <p className="text-xs text-muted-foreground mb-6">其他用戶會見到你嘅 MBTI、興趣同模糊照片</p>
+                    <h2 className="font-display text-lg font-bold text-foreground mb-2">{t("dating.profile.title")}</h2>
+                    <p className="text-xs text-muted-foreground mb-6">{t("dating.profile.subtitle")}</p>
                     <div className="space-y-6">
                       <div className="p-4 rounded-xl border border-border bg-card">
-                        <label className="text-sm font-medium text-foreground mb-3 block">性取向</label>
+                        <label className="text-sm font-medium text-foreground mb-3 block">{t("dating.profile.sexuality")}</label>
                         <div className="flex flex-wrap gap-2">
                           {SEXUALITY_OPTIONS.map((opt) => (<button key={opt.key} onClick={() => setSelectedSexuality(opt.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedSexuality === opt.key ? "bg-neon-lavender text-white shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? opt.zh : opt.en}</button>))}
                         </div>
                       </div>
                       <div className="p-4 rounded-xl border border-border bg-card">
-                        <label className="text-sm font-medium text-foreground mb-3 block">你的 MBTI</label>
+                        <label className="text-sm font-medium text-foreground mb-3 block">{t("dating.profile.mbti")}</label>
                         <div className="grid grid-cols-4 gap-2">
                           {MBTI_TYPES.map((type) => (<button key={type} onClick={() => setSelectedMbti(type)} className={`py-2.5 rounded-lg text-xs font-bold transition-all ${selectedMbti === type ? "bg-neon-coral text-white shadow-md scale-105" : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"}`}>{type}</button>))}
                         </div>
                       </div>
                       <div className="p-4 rounded-xl border border-border bg-card">
-                        <label className="text-sm font-medium text-foreground mb-1 block">興趣愛好</label>
-                        <p className="text-xs text-muted-foreground mb-3">已選 {selectedInterests.length}/6（最少 3 個）</p>
+                        <label className="text-sm font-medium text-foreground mb-1 block">{t("dating.profile.interests")}</label>
+                        <p className="text-xs text-muted-foreground mb-3">{t("dating.profile.selected")} {selectedInterests.length}/6（{t("dating.profile.min")} 3）</p>
                         <div className="grid grid-cols-2 gap-2">
                           {INTEREST_OPTIONS.map(({ key, icon: Icon, zh }) => {
                             const selected = selectedInterests.includes(key);
@@ -600,8 +601,8 @@ export default function Dating() {
                           })}
                         </div>
                       </div>
-                      <Button onClick={handleSaveProfile} className="w-full h-12 bg-neon-coral hover:bg-neon-coral/90 text-white font-medium rounded-xl text-base">儲存檔案</Button>
-                      {profileSetup && (<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">✓ 你的交友檔案已啟用！其他用戶現在可以看到你。</p></motion.div>)}
+                      <Button onClick={handleSaveProfile} className="w-full h-12 bg-neon-coral hover:bg-neon-coral/90 text-white font-medium rounded-xl text-base">{t("dating.profile.save")}</Button>
+                      {profileSetup && (<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">{t("dating.profile.active")}</p></motion.div>)}
                     </div>
                   </motion.div>
                 )}
@@ -616,8 +617,8 @@ export default function Dating() {
         <div className="flex items-center justify-around py-2">
           <a href="/feed" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Home className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.feed")}</span></a>
           <a href="/dating" className="flex flex-col items-center gap-0.5 px-3 py-1 text-neon-coral"><HeartHandshake className="w-5 h-5" /><span className="text-[10px] font-medium">{t("feed.nav.dating")}</span></a>
-          <button onClick={() => toast(t("common.coming_soon"))} className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Wrench className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.tools")}</span></button>
-          <button onClick={() => toast(t("common.coming_soon"))} className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><User className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.profile")}</span></button>
+          <a href="/tools" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Wrench className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.tools")}</span></a>
+          <a href="/profile" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><User className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.profile")}</span></a>
         </div>
       </div>
     </div>

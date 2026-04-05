@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { getToken, getUser, isLoggedIn as checkLoggedIn, logout as doLogout, type User } from '../lib/auth';
+import { getToken, getUser, logout as doLogout, updateProfile as doUpdateProfile, type User } from '../lib/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   logout: () => void;
   refreshUser: () => void;
+  updateProfile: (updates: Record<string, any>) => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,10 +18,10 @@ const AuthContext = createContext<AuthContextType>({
   loading: false,
   logout: () => {},
   refreshUser: () => {},
+  updateProfile: async () => null,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Initialize SYNCHRONOUSLY from localStorage so isLoggedIn is correct on first render
   const [user, setUser] = useState<User | null>(() => getUser());
   const [token, setToken] = useState<string | null>(() => getToken());
   const [loading, setLoading] = useState(false);
@@ -33,7 +34,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Listen for storage changes (e.g., login/logout in another tab)
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'univibe_token' || e.key === 'univibe_user') {
         refreshUser();
@@ -47,6 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     doLogout();
   };
 
+  const updateProfile = async (updates: Record<string, any>): Promise<User | null> => {
+    const result = await doUpdateProfile(updates);
+    if (result) {
+      setUser(result);
+    }
+    return result;
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -55,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       logout,
       refreshUser,
+      updateProfile,
     }}>
       {children}
     </AuthContext.Provider>
