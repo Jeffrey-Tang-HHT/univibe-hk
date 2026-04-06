@@ -804,6 +804,7 @@ export default function Dating() {
     }
   };
   const [showUnmatchConfirm, setShowUnmatchConfirm] = useState(false);
+  const [showPartnerProfile, setShowPartnerProfile] = useState(false);
   const [hiddenMsgIds, setHiddenMsgIds] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
@@ -1080,7 +1081,7 @@ export default function Dating() {
             {activeChatId ? (
               <>
                 <button onClick={() => setActiveChatId(null)} className="flex items-center gap-2 text-foreground"><ChevronLeft className="w-5 h-5" /><span className="font-medium text-sm">{t("dating.back")}</span></button>
-                {activeChat && <span className="font-display font-bold text-sm">{activeChat.mbti} {genderSign(activeChat.gender)} · {activeChat.institution}</span>}
+                {activeChat && <button onClick={() => setShowPartnerProfile(true)} className="font-display font-bold text-sm hover:text-primary transition-colors flex items-center gap-1">{activeChat.mbti} {genderSign(activeChat.gender)} · {activeChat.institution} <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" /></button>}
                 <div className="flex items-center gap-1">
                   <button onClick={() => setShowReportDialog(true)} className="text-muted-foreground hover:text-orange-500 p-1"><Flag className="w-4 h-4" /></button>
                   <button onClick={() => setShowBlockConfirm(true)} className="text-muted-foreground hover:text-destructive p-1"><ShieldAlert className="w-4 h-4" /></button>
@@ -1103,19 +1104,19 @@ export default function Dating() {
             <div className="flex flex-col h-[calc(100vh-57px)] lg:h-screen">
               <div className="hidden lg:flex items-center gap-4 p-4 border-b border-border">
                 <button onClick={() => setActiveChatId(null)} className="text-muted-foreground hover:text-foreground"><ChevronLeft className="w-5 h-5" /></button>
-                <div className="relative">
+                <button onClick={() => setShowPartnerProfile(true)} className="relative cursor-pointer hover:opacity-80 transition-opacity group">
                   <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="sm" avatarUrl={activeChat.avatar_url} photos={activeChat.photos} />
                   {(() => { const s = getOnlineStatus(activeChat.last_seen || null, lang); return s.online ? <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-neon-emerald border-2 border-card" /> : null; })()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2"><span className="font-display font-bold text-foreground">{activeChat.mbti} {genderSign(activeChat.gender)}</span><span className="text-sm text-muted-foreground">· {activeChat.institution} · {activeChat.major}</span></div>
+                </button>
+                <button onClick={() => setShowPartnerProfile(true)} className="text-left hover:opacity-80 transition-opacity">
+                  <div className="flex items-center gap-2"><span className="font-display font-bold text-foreground">{activeChat.mbti} {genderSign(activeChat.gender)}</span><span className="text-sm text-muted-foreground">· {activeChat.institution} · {activeChat.major}</span><ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" /></div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={`text-[10px] ${getOnlineStatus(activeChat.last_seen || null, lang).online ? "text-neon-emerald" : "text-muted-foreground"}`}>{getOnlineStatus(activeChat.last_seen || null, lang).text}</span>
                     <span className="text-muted-foreground/30">·</span>
                     <div className="h-1 w-16 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${activeChat.blurLevel}%` }} /></div>
                     <span className="text-[10px] text-muted-foreground">{activeChat.messages}/20 {t("dating.msg_unlock")}</span>
                   </div>
-                </div>
+                </button>
                 <div className="ml-auto flex items-center gap-1">
                   <button onClick={() => setShowReportDialog(true)} className="text-muted-foreground hover:text-orange-500 transition-colors p-1.5 rounded-lg hover:bg-muted" title={lang === "zh" ? "舉報" : "Report"}><Flag className="w-4 h-4" /></button>
                   <button onClick={() => setShowBlockConfirm(true)} className="text-muted-foreground hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-muted" title={lang === "zh" ? "封鎖" : "Block"}><ShieldAlert className="w-4 h-4" /></button>
@@ -1189,6 +1190,125 @@ export default function Dating() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Partner Profile Drawer */}
+              <AnimatePresence>
+                {showPartnerProfile && activeChat && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/50 flex items-end lg:items-center justify-center" onClick={() => setShowPartnerProfile(false)}>
+                    <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                      className="bg-card rounded-t-2xl lg:rounded-2xl border border-border w-full max-w-md max-h-[85vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+                      {/* Drag handle */}
+                      <div className="flex justify-center pt-3 pb-1 lg:hidden"><div className="w-10 h-1 rounded-full bg-muted-foreground/30" /></div>
+                      {/* Photo */}
+                      <div className="relative">
+                        <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="lg" avatarUrl={activeChat.avatar_url} photos={activeChat.photos} />
+                        <button onClick={() => setShowPartnerProfile(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70"><X className="w-4 h-4" /></button>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        {/* Name / School */}
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-display text-xl font-bold text-foreground">{activeChat.mbti} {genderSign(activeChat.gender)}</span>
+                            {activeChat.age > 0 && <span className="text-sm text-muted-foreground">· {activeChat.age}</span>}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{activeChat.institution}{activeChat.major ? ` · ${activeChat.major}` : ""}</p>
+                          {activeChat.district && <p className="text-xs text-muted-foreground mt-0.5">📍 {activeChat.district}</p>}
+                        </div>
+                        {/* Bio */}
+                        {activeChat.bio && (
+                          <div className="p-3 rounded-xl bg-muted/50">
+                            <p className="text-sm text-foreground leading-relaxed">{activeChat.bio}</p>
+                          </div>
+                        )}
+                        {/* Icebreakers */}
+                        {activeChat.icebreakers && activeChat.icebreakers.filter(ib => ib.answer).length > 0 && (
+                          <div className="space-y-2">
+                            {activeChat.icebreakers.filter(ib => ib.answer).map((ib, idx) => {
+                              const prompt = ICEBREAKER_PROMPTS.find(p => p.key === ib.prompt);
+                              return (
+                                <div key={idx} className="p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15">
+                                  <p className="text-[11px] font-medium text-neon-lavender mb-1 flex items-center gap-1"><MessageSquare className="w-3 h-3" />{prompt ? (lang === "zh" ? prompt.zh : prompt.en) : ib.prompt}</p>
+                                  <p className="text-sm text-foreground">{ib.answer}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {/* Tags */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeChat.sexuality && activeChat.sexuality !== "prefer_not_to_say" && (() => {
+                            const opt = SEXUALITY_OPTIONS.find(s => s.key === activeChat.sexuality);
+                            return opt ? <span className="px-2.5 py-1 rounded-full bg-neon-lavender/10 text-neon-lavender text-xs font-medium">{lang === "zh" ? opt.zh : opt.en}</span> : null;
+                          })()}
+                          {activeChat.relationshipType && (() => {
+                            const labels: Record<string, { zh: string; en: string }> = { long: { zh: "長期關係", en: "Long-term" }, short: { zh: "短期關係", en: "Short-term" }, casual: { zh: "隨意交往", en: "Casual" }, friends: { zh: "先做朋友", en: "Friends first" }, unsure: { zh: "未確定", en: "Unsure" } };
+                            const l = labels[activeChat.relationshipType];
+                            return l ? <span className="px-2.5 py-1 rounded-full bg-neon-cyan/10 text-neon-cyan text-xs font-medium">{lang === "zh" ? l.zh : l.en}</span> : null;
+                          })()}
+                          {activeChat.religion && activeChat.religion !== "none" && activeChat.religion !== "private" && (
+                            <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 text-xs font-medium">{activeChat.religion}</span>
+                          )}
+                        </div>
+                        {/* Interests */}
+                        {activeChat.interests.length > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-2">{lang === "zh" ? "興趣" : "Interests"}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {activeChat.interests.map(key => {
+                                const item = INTEREST_OPTIONS.find(i => i.key === key);
+                                return <span key={key} className="px-2.5 py-1 rounded-full bg-muted text-xs text-muted-foreground font-medium">{item ? (lang === "zh" ? item.zh : key) : key}</span>;
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {/* Photo clarity */}
+                        <div className="p-3 rounded-xl bg-muted/50">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground mb-2"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> {t("dating.photo_clarity")}</span><span className="font-medium">{activeChat.blurLevel}%</span></div>
+                          <div className="h-2 rounded-full bg-background overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${activeChat.blurLevel}%` }} /></div>
+                        </div>
+                        {/* Compatibility */}
+                        {(() => {
+                          const stored = (() => { try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "{}"); } catch { return {}; } })();
+                          const myProfile = { mbti: stored.mbti || user?.mbti || "", interests: stored.interests || [], institution: user?.school || user?.institution || "", district: user?.district || "", religion: user?.religion || "" };
+                          if (!myProfile.mbti) return null;
+                          const compat = computeCompatibility(myProfile as any, activeChat);
+                          return (
+                            <div className="p-3 rounded-xl bg-neon-emerald/5 border border-neon-emerald/15">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium text-foreground">{lang === "zh" ? "配對指數" : "Compatibility"}</span>
+                                <span className="text-lg font-bold text-neon-emerald">{compat.total}%</span>
+                              </div>
+                              <div className="space-y-1.5">
+                                {compat.factors.map(f => (
+                                  <div key={f.key} className="flex items-center gap-2 text-[11px]">
+                                    <span>{f.emoji}</span>
+                                    <span className="flex-1 text-muted-foreground">{lang === "zh" ? f.label_zh : f.label_en}</span>
+                                    <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-neon-emerald/60" style={{ width: `${(f.score / f.max) * 100}%` }} /></div>
+                                  </div>
+                                ))}
+                              </div>
+                              {compat.sharedInterests.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-neon-emerald/10">
+                                  {compat.sharedInterests.map(key => {
+                                    const item = INTEREST_OPTIONS.find(i => i.key === key);
+                                    return <span key={key} className="px-2 py-0.5 rounded-full bg-neon-emerald/10 text-neon-emerald text-[10px] font-medium">{item ? (lang === "zh" ? item.zh : key) : key}</span>;
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        {/* Actions */}
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={() => setShowPartnerProfile(false)} className="flex-1 py-3 rounded-xl font-medium text-sm bg-primary text-white hover:bg-primary/90 transition-colors">{lang === "zh" ? "返回聊天" : "Back to Chat"}</button>
+                          <button onClick={() => { setShowPartnerProfile(false); setShowReportDialog(true); }} className="py-3 px-4 rounded-xl font-medium text-sm border border-border text-muted-foreground hover:text-orange-500 hover:border-orange-500/30 transition-colors"><Flag className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
                 <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />{activeChat.blurLevel >= 100 ? (lang === "zh" ? "照片已完全解鎖 🎉" : "Photos fully unlocked 🎉") : `${t("dating.photo_clarity")} ${activeChat.blurLevel}% · ${t("dating.send_more")} ${Math.max(0, 20 - activeChat.messages)} ${t("dating.to_fully_unlock")}`}</div></div>
                 {(chatMessages[activeChatId] || []).filter((msg) => !hiddenMsgIds.has((msg as any).id || '')).map((msg, idx) => (
