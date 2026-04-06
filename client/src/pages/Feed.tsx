@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Shield, MessageCircle, Heart, Share2, TrendingUp, BookOpen, Compass,
   DollarSign, Send, Ghost, School, GraduationCap, Plus, Search,
   LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench, X, Flame,
-  ChevronDown, ChevronUp, BarChart3, Trash2
+  ChevronDown, ChevronUp, BarChart3, Trash2, ImagePlus
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -163,6 +163,9 @@ export default function Feed() {
   const [isPoll, setIsPoll] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [postImage, setPostImage] = useState<string | null>(null);
+  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const feedImageRef = useRef<HTMLInputElement>(null);
   const { user, isLoggedIn, logout } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -199,16 +202,39 @@ export default function Feed() {
   };
 
   const handlePost = async () => {
-    if (!newPost.trim() && !pollQuestion.trim()) return;
+    if (!newPost.trim() && !pollQuestion.trim() && !postImage) return;
     try {
       const postData: any = { content: newPost, category: composerCategory, privacy_mode: composerPrivacy };
+      if (postImage) postData.image_url = postImage;
       if (isPoll && pollQuestion.trim() && pollOptions.filter(o => o.trim()).length >= 2) {
         postData.poll_question = pollQuestion;
         postData.poll_options = pollOptions.filter(o => o.trim());
       }
       const data = await createPost(postData);
-      if (data.post) { toast.success(t("feed.post.success")); setNewPost(""); setComposerOpen(false); setIsPoll(false); setPollQuestion(""); setPollOptions(["", ""]); fetchPosts(); }
+      if (data.post) { toast.success(t("feed.post.success")); setNewPost(""); setComposerOpen(false); setIsPoll(false); setPollQuestion(""); setPollOptions(["", ""]); setPostImage(null); setPostImagePreview(null); fetchPosts(); }
     } catch { toast.error(lang === "zh" ? "發布失敗" : "Post failed"); }
+  };
+
+  const handleFeedImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error(lang === "zh" ? "圖片不能超過 5MB" : "Image must be under 5MB"); return; }
+    setPostImagePreview(URL.createObjectURL(file));
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width, h = img.height;
+        if (w > 1200 || h > 1200) { const r = Math.min(1200 / w, 1200 / h); w *= r; h *= r; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
+        setPostImage(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   const toggleComments = (postId: string) => setExpandedComments(prev => { const n = new Set(prev); if (n.has(postId)) n.delete(postId); else n.add(postId); return n; });
@@ -284,10 +310,22 @@ export default function Feed() {
                     <textarea value={newPost} onChange={(e) => setNewPost(e.target.value)} placeholder={t("feed.compose.placeholder")}
                       className="w-full h-28 p-3 rounded-xl bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none focus:border-neon-coral focus:ring-2 focus:ring-neon-coral/20 outline-none" autoFocus />
                     <div className="flex items-center gap-3 mt-3">
+                      <input ref={feedImageRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFeedImage} />
+                      <button onClick={() => feedImageRef.current?.click()} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${postImage ? "bg-neon-cyan/15 text-neon-cyan ring-1 ring-neon-cyan/30" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                        <ImagePlus className="w-3 h-3" />{lang === "zh" ? "相片" : "Photo"}
+                      </button>
                       <button onClick={() => setIsPoll(!isPoll)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isPoll ? "bg-neon-lavender/15 text-neon-lavender ring-1 ring-neon-lavender/30" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
                         <BarChart3 className="w-3 h-3" />{lang === "zh" ? "投票" : "Poll"}
                       </button>
                     </div>
+                    {/* Image preview */}
+                    {postImagePreview && (
+                      <div className="relative mt-3 rounded-xl overflow-hidden border border-border">
+                        <img src={postImagePreview} alt="" className="w-full max-h-48 object-cover" />
+                        <button onClick={() => { setPostImage(null); setPostImagePreview(null); }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    )}
                     <AnimatePresence>
                       {isPoll && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
@@ -308,7 +346,7 @@ export default function Feed() {
                       )}
                     </AnimatePresence>
                     <div className="flex justify-end mt-4">
-                      <Button onClick={handlePost} disabled={!newPost.trim() && !(isPoll && pollQuestion.trim())} className="bg-neon-coral hover:bg-neon-coral/90 text-white"><Send className="w-4 h-4 mr-2" />{t("feed.compose.submit")}</Button>
+                      <Button onClick={handlePost} disabled={!newPost.trim() && !(isPoll && pollQuestion.trim()) && !postImage} className="bg-neon-coral hover:bg-neon-coral/90 text-white"><Send className="w-4 h-4 mr-2" />{t("feed.compose.submit")}</Button>
                     </div>
                   </motion.div>
                 </motion.div>
@@ -333,6 +371,11 @@ export default function Feed() {
                         <div><span className="text-sm font-medium text-foreground">{lang === "zh" ? post.authorTag : (post.authorTag_en || post.authorTag)}</span><span className="text-xs text-muted-foreground ml-2">· {formatTimeAgo(post.created_at, lang)}</span></div>
                       </div>
                       <p className="text-sm text-foreground leading-relaxed mb-3">{post.content}</p>
+                      {post.image_url && (
+                        <div className="mb-3 rounded-xl overflow-hidden border border-border">
+                          <img src={post.image_url} alt="" className="w-full max-h-80 object-cover cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(post.image_url, '_blank')} />
+                        </div>
+                      )}
                       {post.poll_question && post.poll_options && <PollDisplay post={post} lang={lang} userId={user?.id} onVote={handleVotePoll} />}
                       <div className="flex items-center gap-4 mt-3">
                         <button onClick={() => handleLike(post.id)} className={`flex items-center gap-1.5 text-xs transition-colors ${post.liked ? "text-neon-coral" : "text-muted-foreground hover:text-neon-coral"}`}><Heart className={`w-4 h-4 ${post.liked ? "fill-current" : ""}`} />{post.likes}</button>

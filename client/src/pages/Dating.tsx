@@ -315,14 +315,15 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl, photos }: { bl
   );
 }
 
-type ChatMsg = { id?: string; text: string; isMe: boolean; time: string; type?: "text" | "gif" | "voice" | "image"; gifUrl?: string; imageUrl?: string; voiceDuration?: number; read?: boolean; replyTo?: string };
+type ChatMsg = { id?: string; text: string; isMe: boolean; time: string; type?: "text" | "gif" | "voice" | "image"; gifUrl?: string; imageUrl?: string; voiceDuration?: number; read?: boolean; replyTo?: string; reactions?: Record<string, string[]> };
 
-function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; onDelete?: (forBoth: boolean) => void; onReply?: () => void; onCopy?: () => void; lang: string }) {
+function ChatBubble({ msg, onDelete, onReply, onCopy, onReact, lang }: { msg: ChatMsg; onDelete?: (forBoth: boolean) => void; onReply?: () => void; onCopy?: () => void; onReact?: (emoji: string) => void; lang: string }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteSub, setShowDeleteSub] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const REACTION_EMOJIS = ["❤️", "😂", "👍", "😮", "😢", "🔥"];
 
   const playVoice = () => {
     if (playing) return;
@@ -396,6 +397,18 @@ function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; on
             {msg.isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? "text-neon-cyan" : "text-white/40"}`} />}
           </div>
           )}
+          {/* Reactions display */}
+          {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+            <div className={`flex gap-1 mt-1 ${msg.isMe ? "justify-end" : "justify-start"}`}>
+              {Object.entries(msg.reactions).map(([emoji, users]) => (
+                <button key={emoji} onClick={() => onReact?.(emoji)}
+                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-all ${users.includes("me") ? "bg-primary/10 border-primary/30" : "bg-muted border-border hover:border-primary/30"}`}>
+                  <span>{emoji}</span>
+                  {users.length > 1 && <span className="text-[10px] text-muted-foreground">{users.length}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {/* Long-press menu */}
         <AnimatePresence>
@@ -407,6 +420,15 @@ function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; on
               transition={{ duration: 0.15 }}
               className={`absolute ${msg.isMe ? "right-0" : "left-0"} bottom-full mb-2 z-50 bg-card border border-border rounded-2xl shadow-xl overflow-hidden min-w-[180px]`}
             >
+              {/* Reaction emoji bar */}
+              <div className="flex items-center gap-0.5 px-2 py-2 border-b border-border/50">
+                {REACTION_EMOJIS.map(emoji => (
+                  <button key={emoji} onClick={() => { onReact?.(emoji); closeMenu(); }}
+                    className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center text-lg hover:scale-125 transition-all">
+                    {emoji}
+                  </button>
+                ))}
+              </div>
               {!showDeleteSub ? (
                 <>
                   <button onClick={() => { onReply?.(); closeMenu(); }}
@@ -599,6 +621,20 @@ export default function Dating() {
       if (data.profiles && data.profiles.length > 0) setRealProfiles(data.profiles);
     }).catch(() => {}).finally(() => setLoadingDiscover(false));
   }, [user?.id, profileSetup]);
+
+  // Request notification permission
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      const timer = setTimeout(() => Notification.requestPermission(), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const sendNotification = (title: string, body: string) => {
+    if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification(title, { body, icon: "/favicon.ico", badge: "/favicon.ico" }); } catch {}
+    }
+  };
 
   // Load real matches on mount + when matches tab opens
   useEffect(() => {
@@ -800,6 +836,7 @@ export default function Dating() {
           : ["Haha really? 😂", "Sure!", "Interesting 🤔", "I agree!", "Tell me more?"];
         const reply: ChatMsg = { text: replies[Math.floor(Math.random() * replies.length)], isMe: false, time: lang === "zh" ? "剛剛" : "Just now", read: true };
         setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), reply] }));
+        sendNotification(lang === "zh" ? "💬 新訊息" : "💬 New Message", reply.text);
       }, 2500 + Math.random() * 2000);
     }
   };
@@ -1311,11 +1348,65 @@ export default function Dating() {
 
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
                 <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />{activeChat.blurLevel >= 100 ? (lang === "zh" ? "照片已完全解鎖 🎉" : "Photos fully unlocked 🎉") : `${t("dating.photo_clarity")} ${activeChat.blurLevel}% · ${t("dating.send_more")} ${Math.max(0, 20 - activeChat.messages)} ${t("dating.to_fully_unlock")}`}</div></div>
+                {/* Nudge / ice-breaker prompt */}
+                {(() => {
+                  const msgs = chatMessages[activeChatId] || [];
+                  const lastMsg = msgs[msgs.length - 1];
+                  const showNudge = msgs.length === 0 || (lastMsg && !lastMsg.isMe && msgs.length <= 2);
+                  if (!showNudge || !activeChat) return null;
+                  const sharedInterests = activeChat.interests || [];
+                  const nudges = lang === "zh" ? [
+                    `見到你都鍾意 ${sharedInterests[0] || "旅行"}！你最近有冇去邊度？`,
+                    `你個 ${activeChat.mbti} 同我好夾喎 😆 你覺得 MBTI 準唔準？`,
+                    `你 bio 入面講嘅好有趣！可以講多啲嗎？`,
+                    `如果可以即刻飛去任何地方，你會去邊？✈️`,
+                    `你平時放學鍾意做咩？`,
+                  ] : [
+                    `I see you're into ${sharedInterests[0] || "travel"} too! Been anywhere cool lately?`,
+                    `Your ${activeChat.mbti} pairs well with mine 😆 Do you think MBTI is accurate?`,
+                    `Your bio is interesting! Tell me more?`,
+                    `If you could fly anywhere right now, where would you go? ✈️`,
+                    `What do you usually do after class?`,
+                  ];
+                  return (
+                    <div className="mb-4 p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15">
+                      <p className="text-[11px] font-medium text-neon-lavender mb-2 flex items-center gap-1">💡 {lang === "zh" ? "唔知點開口？試吓呢啲：" : "Not sure what to say? Try these:"}</p>
+                      <div className="flex flex-col gap-1.5">
+                        {nudges.slice(0, 3).map((nudge, i) => (
+                          <button key={i} onClick={() => { setChatMessage(nudge); }}
+                            className="text-left text-xs text-foreground px-3 py-2 rounded-lg bg-background border border-border hover:border-neon-lavender/30 hover:bg-neon-lavender/5 transition-all truncate">
+                            {nudge}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {(chatMessages[activeChatId] || []).filter((msg) => !hiddenMsgIds.has((msg as any).id || '')).map((msg, idx) => (
                   <ChatBubble key={(msg as any).id || idx} msg={msg} lang={lang}
                     onDelete={(forBoth) => handleDeleteMsg((msg as any).id, forBoth)}
                     onReply={() => setReplyingTo(msg.type === "voice" ? "🎤 Voice note" : msg.text)}
                     onCopy={() => { navigator.clipboard.writeText(msg.text); toast.success(lang === "zh" ? "已複製" : "Copied"); }}
+                    onReact={(emoji) => {
+                      setChatMessages(prev => {
+                        const chatId = activeChatId;
+                        if (!chatId) return prev;
+                        const msgs = [...(prev[chatId] || [])];
+                        const msgIdx = msgs.findIndex(m => ((m as any).id || msgs.indexOf(m)) === ((msg as any).id || idx));
+                        if (msgIdx === -1) return prev;
+                        const target = { ...msgs[msgIdx] };
+                        const reactions = { ...(target.reactions || {}) };
+                        if (reactions[emoji]?.includes("me")) {
+                          reactions[emoji] = reactions[emoji].filter((u: string) => u !== "me");
+                          if (reactions[emoji].length === 0) delete reactions[emoji];
+                        } else {
+                          reactions[emoji] = [...(reactions[emoji] || []), "me"];
+                        }
+                        target.reactions = reactions;
+                        msgs[msgIdx] = target;
+                        return { ...prev, [chatId]: msgs };
+                      });
+                    }}
                   />
                 ))}
                 {isTyping && <TypingIndicator />}
