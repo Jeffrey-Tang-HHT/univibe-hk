@@ -8,14 +8,14 @@ import {
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
   Mic, CheckCheck, Smile, Square, Play, UserX, MoreVertical,
-  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload
+  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus } from "@/lib/chat";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, sendImageMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus } from "@/lib/chat";
 
 type DatingTab = "discover" | "matches" | "profile";
 
@@ -264,7 +264,7 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl, photos }: { bl
   );
 }
 
-type ChatMsg = { id?: string; text: string; isMe: boolean; time: string; type?: "text" | "gif" | "voice"; gifUrl?: string; voiceDuration?: number; read?: boolean; replyTo?: string };
+type ChatMsg = { id?: string; text: string; isMe: boolean; time: string; type?: "text" | "gif" | "voice" | "image"; gifUrl?: string; imageUrl?: string; voiceDuration?: number; read?: boolean; replyTo?: string };
 
 function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; onDelete?: (forBoth: boolean) => void; onReply?: () => void; onCopy?: () => void; lang: string }) {
   const [playing, setPlaying] = useState(false);
@@ -302,7 +302,7 @@ function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; on
       {showMenu && <div className="fixed inset-0 z-40" onClick={closeMenu} />}
       <div className={`flex ${msg.isMe ? "justify-end" : "justify-start"} mb-3 relative`}>
         <div
-          className={`max-w-[75%] relative select-none ${msg.type === "gif" ? "rounded-2xl overflow-hidden" : `px-4 py-2.5 rounded-2xl ${msg.isMe ? "bg-neon-coral text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"}`}`}
+          className={`max-w-[75%] relative select-none ${msg.type === "gif" || msg.type === "image" ? "rounded-2xl overflow-hidden" : `px-4 py-2.5 rounded-2xl ${msg.isMe ? "bg-neon-coral text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"}`}`}
           onTouchStart={startLongPress}
           onTouchEnd={cancelLongPress}
           onTouchMove={cancelLongPress}
@@ -317,7 +317,16 @@ function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; on
               <p className={`text-[11px] truncate ${msg.isMe ? "text-white/70" : "text-muted-foreground"}`}>{msg.replyTo}</p>
             </div>
           )}
-          {msg.type === "voice" ? (
+          {msg.type === "image" && msg.imageUrl ? (
+            <div className="relative">
+              <img src={msg.imageUrl} alt="" className="max-w-full rounded-2xl object-cover cursor-pointer" style={{ maxHeight: "280px" }}
+                onClick={() => window.open(msg.imageUrl, '_blank')} />
+              <div className={`absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full ${msg.isMe ? "bg-black/40" : "bg-black/40"}`}>
+                <span className="text-[10px] text-white/80">{msg.time}</span>
+                {msg.isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? "text-neon-cyan" : "text-white/40"}`} />}
+              </div>
+            </div>
+          ) : msg.type === "voice" ? (
             <button onClick={(e) => { e.stopPropagation(); playVoice(); }} className="flex items-center gap-2 min-w-[160px]">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.isMe ? "bg-white/20" : "bg-foreground/10"}`}>
                 {playing ? <Square className="w-3 h-3" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
@@ -330,10 +339,12 @@ function ChatBubble({ msg, onDelete, onReply, onCopy, lang }: { msg: ChatMsg; on
           ) : (
             <p className="text-sm">{msg.text}</p>
           )}
+          {msg.type !== "image" && (
           <div className={`flex items-center gap-1 mt-1 ${msg.isMe ? "justify-end" : ""}`}>
             <span className={`text-[10px] ${msg.isMe ? "text-white/60" : "text-muted-foreground"}`}>{msg.time}</span>
             {msg.isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? "text-neon-cyan" : "text-white/40"}`} />}
           </div>
+          )}
         </div>
         {/* Long-press menu */}
         <AnimatePresence>
@@ -557,6 +568,7 @@ export default function Dating() {
             time: formatMessageTime(m.time, lang),
             type: m.type || "text",
             voiceDuration: m.voice_duration,
+            imageUrl: m.image_url || undefined,
             read: m.read,
           }));
           setChatMessages(prev => ({ ...prev, [activeChatId]: formatted }));
@@ -695,7 +707,9 @@ export default function Dating() {
   const [reportReason, setReportReason] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingPhotoIndex, setUploadingPhotoIndex] = useState(-1);
+  const [sendingImage, setSendingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatImageInputRef = useRef<HTMLInputElement | null>(null);
   const prevMatchCountRef = useRef(0);
   const prevMsgCountsRef = useRef<Record<string, number>>({});
 
@@ -796,6 +810,45 @@ export default function Dating() {
   const triggerPhotoUpload = (index: number) => {
     setUploadingPhotoIndex(index);
     setTimeout(() => fileInputRef.current?.click(), 50);
+  };
+
+  const handleChatImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChatId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(lang === 'zh' ? '圖片太大（最大5MB）' : 'Image too large (max 5MB)');
+      return;
+    }
+    setSendingImage(true);
+    try {
+      const resized = await resizeImage(file, 1200, 1200);
+      // Optimistic UI: show image immediately
+      const tempMsg: ChatMsg = { text: '📷', isMe: true, time: lang === 'zh' ? '剛剛' : 'Just now', type: 'image', imageUrl: resized, read: false };
+      setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), tempMsg] }));
+
+      // Send via API
+      const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
+      const matchId = (matchProfile as any)?._matchId || activeMatchId;
+      if (user?.id && matchId && !matchId.startsWith('m')) {
+        sendImageMessage(matchId, user.id, resized).then(data => {
+          if (data.message) {
+            setTimeout(() => {
+              setChatMessages(prev => {
+                const msgs = [...(prev[activeChatId] || [])];
+                const last = msgs[msgs.length - 1];
+                if (last?.isMe && last?.type === 'image') msgs[msgs.length - 1] = { ...last, read: true };
+                return { ...prev, [activeChatId]: msgs };
+              });
+            }, 1000);
+          }
+        }).catch(() => toast.error(lang === 'zh' ? '發送失敗' : 'Send failed'));
+      }
+    } catch {
+      toast.error(lang === 'zh' ? '發送失敗' : 'Send failed');
+    } finally {
+      setSendingImage(false);
+      if (chatImageInputRef.current) chatImageInputRef.current.value = '';
+    }
   };
 
   const handleBlock = () => {
@@ -1075,6 +1128,11 @@ export default function Dating() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${showEmojiPicker ? "bg-neon-coral/10 text-neon-coral" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}><Smile className="w-5 h-5" /></button>
+                    <input ref={chatImageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleChatImageUpload} />
+                    <button onClick={() => chatImageInputRef.current?.click()} disabled={sendingImage}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+                      {sendingImage ? <div className="w-4 h-4 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" /> : <ImagePlus className="w-5 h-5" />}
+                    </button>
                     <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder={t("dating.msg_input")} className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-neon-coral/30" />
                     {chatMessage.trim() ? (
                       <Button onClick={handleSendMessage} className="bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl px-4" size="sm"><Send className="w-4 h-4" /></Button>

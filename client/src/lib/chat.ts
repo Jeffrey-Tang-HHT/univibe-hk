@@ -45,6 +45,14 @@ export async function sendVoiceMessage(matchId: string, senderId: string, durati
   return res.json();
 }
 
+export async function sendImageMessage(matchId: string, senderId: string, imageBase64: string) {
+  const res = await fetch(`${API}?action=send-message`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ match_id: matchId, sender_id: senderId, content: '📷', type: 'image', image_base64: imageBase64 }),
+  });
+  return res.json();
+}
+
 export async function discoverProfiles(userId: string) {
   const res = await fetch(`${API}?action=discover&user_id=${userId}`);
   return res.json();

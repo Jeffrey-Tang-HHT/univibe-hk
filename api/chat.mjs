@@ -1,5 +1,8 @@
 import { supabaseQuery } from './utils/supabase.mjs';
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -158,9 +161,10 @@ export default async function handler(req, res) {
 
     // ========== SEND MESSAGE ==========
     if (action === 'send-message' && req.method === 'POST') {
-      const { match_id, sender_id, content, type = 'text', voice_duration } = req.body;
+      const { match_id, sender_id, content, type = 'text', voice_duration, image_base64 } = req.body;
       if (!match_id || !sender_id) return res.status(400).json({ error: 'Missing required fields' });
       if (type === 'text' && !content?.trim()) return res.status(400).json({ error: 'Message content required' });
+      if (type === 'image' && !image_base64) return res.status(400).json({ error: 'Missing image data' });
 
       const matches = await supabaseQuery('matches', { filters: `id=eq.${match_id}&status=eq.active` });
       if (matches.length === 0) return res.status(404).json({ error: 'Match not found or expired' });
@@ -175,8 +179,50 @@ export default async function handler(req, res) {
         return res.status(410).json({ error: 'Match has expired' });
       }
 
-      const msgBody = { match_id, sender_id, content: content || '', type };
+      let image_url = null;
+      if (type === 'image' && image_base64) {
+        // Upload image to Supabase Storage
+        const imgMatches = image_base64.match(/^data:image\/(jpeg|png|webp|gif);base64,(.+)$/);
+        const mimeType = imgMatches ? `image/${imgMatches[1]}` : 'image/jpeg';
+        const raw = imgMatches ? imgMatches[2] : image_base64;
+        const buffer = Buffer.from(raw, 'base64');
+
+        if (buffer.length > 5 * 1024 * 1024) {
+          return res.status(400).json({ error: 'Image too large (max 5MB)' });
+        }
+
+        const ext = mimeType.includes('png') ? 'png' : mimeType.includes('gif') ? 'gif' : 'jpg';
+        const fileName = `chat_${match_id}_${Date.now()}.${ext}`;
+
+        try {
+          const uploadRes = await fetch(
+            `${SUPABASE_URL}/storage/v1/object/chat-images/${fileName}`,
+            {
+              method: 'POST',
+              headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': mimeType,
+                'x-upsert': 'true',
+              },
+              body: buffer,
+            }
+          );
+
+          if (uploadRes.ok) {
+            image_url = `${SUPABASE_URL}/storage/v1/object/public/chat-images/${fileName}`;
+          } else {
+            // Fallback: store as data URL (truncated for safety)
+            image_url = `data:${mimeType};base64,${raw.substring(0, 800000)}`;
+          }
+        } catch (e) {
+          image_url = `data:${mimeType};base64,${raw.substring(0, 800000)}`;
+        }
+      }
+
+      const msgBody = { match_id, sender_id, content: content || (type === 'image' ? '📷' : ''), type };
       if (type === 'voice' && voice_duration) msgBody.voice_duration = voice_duration;
+      if (type === 'image' && image_url) msgBody.image_url = image_url;
       const result = await supabaseQuery('messages', { method: 'POST', body: msgBody });
 
       if (!match.last_message_at) {
@@ -201,7 +247,7 @@ export default async function handler(req, res) {
 
       const messages = await supabaseQuery('messages', {
         filters: `match_id=eq.${match_id}&order=created_at.asc`,
-        select: 'id,sender_id,content,type,voice_duration,read,created_at,deleted_by'
+        select: 'id,sender_id,content,type,voice_duration,image_url,read,created_at,deleted_by'
       });
 
       await supabaseQuery('messages', {
@@ -215,6 +261,7 @@ export default async function handler(req, res) {
           .filter(m => !(m.deleted_by || []).includes(user_id))
           .map(m => ({
             id: m.id, text: m.content, type: m.type, voice_duration: m.voice_duration,
+            image_url: m.image_url || null,
             isMe: m.sender_id === user_id, read: m.read, time: m.created_at, sender_id: m.sender_id,
           }))
       });
