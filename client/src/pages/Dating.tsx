@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime } from "@/lib/chat";
 
 type DatingTab = "discover" | "matches" | "profile";
 
@@ -365,8 +366,60 @@ export default function Dating() {
   const { theme, toggleTheme } = useTheme();
   const [, setLocation] = useLocation();
 
+  // === REAL DATA STATE ===
+  const [realProfiles, setRealProfiles] = useState<MatchProfile[]>([]);
+  const [realMatches, setRealMatches] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
+  const [loadingDiscover, setLoadingDiscover] = useState(false);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load real discover profiles
+  useEffect(() => {
+    if (!user?.id || !profileSetup) return;
+    setLoadingDiscover(true);
+    discoverProfiles(user.id).then(data => {
+      if (data.profiles && data.profiles.length > 0) setRealProfiles(data.profiles);
+    }).catch(() => {}).finally(() => setLoadingDiscover(false));
+  }, [user?.id, profileSetup]);
+
+  // Load real matches when matches tab opens
+  useEffect(() => {
+    if (!user?.id || tab !== "matches") return;
+    setLoadingMatches(true);
+    getMatches(user.id).then(data => {
+      if (data.matches) setRealMatches(data.matches);
+    }).catch(() => {}).finally(() => setLoadingMatches(false));
+  }, [user?.id, tab]);
+
+  // Poll for new messages when in a chat
+  useEffect(() => {
+    if (!activeChatId || !user?.id || !activeMatchId) return;
+    const fetchMessages = () => {
+      getMessages(activeMatchId, user.id).then(data => {
+        if (data.messages) {
+          const formatted: ChatMsg[] = data.messages.map((m: any) => ({
+            text: m.text,
+            isMe: m.isMe,
+            time: formatMessageTime(m.time, lang),
+            type: m.type || "text",
+            voiceDuration: m.voice_duration,
+            read: m.read,
+          }));
+          setChatMessages(prev => ({ ...prev, [activeChatId]: formatted }));
+        }
+      }).catch(() => {});
+    };
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 3000); // poll every 3s
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [activeChatId, activeMatchId, user?.id, lang]);
+
+  // Use real profiles if available, otherwise mock
+  const discoverSource = realProfiles.length > 0 ? realProfiles : MOCK_PROFILES.filter(p => p.messages === 0);
+
   const filteredProfiles = useMemo(() => {
-    let available = MOCK_PROFILES.filter(p => p.messages === 0);
+    let available = discoverSource;
     if (filterSexuality !== "all") available = available.filter(p => p.sexuality === filterSexuality);
     if (filterInstitution !== "all") available = available.filter(p => p.institution === filterInstitution);
     if (filterFaculty !== "all") available = available.filter(p => p.faculty === filterFaculty);
@@ -378,20 +431,55 @@ export default function Dating() {
       available = available.filter(p => p.age >= filterAge[0] && p.age <= filterAge[1]);
     }
     return available;
-  }, [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterAge, filterReligion, filterGender]);
+  }, [discoverSource, filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterAge, filterReligion, filterGender]);
 
   const activeFilterCount = [filterSexuality, filterInstitution, filterFaculty, filterDistrict, filterRelationship, filterReligion, filterGender].filter(f => f !== "all").length + ((filterAge[0] !== 18 || filterAge[1] !== 30) ? 1 : 0);
 
+  // Use real matches if available, otherwise mock
   const matchedProfiles = useMemo(() => {
+    if (realMatches.length > 0) {
+      return realMatches.map((m: any) => ({
+        id: m.partner?.id || m.match_id,
+        gender: m.partner?.gender || "other",
+        age: m.partner?.age || 20,
+        mbti: m.partner?.mbti || "????",
+        institution: m.partner?.school || "",
+        faculty: m.partner?.faculty || "",
+        major: m.partner?.faculty || "",
+        district: m.partner?.district || "",
+        relationshipType: m.partner?.relationship_type || "",
+        religion: m.partner?.religion || "",
+        interests: m.partner?.interests || [],
+        bio: m.partner?.bio || "",
+        sexuality: m.partner?.sexuality || "",
+        blurLevel: m.blur_level || 0,
+        messages: m.message_count || 0,
+        compatibility: 85,
+        lastMessage: m.last_message || undefined,
+        lastMessageTime: m.last_message_at ? formatMessageTime(m.last_message_at, lang) : undefined,
+        unread: m.unread_count || 0,
+        matchedAt: new Date(m.created_at).getTime(),
+        _matchId: m.match_id, // keep real match ID for API calls
+      }));
+    }
     return MOCK_PROFILES.filter(p => p.messages > 0).sort((a, b) => (b.unread || 0) - (a.unread || 0));
-  }, []);
+  }, [realMatches, lang]);
 
   const currentProfile = filteredProfiles[currentIndex % Math.max(filteredProfiles.length, 1)];
-  const activeChat = activeChatId ? MOCK_PROFILES.find(p => p.id === activeChatId) : null;
+  const activeChat = activeChatId ? (matchedProfiles.find(p => p.id === activeChatId) || MOCK_PROFILES.find(p => p.id === activeChatId)) : null;
 
   const handleVibeCheck = () => {
     setSwipeDirection("right");
-    setTimeout(() => { toast.success(t("dating.vibe_sent")); setCurrentIndex(prev => prev + 1); setSwipeDirection(null); }, 300);
+    // Try real API if user and profile have IDs
+    if (user?.id && currentProfile?.id && !currentProfile.id.startsWith("m")) {
+      createMatch(user.id, currentProfile.id).then(data => {
+        if (data.match) toast.success(lang === "zh" ? "已配對！去「配對」查看 🎉" : "Matched! Check your Matches tab 🎉");
+        else toast.success(t("dating.vibe_sent"));
+      }).catch(() => toast.success(t("dating.vibe_sent")));
+    } else {
+      toast.success(t("dating.vibe_sent"));
+    }
+    setTimeout(() => { setCurrentIndex(prev => prev + 1); setSwipeDirection(null); }, 300);
   };
   const handleSkip = () => {
     setSwipeDirection("left");
@@ -401,26 +489,46 @@ export default function Dating() {
     if (!chatMessage.trim() || !activeChatId) return;
     const newMsg: ChatMsg = { text: chatMessage, isMe: true, time: lang === "zh" ? "剛剛" : "Just now", read: false };
     setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), newMsg] }));
+    const msgText = chatMessage;
     setChatMessage("");
-    // Simulate read receipt after 1s
-    setTimeout(() => {
-      setChatMessages(prev => {
-        const msgs = [...(prev[activeChatId] || [])];
-        const last = msgs[msgs.length - 1];
-        if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true };
-        return { ...prev, [activeChatId]: msgs };
-      });
-    }, 1000);
-    // Simulate typing indicator + reply after 2-4s
-    setTimeout(() => setIsTyping(true), 1500);
-    setTimeout(() => {
-      setIsTyping(false);
-      const replies = lang === "zh"
-        ? ["哈哈真係？😂", "好呀！", "有意思 🤔", "我都覺得！", "可以再講多啲嗎？"]
-        : ["Haha really? 😂", "Sure!", "Interesting 🤔", "I agree!", "Tell me more?"];
-      const reply: ChatMsg = { text: replies[Math.floor(Math.random() * replies.length)], isMe: false, time: lang === "zh" ? "剛剛" : "Just now", read: true };
-      setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), reply] }));
-    }, 2500 + Math.random() * 2000);
+
+    // Try real API
+    const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
+    const matchId = (matchProfile as any)?._matchId || activeMatchId;
+    if (user?.id && matchId && !matchId.startsWith("m")) {
+      sendMessage(matchId, user.id, msgText).then(data => {
+        if (data.message) {
+          // Mark as read after 1s
+          setTimeout(() => {
+            setChatMessages(prev => {
+              const msgs = [...(prev[activeChatId] || [])];
+              const last = msgs[msgs.length - 1];
+              if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true };
+              return { ...prev, [activeChatId]: msgs };
+            });
+          }, 1000);
+        }
+      }).catch(() => {});
+    } else {
+      // Mock: simulate read receipt + auto-reply
+      setTimeout(() => {
+        setChatMessages(prev => {
+          const msgs = [...(prev[activeChatId] || [])];
+          const last = msgs[msgs.length - 1];
+          if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true };
+          return { ...prev, [activeChatId]: msgs };
+        });
+      }, 1000);
+      setTimeout(() => setIsTyping(true), 1500);
+      setTimeout(() => {
+        setIsTyping(false);
+        const replies = lang === "zh"
+          ? ["哈哈真係？😂", "好呀！", "有意思 🤔", "我都覺得！", "可以再講多啲嗎？"]
+          : ["Haha really? 😂", "Sure!", "Interesting 🤔", "I agree!", "Tell me more?"];
+        const reply: ChatMsg = { text: replies[Math.floor(Math.random() * replies.length)], isMe: false, time: lang === "zh" ? "剛剛" : "Just now", read: true };
+        setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), reply] }));
+      }, 2500 + Math.random() * 2000);
+    }
   };
   const handleInsertEmoji = (emoji: string) => {
     setChatMessage(prev => prev + emoji);
@@ -433,7 +541,14 @@ export default function Dating() {
       if (!activeChatId || recordingTime < 1) { setRecordingTime(0); return; }
       const msg: ChatMsg = { text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "voice", voiceDuration: recordingTime, read: false };
       setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), msg] }));
+      const dur = recordingTime;
       setRecordingTime(0);
+      // Try real API
+      const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
+      const matchId = (matchProfile as any)?._matchId || activeMatchId;
+      if (user?.id && matchId && !matchId.startsWith("m")) {
+        sendVoiceMessage(matchId, user.id, dur).catch(() => {});
+      }
       setTimeout(() => setChatMessages(prev => { const msgs = [...(prev[activeChatId] || [])]; const last = msgs[msgs.length - 1]; if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true }; return { ...prev, [activeChatId]: msgs }; }), 1000);
     } else {
       setIsRecording(true);
@@ -746,7 +861,7 @@ export default function Dating() {
                         const timeLeft = getTimeRemaining(profile.matchedAt);
                         if (timeLeft.expired) return null;
                         return (
-                        <button key={profile.id} onClick={() => setActiveChatId(profile.id)} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group ${timeLeft.urgent ? "border-destructive/40" : "border-border"}`}>
+                        <button key={profile.id} onClick={() => { setActiveChatId(profile.id); setActiveMatchId((profile as any)._matchId || profile.id); }} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group ${timeLeft.urgent ? "border-destructive/40" : "border-border"}`}>
                           <div className="relative">
                             <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" />
                             {(profile.unread || 0) > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center">{profile.unread}</div>}
