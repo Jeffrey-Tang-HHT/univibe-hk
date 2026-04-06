@@ -6,6 +6,11 @@ function headers() {
   return { 'Content-Type': 'application/json' };
 }
 
+function authHeaders() {
+  const token = localStorage.getItem('unigo_token');
+  return { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+}
+
 export async function createMatch(userId: string, targetId: string) {
   const res = await fetch(`${API}?action=create-match`, {
     method: 'POST', headers: headers(),
@@ -72,4 +77,47 @@ export async function deleteMessage(messageId: string, userId: string, forBoth: 
     body: JSON.stringify({ message_id: messageId, user_id: userId, for_both: forBoth }),
   });
   return res.json();
+}
+
+export async function blockUser(blockerId: string, blockedId: string) {
+  const res = await fetch(`${API}?action=block`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ blocker_id: blockerId, blocked_id: blockedId }),
+  });
+  return res.json();
+}
+
+export async function reportUser(reporterId: string, reportedId: string, reason: string) {
+  const res = await fetch(`${API}?action=report`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ reporter_id: reporterId, reported_id: reportedId, reason }),
+  });
+  return res.json();
+}
+
+export async function heartbeat(userId: string) {
+  const res = await fetch(`${API}?action=heartbeat`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ user_id: userId }),
+  });
+  return res.json();
+}
+
+export async function uploadAvatar(imageBase64: string): Promise<{ success: boolean; avatar_url?: string }> {
+  const res = await fetch('/api/upload-avatar', {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ image_base64: imageBase64 }),
+  });
+  return res.json();
+}
+
+export function getOnlineStatus(lastSeen: string | null, lang: string): { online: boolean; text: string } {
+  if (!lastSeen) return { online: false, text: lang === 'zh' ? '離線' : 'Offline' };
+  const diff = Date.now() - new Date(lastSeen).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 5) return { online: true, text: lang === 'zh' ? '在線' : 'Online' };
+  if (minutes < 60) return { online: false, text: lang === 'zh' ? `${minutes}分鐘前在線` : `${minutes}m ago` };
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return { online: false, text: lang === 'zh' ? `${hours}小時前在線` : `${hours}h ago` };
+  return { online: false, text: lang === 'zh' ? `${Math.floor(hours / 24)}日前在線` : `${Math.floor(hours / 24)}d ago` };
 }

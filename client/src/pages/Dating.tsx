@@ -8,14 +8,14 @@ import {
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
   Mic, CheckCheck, Smile, Square, Play, UserX, MoreVertical,
-  Reply, Copy, CornerUpLeft
+  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage } from "@/lib/chat";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, getOnlineStatus } from "@/lib/chat";
 
 type DatingTab = "discover" | "matches" | "profile";
 
@@ -41,6 +41,8 @@ interface MatchProfile {
   unread?: number;
   icebreakers?: { prompt: string; answer: string }[];
   matchedAt?: number;
+  avatar_url?: string;
+  last_seen?: string;
 }
 
 const SEXUALITY_OPTIONS = [
@@ -188,7 +190,7 @@ function genderSign(g: "male" | "female" | "nonbinary") {
   return <span className="text-purple-400">⚧</span>;
 }
 
-function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mbti: string; size?: "sm" | "md" | "lg" }) {
+function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl }: { blurLevel: number; mbti: string; size?: "sm" | "md" | "lg"; avatarUrl?: string }) {
   const { t } = useLanguage();
   const clarity = blurLevel / 100;
   const blurPx = Math.max(0, 20 * (1 - clarity));
@@ -199,10 +201,16 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mb
 
   return (
     <div className={`${dim} rounded-2xl overflow-hidden relative flex-shrink-0`}>
-      <div className="w-full h-full" style={{
-        background: `linear-gradient(135deg, hsl(${hue1}, 55%, 55%), hsl(${hue3}, 45%, 45%), hsl(${hue2}, 50%, 40%))`,
-        filter: `blur(${blurPx}px)`, transition: "filter 0.5s ease", transform: "scale(1.1)",
-      }} />
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" className="w-full h-full object-cover" style={{
+          filter: `blur(${blurPx}px)`, transition: "filter 0.5s ease", transform: "scale(1.1)",
+        }} />
+      ) : (
+        <div className="w-full h-full" style={{
+          background: `linear-gradient(135deg, hsl(${hue1}, 55%, 55%), hsl(${hue3}, 45%, 45%), hsl(${hue2}, 50%, 40%))`,
+          filter: `blur(${blurPx}px)`, transition: "filter 0.5s ease", transform: "scale(1.1)",
+        }} />
+      )}
       <div className="absolute inset-0 flex items-center justify-center">
         <span className={`font-display font-bold text-white/80 ${size === "lg" ? "text-5xl" : size === "md" ? "text-lg" : "text-sm"}`}
           style={{ filter: `blur(${Math.max(0, blurPx * 0.6)}px)` }}>{mbti}</span>
@@ -352,6 +360,28 @@ function TypingIndicator() {
       </div>
     </div>
   );
+}
+
+function resizeImage(file: File, maxW: number, maxH: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = h * maxW / w; w = maxW; }
+        if (h > maxH) { w = w * maxH / h; h = maxH; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function Dating() {
@@ -543,7 +573,9 @@ export default function Dating() {
         lastMessageTime: m.last_message_at ? formatMessageTime(m.last_message_at, lang) : undefined,
         unread: m.unread_count || 0,
         matchedAt: new Date(m.created_at).getTime(),
-        _matchId: m.match_id, // keep real match ID for API calls
+        _matchId: m.match_id,
+        avatar_url: m.partner?.avatar_url || undefined,
+        last_seen: m.partner?.last_seen || undefined,
       }));
     }
     return user?.id ? [] : MOCK_PROFILES.filter(p => p.messages > 0).sort((a, b) => (b.unread || 0) - (a.unread || 0));
@@ -618,6 +650,111 @@ export default function Dating() {
   const [showUnmatchConfirm, setShowUnmatchConfirm] = useState(false);
   const [hiddenMsgIds, setHiddenMsgIds] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const prevMatchCountRef = useRef(0);
+  const prevMsgCountsRef = useRef<Record<string, number>>({});
+
+  // Heartbeat — update last_seen every 60s
+  useEffect(() => {
+    if (!user?.id) return;
+    heartbeat(user.id).catch(() => {});
+    const hb = setInterval(() => heartbeat(user.id).catch(() => {}), 60000);
+    return () => clearInterval(hb);
+  }, [user?.id]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      // Delay to avoid being too aggressive
+      const timer = setTimeout(() => Notification.requestPermission(), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Notify on new matches
+  useEffect(() => {
+    if (realMatches.length > prevMatchCountRef.current && prevMatchCountRef.current > 0) {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const newest = realMatches[realMatches.length - 1];
+        const mbti = newest?.partner?.mbti || '???';
+        new Notification(lang === 'zh' ? '新配對！' : 'New Match!', {
+          body: lang === 'zh' ? `你同 ${mbti} 配對成功 🎉` : `You matched with ${mbti} 🎉`,
+          icon: '/favicon.ico',
+        });
+      }
+    }
+    prevMatchCountRef.current = realMatches.length;
+  }, [realMatches.length]);
+
+  // Notify on new unread messages
+  useEffect(() => {
+    if (!activeChatId) {
+      for (const m of realMatches) {
+        const key = m.match_id;
+        const prev = prevMsgCountsRef.current[key] || 0;
+        if (m.unread_count > 0 && m.unread_count > prev) {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const mbti = m.partner?.mbti || '???';
+            new Notification(lang === 'zh' ? '新訊息' : 'New Message', {
+              body: lang === 'zh' ? `${mbti}: ${m.last_message || '新訊息'}` : `${mbti}: ${m.last_message || 'New message'}`,
+              icon: '/favicon.ico',
+            });
+          }
+        }
+        prevMsgCountsRef.current[key] = m.unread_count;
+      }
+    }
+  }, [realMatches, activeChatId]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(lang === 'zh' ? '圖片太大（最大5MB）' : 'Image too large (max 5MB)');
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      // Resize client-side
+      const resized = await resizeImage(file, 600, 600);
+      const result = await uploadAvatar(resized);
+      if (result.success && result.avatar_url) {
+        updateProfile({ avatar_url: result.avatar_url });
+        toast.success(lang === 'zh' ? '頭像已上傳！' : 'Photo uploaded!');
+      } else {
+        toast.error(lang === 'zh' ? '上傳失敗' : 'Upload failed');
+      }
+    } catch {
+      toast.error(lang === 'zh' ? '上傳失敗' : 'Upload failed');
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleBlock = () => {
+    if (!user?.id || !activeChat) return;
+    blockUser(user.id, activeChat.id).then(() => {
+      toast.success(lang === 'zh' ? '已封鎖此用戶' : 'User blocked');
+      setActiveChatId(null);
+      setActiveMatchId(null);
+      setShowBlockConfirm(false);
+      getMatches(user.id).then(data => { if (data.matches) setRealMatches(data.matches); });
+    }).catch(() => toast.error(lang === 'zh' ? '操作失敗' : 'Failed'));
+  };
+
+  const handleReport = () => {
+    if (!user?.id || !activeChat) return;
+    reportUser(user.id, activeChat.id, reportReason).then(() => {
+      toast.success(lang === 'zh' ? '舉報已提交，感謝你的反饋' : 'Report submitted, thank you');
+      setShowReportDialog(false);
+      setReportReason("");
+    }).catch(() => toast.error(lang === 'zh' ? '操作失敗' : 'Failed'));
+  };
 
   const handleUnmatch = () => {
     if (!activeChatId) return;
@@ -719,7 +856,11 @@ export default function Dating() {
               <>
                 <button onClick={() => setActiveChatId(null)} className="flex items-center gap-2 text-foreground"><ChevronLeft className="w-5 h-5" /><span className="font-medium text-sm">{t("dating.back")}</span></button>
                 {activeChat && <span className="font-display font-bold text-sm">{activeChat.mbti} {genderSign(activeChat.gender)} · {activeChat.institution}</span>}
-                <button onClick={() => setShowUnmatchConfirm(true)} className="text-muted-foreground hover:text-destructive"><UserX className="w-5 h-5" /></button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setShowReportDialog(true)} className="text-muted-foreground hover:text-orange-500 p-1"><Flag className="w-4 h-4" /></button>
+                  <button onClick={() => setShowBlockConfirm(true)} className="text-muted-foreground hover:text-destructive p-1"><ShieldAlert className="w-4 h-4" /></button>
+                  <button onClick={() => setShowUnmatchConfirm(true)} className="text-muted-foreground hover:text-destructive p-1"><UserX className="w-5 h-5" /></button>
+                </div>
               </>
             ) : (
               <>
@@ -737,15 +878,24 @@ export default function Dating() {
             <div className="flex flex-col h-[calc(100vh-57px)] lg:h-screen">
               <div className="hidden lg:flex items-center gap-4 p-4 border-b border-border">
                 <button onClick={() => setActiveChatId(null)} className="text-muted-foreground hover:text-foreground"><ChevronLeft className="w-5 h-5" /></button>
-                <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="sm" />
+                <div className="relative">
+                  <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="sm" avatarUrl={activeChat.avatar_url} />
+                  {(() => { const s = getOnlineStatus(activeChat.last_seen || null, lang); return s.online ? <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-neon-emerald border-2 border-card" /> : null; })()}
+                </div>
                 <div>
                   <div className="flex items-center gap-2"><span className="font-display font-bold text-foreground">{activeChat.mbti} {genderSign(activeChat.gender)}</span><span className="text-sm text-muted-foreground">· {activeChat.institution} · {activeChat.major}</span></div>
                   <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] ${getOnlineStatus(activeChat.last_seen || null, lang).online ? "text-neon-emerald" : "text-muted-foreground"}`}>{getOnlineStatus(activeChat.last_seen || null, lang).text}</span>
+                    <span className="text-muted-foreground/30">·</span>
                     <div className="h-1 w-16 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${activeChat.blurLevel}%` }} /></div>
                     <span className="text-[10px] text-muted-foreground">{activeChat.messages}/20 {t("dating.msg_unlock")}</span>
                   </div>
                 </div>
-                <button onClick={() => setShowUnmatchConfirm(true)} className="ml-auto text-muted-foreground hover:text-destructive transition-colors" title={lang === "zh" ? "取消配對" : "Unmatch"}><UserX className="w-5 h-5" /></button>
+                <div className="ml-auto flex items-center gap-1">
+                  <button onClick={() => setShowReportDialog(true)} className="text-muted-foreground hover:text-orange-500 transition-colors p-1.5 rounded-lg hover:bg-muted" title={lang === "zh" ? "舉報" : "Report"}><Flag className="w-4 h-4" /></button>
+                  <button onClick={() => setShowBlockConfirm(true)} className="text-muted-foreground hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-muted" title={lang === "zh" ? "封鎖" : "Block"}><ShieldAlert className="w-4 h-4" /></button>
+                  <button onClick={() => setShowUnmatchConfirm(true)} className="text-muted-foreground hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-muted" title={lang === "zh" ? "取消配對" : "Unmatch"}><UserX className="w-5 h-5" /></button>
+                </div>
               </div>
               {/* Unmatch confirmation */}
               <AnimatePresence>
@@ -759,6 +909,55 @@ export default function Dating() {
                         <div className="flex gap-3">
                           <button onClick={() => setShowUnmatchConfirm(false)} className="flex-1 py-3 rounded-xl font-medium text-sm border border-border hover:bg-muted transition-colors">{lang === "zh" ? "取消" : "Cancel"}</button>
                           <button onClick={handleUnmatch} className="flex-1 py-3 rounded-xl font-medium text-sm bg-destructive text-white hover:bg-destructive/90 transition-colors">{lang === "zh" ? "取消配對" : "Unmatch"}</button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {/* Block confirmation */}
+              <AnimatePresence>
+                {showBlockConfirm && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowBlockConfirm(false)}>
+                    <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card rounded-2xl border border-border p-6 max-w-sm w-full shadow-xl" onClick={e => e.stopPropagation()}>
+                      <div className="text-center">
+                        <ShieldAlert className="w-12 h-12 text-destructive mx-auto mb-3" />
+                        <h3 className="font-display font-bold text-lg text-foreground mb-2">{lang === "zh" ? "封鎖此用戶？" : "Block this user?"}</h3>
+                        <p className="text-sm text-muted-foreground mb-5">{lang === "zh" ? "封鎖後對方將無法再看到你或與你配對，所有對話將被刪除。" : "They won't be able to see you or match with you. All messages will be deleted."}</p>
+                        <div className="flex gap-3">
+                          <button onClick={() => setShowBlockConfirm(false)} className="flex-1 py-3 rounded-xl font-medium text-sm border border-border hover:bg-muted transition-colors">{lang === "zh" ? "取消" : "Cancel"}</button>
+                          <button onClick={handleBlock} className="flex-1 py-3 rounded-xl font-medium text-sm bg-destructive text-white hover:bg-destructive/90 transition-colors">{lang === "zh" ? "封鎖" : "Block"}</button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {/* Report dialog */}
+              <AnimatePresence>
+                {showReportDialog && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowReportDialog(false)}>
+                    <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card rounded-2xl border border-border p-6 max-w-sm w-full shadow-xl" onClick={e => e.stopPropagation()}>
+                      <div className="text-center">
+                        <Flag className="w-12 h-12 text-orange-500 mx-auto mb-3" />
+                        <h3 className="font-display font-bold text-lg text-foreground mb-2">{lang === "zh" ? "舉報此用戶" : "Report this user"}</h3>
+                        <p className="text-sm text-muted-foreground mb-4">{lang === "zh" ? "你的舉報將被匿名處理" : "Your report will be handled anonymously"}</p>
+                        <div className="space-y-2 mb-5">
+                          {[
+                            { key: "spam", zh: "垃圾訊息 / 廣告", en: "Spam / Advertising" },
+                            { key: "harassment", zh: "騷擾 / 不當行為", en: "Harassment / Inappropriate behavior" },
+                            { key: "fake", zh: "虛假個人資料", en: "Fake profile" },
+                            { key: "underage", zh: "未成年用戶", en: "Underage user" },
+                            { key: "other", zh: "其他", en: "Other" },
+                          ].map(r => (
+                            <button key={r.key} onClick={() => setReportReason(r.key)} className={`w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all ${reportReason === r.key ? "bg-orange-500/10 text-orange-500 border border-orange-500/30" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                              {lang === "zh" ? r.zh : r.en}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-3">
+                          <button onClick={() => { setShowReportDialog(false); setReportReason(""); }} className="flex-1 py-3 rounded-xl font-medium text-sm border border-border hover:bg-muted transition-colors">{lang === "zh" ? "取消" : "Cancel"}</button>
+                          <button onClick={handleReport} disabled={!reportReason} className="flex-1 py-3 rounded-xl font-medium text-sm bg-orange-500 text-white hover:bg-orange-500/90 transition-colors disabled:opacity-40">{lang === "zh" ? "提交舉報" : "Submit Report"}</button>
                         </div>
                       </div>
                     </motion.div>
@@ -948,7 +1147,7 @@ export default function Dating() {
                         <motion.div key={currentProfile.id + currentIndex} initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: swipeDirection ? 0 : 1, scale: swipeDirection ? 0.9 : 1, x: swipeDirection === "left" ? -200 : swipeDirection === "right" ? 200 : 0, rotate: swipeDirection === "left" ? -10 : swipeDirection === "right" ? 10 : 0 }}
                           transition={{ duration: 0.3 }} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-                          <BlurredAvatar blurLevel={currentProfile.blurLevel} mbti={currentProfile.mbti} size="lg" />
+                          <BlurredAvatar blurLevel={currentProfile.blurLevel} mbti={currentProfile.mbti} size="lg" avatarUrl={currentProfile.avatar_url} />
                           <div className="p-5">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{currentProfile.mbti} {genderSign(currentProfile.gender)}</span><span className="text-sm text-muted-foreground">· {currentProfile.institution}</span></div>
@@ -1021,11 +1220,12 @@ export default function Dating() {
                         return (
                         <button key={profile.id} onClick={() => { setActiveChatId(profile.id); setActiveMatchId((profile as any)._matchId || profile.id); }} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group ${timeLeft.urgent ? "border-destructive/40" : "border-border"}`}>
                           <div className="relative">
-                            <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" />
+                            <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" avatarUrl={profile.avatar_url} />
                             {(profile.unread || 0) > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center">{profile.unread}</div>}
+                            {getOnlineStatus(profile.last_seen || null, lang).online && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-neon-emerald border-2 border-card" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="font-display font-bold text-sm text-foreground">{profile.mbti} {genderSign(profile.gender)}</span><span className="text-xs text-muted-foreground">· {profile.institution}</span></div><span className="text-[10px] text-muted-foreground">{profile.lastMessageTime}</span></div>
+                            <div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="font-display font-bold text-sm text-foreground">{profile.mbti} {genderSign(profile.gender)}</span><span className="text-xs text-muted-foreground">· {profile.institution}</span>{getOnlineStatus(profile.last_seen || null, lang).online && <span className="text-[10px] text-neon-emerald font-medium">{lang === "zh" ? "在線" : "Online"}</span>}</div><span className="text-[10px] text-muted-foreground">{profile.lastMessageTime}</span></div>
                             <p className="text-xs text-muted-foreground mt-0.5">{profile.major}</p>
                             {profile.lastMessage && <p className={`text-sm mt-1.5 truncate ${(profile.unread || 0) > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>{profile.lastMessage}</p>}
                             <div className="flex items-center gap-3 mt-2">
@@ -1051,6 +1251,35 @@ export default function Dating() {
                     <h2 className="font-display text-lg font-bold text-foreground mb-2">{t("dating.profile.title")}</h2>
                     <p className="text-xs text-muted-foreground mb-6">{t("dating.profile.subtitle")}</p>
                     <div className="space-y-6">
+                      {/* Photo Upload */}
+                      <div className="p-4 rounded-xl border border-border bg-card">
+                        <label className="text-sm font-medium text-foreground mb-3 block flex items-center gap-1.5"><Camera className="w-4 h-4 text-neon-coral" />{lang === "zh" ? "交友頭像" : "Dating Photo"}</label>
+                        <p className="text-xs text-muted-foreground mb-3">{lang === "zh" ? "上傳你嘅頭像，配對時會模糊處理，聊天越多越清晰" : "Upload your photo — it starts blurred and reveals as you chat"}</p>
+                        <div className="flex items-center gap-4">
+                          <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-muted flex-shrink-0">
+                            {user?.avatar_url ? (
+                              <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                <Camera className="w-8 h-8" />
+                              </div>
+                            )}
+                            {uploadingPhoto && (
+                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
+                            <button onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}
+                              className="w-full py-2.5 rounded-xl font-medium text-sm border border-neon-coral/30 bg-neon-coral/5 text-neon-coral hover:bg-neon-coral/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                              <Upload className="w-4 h-4" />{user?.avatar_url ? (lang === "zh" ? "更換頭像" : "Change Photo") : (lang === "zh" ? "上傳頭像" : "Upload Photo")}
+                            </button>
+                            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">{lang === "zh" ? "JPEG / PNG · 最大 5MB" : "JPEG / PNG · Max 5MB"}</p>
+                          </div>
+                        </div>
+                      </div>
                       <div className="p-4 rounded-xl border border-border bg-card">
                         <label className="text-sm font-medium text-foreground mb-3 block">{t("dating.profile.sexuality")}</label>
                         <div className="flex flex-wrap gap-2">
@@ -1129,7 +1358,7 @@ export default function Dating() {
                           <p className="text-xs text-muted-foreground mb-3 text-center">{lang === "zh" ? "↓ 其他用戶會見到以下畫面 ↓" : "↓ This is what others see ↓"}</p>
                           <div className="rounded-2xl border-2 border-dashed border-neon-cyan/30 p-3">
                             <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-                              <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" />
+                              <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" avatarUrl={user?.avatar_url} />
                               <div className="p-5">
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{selectedMbti} {user?.gender === "male" ? "♂" : user?.gender === "female" ? "♀" : "⚧"}</span><span className="text-sm text-muted-foreground">· {user?.institution || user?.school || "Your School"}</span></div>
