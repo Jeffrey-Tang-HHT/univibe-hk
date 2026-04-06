@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench,
-  Mail, School, BookOpen, MapPin, Heart, Brain, Calendar, Edit3, Save, X, Camera, Palette, Check
+  Mail, School, BookOpen, MapPin, Calendar, Edit3, Save, X, Palette, Check
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,63 +14,15 @@ import { getUser, updateStoredUser, updateProfile, type User as UserType } from 
 
 const SCHOOLS = ["HKU", "CUHK", "HKUST", "PolyU", "CityU", "HKBU", "LU", "EdUHK", "Others"];
 const FACULTIES = ["建築 Architecture", "文學 Arts", "商學 Business", "牙醫 Dentistry", "教育 Education", "工程 Engineering", "法律 Law", "醫學 Medicine", "理學 Science", "社會科學 Social Sciences", "創意媒體 Creative Media", "設計 Design", "新聞 Journalism", "翻譯 Translation", "其他 Others"];
-const MBTI_TYPES = ["INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"];
 const GENDERS = [
   { value: "male", labelZh: "♂ 男", labelEn: "♂ Male" },
   { value: "female", labelZh: "♀ 女", labelEn: "♀ Female" },
   { value: "nonbinary", labelZh: "⚧ 非二元", labelEn: "⚧ Non-binary" },
 ];
-const SEXUALITIES = [
-  { value: "straight", zh: "異性戀", en: "Straight" },
-  { value: "gay", zh: "男同性戀", en: "Gay" },
-  { value: "lesbian", zh: "女同性戀", en: "Lesbian" },
-  { value: "bisexual", zh: "雙性戀", en: "Bisexual" },
-  { value: "pansexual", zh: "泛性戀", en: "Pansexual" },
-  { value: "asexual", zh: "無性戀", en: "Asexual" },
-  { value: "queer", zh: "酷兒", en: "Queer" },
-  { value: "unsure", zh: "未確定", en: "Unsure" },
-];
 const DISTRICTS = [
   "中西區", "灣仔區", "東區", "南區", "油尖旺區", "深水埗區", "九龍城區",
   "黃大仙區", "觀塘區", "葵青區", "荃灣區", "屯門區", "元朗區", "北區",
   "大埔區", "沙田區", "西貢區", "離島區"
-];
-const RELIGIONS = [
-  { value: "none", zh: "無宗教", en: "None" },
-  { value: "christian", zh: "基督教", en: "Christian" },
-  { value: "catholic", zh: "天主教", en: "Catholic" },
-  { value: "buddhist", zh: "佛教", en: "Buddhist" },
-  { value: "taoist", zh: "道教", en: "Taoist" },
-  { value: "islam", zh: "伊斯蘭教", en: "Islam" },
-  { value: "hindu", zh: "印度教", en: "Hindu" },
-  { value: "spiritual", zh: "有靈性信仰", en: "Spiritual" },
-  { value: "other", zh: "其他", en: "Other" },
-  { value: "private", zh: "不願透露", en: "Prefer not to say" },
-];
-const RELATIONSHIP_TYPES = [
-  { value: "long", zh: "長期關係", en: "Long-term" },
-  { value: "short", zh: "短期關係", en: "Short-term" },
-  { value: "casual", zh: "隨意交往", en: "Casual" },
-  { value: "friends", zh: "先做朋友", en: "Friends first" },
-  { value: "unsure", zh: "未確定", en: "Unsure" },
-];
-const INTERESTS = [
-  { key: "music", emoji: "🎵", zh: "音樂", en: "Music" },
-  { key: "movies", emoji: "🎬", zh: "電影", en: "Movies" },
-  { key: "gaming", emoji: "🎮", zh: "遊戲", en: "Gaming" },
-  { key: "sports", emoji: "⚽", zh: "運動", en: "Sports" },
-  { key: "travel", emoji: "✈️", zh: "旅行", en: "Travel" },
-  { key: "food", emoji: "🍜", zh: "美食", en: "Food" },
-  { key: "reading", emoji: "📚", zh: "閱讀", en: "Reading" },
-  { key: "art", emoji: "🎨", zh: "藝術", en: "Art" },
-  { key: "photography", emoji: "📷", zh: "攝影", en: "Photography" },
-  { key: "fitness", emoji: "💪", zh: "健身", en: "Fitness" },
-  { key: "coding", emoji: "💻", zh: "編程", en: "Coding" },
-  { key: "anime", emoji: "🌸", zh: "動漫", en: "Anime" },
-  { key: "kpop", emoji: "🎤", zh: "K-Pop", en: "K-Pop" },
-  { key: "hiking", emoji: "🥾", zh: "行山", en: "Hiking" },
-  { key: "cooking", emoji: "🍳", zh: "烹飪", en: "Cooking" },
-  { key: "pets", emoji: "🐾", zh: "寵物", en: "Pets" },
 ];
 
 export default function Profile() {
@@ -81,19 +33,13 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Profile form state
+  // Profile form state (account info only — dating fields are in Dating profile tab)
   const [displayName, setDisplayName] = useState("");
   const [gender, setGender] = useState("");
-  const [sexuality, setSexuality] = useState("");
   const [school, setSchool] = useState("");
   const [faculty, setFaculty] = useState("");
   const [district, setDistrict] = useState("");
-  const [mbti, setMbti] = useState("");
   const [age, setAge] = useState("");
-  const [bio, setBio] = useState("");
-  const [relationshipType, setRelationshipType] = useState("");
-  const [religion, setReligion] = useState("");
-  const [interests, setInterests] = useState<string[]>([]);
 
   useEffect(() => {
     if (user) {
@@ -101,16 +47,10 @@ export default function Profile() {
       // FIX: handle both display_name and displayName keys
       setDisplayName(stored?.display_name || stored?.displayName || user.username || "");
       setGender(stored?.gender || "");
-      setSexuality(stored?.sexuality || "");
       setSchool(stored?.school || "");
       setFaculty(stored?.faculty || "");
       setDistrict(stored?.district || "");
-      setMbti(stored?.mbti || "");
       setAge(stored?.age?.toString() || "");
-      setBio(stored?.bio || "");
-      setRelationshipType(stored?.relationship_type || "");
-      setReligion(stored?.religion || "");
-      setInterests(stored?.interests || []);
     }
   }, [user]);
 
@@ -125,16 +65,10 @@ export default function Profile() {
     const updates: Record<string, any> = {
       display_name: displayName,
       gender,
-      sexuality,
       school,
       faculty,
       district,
-      mbti,
       age: age ? parseInt(age) : null,
-      bio,
-      relationship_type: relationshipType,
-      religion,
-      interests,
     };
 
     try {
@@ -158,10 +92,6 @@ export default function Profile() {
     refreshUser();
     setEditing(false);
     setSaving(false);
-  };
-
-  const toggleInterest = (key: string) => {
-    setInterests(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
   const selectClass = "w-full h-10 px-3 rounded-xl bg-background border border-border text-sm text-foreground focus:border-primary/70 focus:ring-2 focus:ring-primary/20 outline-none transition-all";
@@ -254,15 +184,6 @@ export default function Profile() {
                     </div>
                   </div>
 
-                  {/* Sexuality */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">{lang === "zh" ? "性取向" : "Sexuality"}</label>
-                    <select value={sexuality} onChange={e => setSexuality(e.target.value)} className={selectClass}>
-                      <option value="">{lang === "zh" ? "選擇..." : "Select..."}</option>
-                      {SEXUALITIES.map(s => <option key={s.value} value={s.value}>{lang === "zh" ? s.zh : s.en}</option>)}
-                    </select>
-                  </div>
-
                   {/* Age */}
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">{lang === "zh" ? "年齡" : "Age"}</label>
@@ -296,56 +217,9 @@ export default function Profile() {
                     </select>
                   </div>
 
-                  {/* MBTI */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5">MBTI</label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {MBTI_TYPES.map(m => (
-                        <button key={m} onClick={() => setMbti(m)}
-                          className={`py-1.5 rounded-lg text-xs font-medium transition-all ${mbti === m ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-                        >{m}</button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Relationship Type */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">{lang === "zh" ? "關係類型" : "Relationship Type"}</label>
-                    <select value={relationshipType} onChange={e => setRelationshipType(e.target.value)} className={selectClass}>
-                      <option value="">{lang === "zh" ? "選擇..." : "Select..."}</option>
-                      {RELATIONSHIP_TYPES.map(r => <option key={r.value} value={r.value}>{lang === "zh" ? r.zh : r.en}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Religion */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">{lang === "zh" ? "宗教" : "Religion"}</label>
-                    <select value={religion} onChange={e => setReligion(e.target.value)} className={selectClass}>
-                      <option value="">{lang === "zh" ? "選擇..." : "Select..."}</option>
-                      {RELIGIONS.map(r => <option key={r.value} value={r.value}>{lang === "zh" ? r.zh : r.en}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Bio */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">{lang === "zh" ? "個人簡介" : "Bio"}</label>
-                    <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} maxLength={200}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none focus:border-primary/70 focus:ring-2 focus:ring-primary/20 outline-none"
-                      placeholder={lang === "zh" ? "介紹一下你自己..." : "Tell us about yourself..."}
-                    />
-                    <p className="text-xs text-muted-foreground text-right">{bio.length}/200</p>
-                  </div>
-
-                  {/* Interests */}
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1.5">{lang === "zh" ? "興趣" : "Interests"}</label>
-                    <div className="flex flex-wrap gap-2">
-                      {INTERESTS.map(item => (
-                        <button key={item.key} onClick={() => toggleInterest(item.key)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${interests.includes(item.key) ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-                        >{item.emoji} {lang === "zh" ? item.zh : item.en}</button>
-                      ))}
-                    </div>
+                  {/* Dating hint */}
+                  <div className="p-3 rounded-xl bg-neon-coral/5 border border-neon-coral/15">
+                    <p className="text-xs text-muted-foreground">{lang === "zh" ? "💡 交友相關設定（MBTI、興趣、性取向、簡介等）請到「交友」頁面嘅個人檔案分頁修改" : "💡 Dating settings (MBTI, interests, sexuality, bio, etc.) can be edited in the Dating page → Profile tab"}</p>
                   </div>
 
                   {/* Save */}
@@ -358,17 +232,15 @@ export default function Profile() {
               ) : (
                 /* View mode */
                 <div className="space-y-4">
-                  <h3 className="font-bold text-foreground mb-3">{lang === "zh" ? "個人資料" : "Profile Info"}</h3>
+                  <h3 className="font-bold text-foreground mb-3">{lang === "zh" ? "帳戶資料" : "Account Info"}</h3>
                   
                   {[
+                    { icon: Mail, label: lang === "zh" ? "電郵" : "Email", value: user?.email || "" },
                     { icon: User, label: lang === "zh" ? "性別" : "Gender", value: gender ? GENDERS.find(g => g.value === gender)?.[lang === "zh" ? "labelZh" : "labelEn"] : "" },
-                    { icon: Heart, label: lang === "zh" ? "性取向" : "Sexuality", value: sexuality ? SEXUALITIES.find(s => s.value === sexuality)?.[lang === "zh" ? "zh" : "en"] : "" },
                     { icon: Calendar, label: lang === "zh" ? "年齡" : "Age", value: age },
                     { icon: School, label: lang === "zh" ? "院校" : "School", value: school },
                     { icon: BookOpen, label: lang === "zh" ? "學院" : "Faculty", value: faculty },
                     { icon: MapPin, label: lang === "zh" ? "地區" : "District", value: district },
-                    { icon: Brain, label: "MBTI", value: mbti },
-                    { icon: Heart, label: lang === "zh" ? "關係類型" : "Relationship", value: relationshipType ? RELATIONSHIP_TYPES.find(r => r.value === relationshipType)?.[lang === "zh" ? "zh" : "en"] : "" },
                   ].map((item, i) => {
                     const Icon = item.icon;
                     return (
@@ -380,28 +252,11 @@ export default function Profile() {
                     );
                   })}
 
-                  {bio && (
-                    <div className="pt-2">
-                      <p className="text-xs text-muted-foreground mb-1">{lang === "zh" ? "個人簡介" : "Bio"}</p>
-                      <p className="text-sm text-foreground">{bio}</p>
-                    </div>
-                  )}
-
-                  {interests.length > 0 && (
-                    <div className="pt-2">
-                      <p className="text-xs text-muted-foreground mb-2">{lang === "zh" ? "興趣" : "Interests"}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {interests.map(key => {
-                          const item = INTERESTS.find(i => i.key === key);
-                          return item ? (
-                            <span key={key} className="px-2.5 py-1 rounded-full text-xs bg-primary/10 text-primary">
-                              {item.emoji} {lang === "zh" ? item.zh : item.en}
-                            </span>
-                          ) : null;
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* Link to dating profile */}
+                  <a href="/dating" className="block mt-2 p-3 rounded-xl bg-neon-coral/5 border border-neon-coral/15 text-center hover:bg-neon-coral/10 transition-colors">
+                    <p className="text-sm font-medium text-neon-coral">{lang === "zh" ? "💕 編輯交友檔案" : "💕 Edit Dating Profile"}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{lang === "zh" ? "MBTI、興趣、性取向、簡介、相片等" : "MBTI, interests, sexuality, bio, photos, etc."}</p>
+                  </a>
                 </div>
               )}
             </motion.div>

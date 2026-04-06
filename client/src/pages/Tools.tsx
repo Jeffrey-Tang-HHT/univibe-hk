@@ -5,7 +5,7 @@ import {
   Shield, Calculator, Clock, CalendarDays, BookOpen, Timer,
   DollarSign, MapPin, GraduationCap, Brain, Notebook, FileText,
   LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench, X,
-  Play, Pause, RotateCcw, Plus, Trash2, Check, ChevronDown
+  Play, Pause, RotateCcw, Plus, Trash2, Check, ChevronDown, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -182,87 +182,172 @@ function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void })
   );
 }
 
-// ==================== DEADLINE TRACKER ====================
+// ==================== DEADLINE TRACKER (Calendar) ====================
 function DeadlineTracker({ lang, onClose }: { lang: string; onClose: () => void }) {
   const [deadlines, setDeadlines] = useState([
-    { id: "1", title: lang === "zh" ? "COMP3230 Assignment 3" : "COMP3230 Assignment 3", date: "2026-04-15", done: false },
-    { id: "2", title: lang === "zh" ? "ENGL1010 Essay" : "ENGL1010 Essay", date: "2026-04-20", done: false },
-    { id: "3", title: lang === "zh" ? "MATH2011 Midterm" : "MATH2011 Midterm", date: "2026-04-25", done: false },
+    { id: "1", title: "COMP3230 Assignment 3", date: "2026-04-15", done: false },
+    { id: "2", title: "ENGL1010 Essay", date: "2026-04-20", done: false },
+    { id: "3", title: "MATH2011 Midterm", date: "2026-04-25", done: false },
   ]);
   const [newTitle, setNewTitle] = useState("");
   const [newDate, setNewDate] = useState("");
+  const [viewMonth, setViewMonth] = useState(() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const addDeadline = () => {
     if (!newTitle || !newDate) return;
     setDeadlines([...deadlines, { id: `d_${Date.now()}`, title: newTitle, date: newDate, done: false }]);
     setNewTitle("");
     setNewDate("");
+    setShowAdd(false);
   };
-
   const toggleDone = (id: string) => setDeadlines(deadlines.map(d => d.id === id ? { ...d, done: !d.done } : d));
   const removeDeadline = (id: string) => setDeadlines(deadlines.filter(d => d.id !== id));
 
-  const daysUntil = (date: string) => {
-    const diff = Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    return diff;
-  };
+  const daysUntil = (date: string) => Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
-  const sorted = [...deadlines].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Calendar helpers
+  const { year, month } = viewMonth;
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date(); const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const monthNames = lang === "zh"
+    ? ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"]
+    : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dayLabels = lang === "zh" ? ["日", "一", "二", "三", "四", "五", "六"] : ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+  const prevMonth = () => setViewMonth(v => v.month === 0 ? { year: v.year - 1, month: 11 } : { year: v.year, month: v.month - 1 });
+  const nextMonth = () => setViewMonth(v => v.month === 11 ? { year: v.year + 1, month: 0 } : { year: v.year, month: v.month + 1 });
+  const goToday = () => { setViewMonth({ year: today.getFullYear(), month: today.getMonth() }); setSelectedDate(todayStr); };
+
+  const dateKey = (day: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const deadlinesByDate: Record<string, typeof deadlines> = {};
+  deadlines.forEach(d => { if (!deadlinesByDate[d.date]) deadlinesByDate[d.date] = []; deadlinesByDate[d.date].push(d); });
+
+  const selectedDeadlines = selectedDate ? (deadlinesByDate[selectedDate] || []) : [];
+
+  // Upcoming list (next 14 days, undone)
+  const upcoming = [...deadlines].filter(d => !d.done && daysUntil(d.date) >= 0 && daysUntil(d.date) <= 14).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <h3 className="font-bold text-foreground text-lg">{lang === "zh" ? "Deadline 追蹤器" : "Deadline Tracker"}</h3>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => { setShowAdd(!showAdd); if (!showAdd && selectedDate) setNewDate(selectedDate); }} className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90"><Plus className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        </div>
       </div>
 
-      {/* Add new */}
-      <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          placeholder={lang === "zh" ? "新增 deadline..." : "Add deadline..."}
-          value={newTitle}
-          onChange={e => setNewTitle(e.target.value)}
-          className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 outline-none"
-          onKeyDown={e => e.key === "Enter" && addDeadline()}
-        />
-        <input
-          type="date"
-          value={newDate}
-          onChange={e => setNewDate(e.target.value)}
-          className="h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
-        />
-        <button onClick={addDeadline} className="h-9 w-9 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90">
-          <Plus className="w-4 h-4" />
-        </button>
+      {/* Add form */}
+      {showAdd && (
+        <div className="mb-4 p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-2">
+          <input type="text" placeholder={lang === "zh" ? "Deadline 名稱..." : "Deadline name..."} value={newTitle} onChange={e => setNewTitle(e.target.value)}
+            className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 outline-none"
+            onKeyDown={e => e.key === "Enter" && addDeadline()} autoFocus />
+          <div className="flex gap-2">
+            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+              className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none" />
+            <button onClick={addDeadline} disabled={!newTitle || !newDate}
+              className="px-4 h-9 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-40">{lang === "zh" ? "新增" : "Add"}</button>
+            <button onClick={() => setShowAdd(false)} className="px-3 h-9 rounded-lg bg-muted text-muted-foreground text-sm hover:text-foreground">{lang === "zh" ? "取消" : "Cancel"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Calendar */}
+      <div className="rounded-xl border border-border bg-card p-3 mb-4">
+        {/* Month nav */}
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={prevMonth} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"><ChevronLeft className="w-4 h-4" /></button>
+          <button onClick={goToday} className="text-sm font-bold text-foreground hover:text-primary transition-colors">{monthNames[month]} {year}</button>
+          <button onClick={nextMonth} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+        {/* Day headers */}
+        <div className="grid grid-cols-7 mb-1">
+          {dayLabels.map(d => <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-1">{d}</div>)}
+        </div>
+        {/* Days */}
+        <div className="grid grid-cols-7 gap-0.5">
+          {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const dk = dateKey(day);
+            const isToday = dk === todayStr;
+            const isSelected = dk === selectedDate;
+            const dls = deadlinesByDate[dk] || [];
+            const hasDone = dls.some(d => d.done);
+            const hasUndone = dls.some(d => !d.done);
+            const hasOverdue = dls.some(d => !d.done && daysUntil(d.date) < 0);
+            const hasUrgent = dls.some(d => !d.done && daysUntil(d.date) >= 0 && daysUntil(d.date) <= 3);
+            return (
+              <button key={day} onClick={() => setSelectedDate(dk === selectedDate ? null : dk)}
+                className={`relative flex flex-col items-center justify-center h-10 rounded-lg text-xs font-medium transition-all
+                  ${isSelected ? "bg-primary text-white" : isToday ? "bg-primary/10 text-primary font-bold" : "text-foreground hover:bg-muted"}`}>
+                {day}
+                {dls.length > 0 && (
+                  <div className="flex gap-0.5 mt-0.5">
+                    {hasUndone && <span className={`w-1.5 h-1.5 rounded-full ${hasOverdue ? "bg-red-500" : hasUrgent ? "bg-orange-400" : isSelected ? "bg-white" : "bg-primary"}`} />}
+                    {hasDone && <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-white/50" : "bg-emerald-500"}`} />}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* List */}
-      <div className="space-y-2">
-        {sorted.map(d => {
-          const days = daysUntil(d.date);
-          const urgent = days <= 3 && days >= 0;
-          const overdue = days < 0;
-          return (
-            <div key={d.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${d.done ? "bg-muted/50 border-border opacity-60" : urgent ? "bg-red-500/5 border-red-500/30" : "bg-card border-border"}`}>
-              <button onClick={() => toggleDone(d.id)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${d.done ? "bg-emerald-500 border-emerald-500" : "border-muted-foreground"}`}>
-                {d.done && <Check className="w-3 h-3 text-white" />}
-              </button>
-              <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium truncate ${d.done ? "line-through text-muted-foreground" : "text-foreground"}`}>{d.title}</p>
-                <p className="text-xs text-muted-foreground">{d.date}</p>
-              </div>
-              <div className={`text-xs font-medium px-2 py-1 rounded-full ${overdue ? "bg-red-500/10 text-red-500" : urgent ? "bg-orange-500/10 text-orange-500" : "bg-muted text-muted-foreground"}`}>
-                {overdue ? (lang === "zh" ? "已過期" : "Overdue") : days === 0 ? (lang === "zh" ? "今日" : "Today") : `${days}d`}
-              </div>
-              <button onClick={() => removeDeadline(d.id)} className="text-muted-foreground hover:text-red-400 flex-shrink-0">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+      {/* Selected date deadlines */}
+      {selectedDate && (
+        <div className="mb-4">
+          <h4 className="text-xs font-semibold text-muted-foreground mb-2">{selectedDate}</h4>
+          {selectedDeadlines.length > 0 ? (
+            <div className="space-y-1.5">
+              {selectedDeadlines.map(d => {
+                const days = daysUntil(d.date);
+                const overdue = days < 0;
+                return (
+                  <div key={d.id} className={`flex items-center gap-2.5 p-2.5 rounded-xl border transition-all ${d.done ? "bg-muted/50 border-border opacity-60" : overdue ? "bg-red-500/5 border-red-500/30" : "bg-card border-border"}`}>
+                    <button onClick={() => toggleDone(d.id)} className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${d.done ? "bg-emerald-500 border-emerald-500" : "border-muted-foreground"}`}>
+                      {d.done && <Check className="w-3 h-3 text-white" />}
+                    </button>
+                    <span className={`flex-1 text-sm truncate ${d.done ? "line-through text-muted-foreground" : "text-foreground font-medium"}`}>{d.title}</span>
+                    <button onClick={() => removeDeadline(d.id)} className="text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-        {sorted.length === 0 && (
-          <p className="text-center text-muted-foreground text-sm py-8">{lang === "zh" ? "暫無 deadline 🎉" : "No deadlines 🎉"}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground py-3 text-center">{lang === "zh" ? "當日無 deadline" : "No deadlines this day"}</p>
+          )}
+        </div>
+      )}
+
+      {/* Upcoming */}
+      <div>
+        <h4 className="text-xs font-semibold text-muted-foreground mb-2">{lang === "zh" ? "即將到期" : "Upcoming"}</h4>
+        {upcoming.length > 0 ? (
+          <div className="space-y-1.5">
+            {upcoming.map(d => {
+              const days = daysUntil(d.date);
+              const urgent = days <= 3;
+              return (
+                <div key={d.id} className={`flex items-center gap-2.5 p-2.5 rounded-xl border ${urgent ? "bg-red-500/5 border-red-500/20" : "bg-card border-border"}`}>
+                  <button onClick={() => toggleDone(d.id)} className="w-5 h-5 rounded-full border-2 border-muted-foreground flex items-center justify-center flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{d.title}</p>
+                    <p className="text-[10px] text-muted-foreground">{d.date}</p>
+                  </div>
+                  <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${urgent ? "bg-red-500/10 text-red-500" : "bg-muted text-muted-foreground"}`}>
+                    {days === 0 ? (lang === "zh" ? "今日" : "Today") : `${days}d`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-center text-muted-foreground text-xs py-4">{lang === "zh" ? "暫無即將到期嘅 deadline 🎉" : "No upcoming deadlines 🎉"}</p>
         )}
       </div>
     </div>
