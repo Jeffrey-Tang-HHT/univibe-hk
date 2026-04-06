@@ -137,3 +137,23 @@ export function getOnlineStatus(lastSeen: string | null, lang: string): { online
   if (hours < 24) return { online: false, text: lang === 'zh' ? `${hours}小時前在線` : `${hours}h ago` };
   return { online: false, text: lang === 'zh' ? `${Math.floor(hours / 24)}日前在線` : `${Math.floor(hours / 24)}d ago` };
 }
+
+// ========== LIKES / SUPER LIKE ==========
+
+export async function likeUser(likerId: string, likedId: string, isSuper = false) {
+  const res = await fetch(`${API}?action=like-user`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ liker_id: likerId, liked_id: likedId, is_super: isSuper }),
+  });
+  return res.json();
+}
+
+export async function getLikedBy(userId: string) {
+  const res = await fetch(`${API}?action=get-liked-by&user_id=${userId}`);
+  return res.json();
+}
+
+export async function getSuperLikesRemaining(userId: string) {
+  const res = await fetch(`${API}?action=get-super-likes&user_id=${userId}`);
+  return res.json();
+}

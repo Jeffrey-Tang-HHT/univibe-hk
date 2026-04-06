@@ -328,6 +328,127 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
+    // ========== LIKE USER (Vibe Check) ==========
+    if (action === 'like-user' && req.method === 'POST') {
+      const { liker_id, liked_id, is_super = false } = req.body;
+      if (!liker_id || !liked_id) return res.status(400).json({ error: 'Missing user IDs' });
+
+      // Check super like quota
+      if (is_super) {
+        const users = await supabaseQuery('users', { filters: `id=eq.${liker_id}`, select: 'super_likes_remaining,last_super_like_reset' });
+        const u = users[0];
+        if (u) {
+          const today = new Date().toISOString().split('T')[0];
+          let remaining = u.super_likes_remaining ?? 3;
+          if (u.last_super_like_reset !== today) {
+            remaining = 3; // Reset daily
+            await supabaseQuery('users', { method: 'PATCH', filters: `id=eq.${liker_id}`, body: { super_likes_remaining: 3, last_super_like_reset: today } });
+          }
+          if (remaining <= 0) return res.status(400).json({ error: 'No super likes remaining today' });
+          await supabaseQuery('users', { method: 'PATCH', filters: `id=eq.${liker_id}`, body: { super_likes_remaining: remaining - 1 } });
+        }
+      }
+
+      // Upsert like
+      try {
+        await supabaseQuery('likes', { method: 'POST', body: { liker_id, liked_id, is_super } });
+      } catch (e) {
+        // Might already exist, update it
+        await supabaseQuery('likes', { method: 'PATCH', filters: `liker_id=eq.${liker_id}&liked_id=eq.${liked_id}`, body: { is_super } });
+      }
+
+      // Check for mutual like → auto-create match
+      let matched = false;
+      try {
+        const mutual = await supabaseQuery('likes', { filters: `liker_id=eq.${liked_id}&liked_id=eq.${liker_id}` });
+        if (mutual.length > 0) {
+          // Check if match already exists
+          const existingMatch = await supabaseQuery('matches', {
+            filters: `or=(and(user1_id.eq.${liker_id},user2_id.eq.${liked_id}),and(user1_id.eq.${liked_id},user2_id.eq.${liker_id}))&status=eq.active`
+          });
+          if (existingMatch.length === 0) {
+            await supabaseQuery('matches', { method: 'POST', body: { user1_id: liker_id, user2_id: liked_id, status: 'active' } });
+            matched = true;
+          }
+        }
+      } catch (e) {}
+
+      return res.status(200).json({ success: true, is_super, matched });
+    }
+
+    // ========== GET LIKED BY (who liked me) ==========
+    if (action === 'get-liked-by' && req.method === 'GET') {
+      const { user_id } = req.query;
+      if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+
+      const likes = await supabaseQuery('likes', {
+        filters: `liked_id=eq.${user_id}&order=created_at.desc`,
+        select: '*'
+      });
+
+      // Get liker profiles
+      const results = await Promise.all(likes.map(async (like) => {
+        try {
+          const users = await supabaseQuery('users', {
+            filters: `id=eq.${like.liker_id}`,
+            select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,photos,last_seen'
+          });
+          const u = users[0];
+          if (!u) return null;
+          let photos = [];
+          try { photos = typeof u.photos === 'string' ? JSON.parse(u.photos) : (Array.isArray(u.photos) ? u.photos : []); } catch { photos = []; }
+          return {
+            like_id: like.id,
+            is_super: like.is_super,
+            liked_at: like.created_at,
+            profile: {
+              id: u.id,
+              gender: u.gender || 'other',
+              age: u.age || 20,
+              mbti: u.mbti || '????',
+              institution: u.school || '',
+              faculty: u.faculty || '',
+              interests: u.interests || [],
+              bio: u.bio || '',
+              sexuality: u.sexuality || '',
+              avatar_url: u.avatar_url || null,
+              photos: photos.filter(Boolean),
+              last_seen: u.last_seen || null,
+            }
+          };
+        } catch (e) { return null; }
+      }));
+
+      // Also check which ones already matched (to filter out)
+      let matchedIds = new Set();
+      try {
+        const matches = await supabaseQuery('matches', {
+          filters: `or=(user1_id.eq.${user_id},user2_id.eq.${user_id})&status=eq.active`,
+          select: 'user1_id,user2_id'
+        });
+        matches.forEach(m => {
+          if (m.user1_id !== user_id) matchedIds.add(m.user1_id);
+          if (m.user2_id !== user_id) matchedIds.add(m.user2_id);
+        });
+      } catch (e) {}
+
+      const filtered = results.filter(r => r && !matchedIds.has(r.profile.id));
+      return res.status(200).json({ liked_by: filtered });
+    }
+
+    // ========== GET SUPER LIKES REMAINING ==========
+    if (action === 'get-super-likes' && req.method === 'GET') {
+      const { user_id } = req.query;
+      if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+      const users = await supabaseQuery('users', { filters: `id=eq.${user_id}`, select: 'super_likes_remaining,last_super_like_reset' });
+      const u = users[0];
+      if (!u) return res.status(404).json({ error: 'User not found' });
+      const today = new Date().toISOString().split('T')[0];
+      let remaining = u.super_likes_remaining ?? 3;
+      if (u.last_super_like_reset !== today) remaining = 3;
+      return res.status(200).json({ remaining });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error('Chat API error:', err);

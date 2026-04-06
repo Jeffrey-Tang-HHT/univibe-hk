@@ -8,16 +8,16 @@ import {
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
   Mic, CheckCheck, Smile, Square, Play, UserX, MoreVertical,
-  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus
+  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus, Star, Crown
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, sendImageMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus } from "@/lib/chat";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, sendImageMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus, likeUser, getLikedBy, getSuperLikesRemaining } from "@/lib/chat";
 
-type DatingTab = "discover" | "matches" | "profile";
+type DatingTab = "discover" | "matches" | "liked" | "profile";
 
 interface MatchProfile {
   id: string;
@@ -184,6 +184,57 @@ const MBTI_TYPES = [
   "ISTJ", "ISFJ", "ESTJ", "ESFJ",
   "ISTP", "ISFP", "ESTP", "ESFP"
 ];
+
+// MBTI golden pairs (highest compatibility)
+const MBTI_GOLDEN_PAIRS: Record<string, string[]> = {
+  INFJ: ["ENTP", "ENFP"], ENFP: ["INFJ", "INTJ"], INFP: ["ENFJ", "ENTJ"], ENFJ: ["INFP", "ISFP"],
+  INTJ: ["ENFP", "ENTP"], ENTJ: ["INFP", "INTP"], INTP: ["ENTJ", "ESTJ"], ENTP: ["INFJ", "INTJ"],
+  ISFJ: ["ESFP", "ESTP"], ESFJ: ["ISFP", "ISTP"], ISTJ: ["ESFP", "ESTP"], ESTJ: ["INTP", "ISFP"],
+  ISFP: ["ENFJ", "ESFJ", "ESTJ"], ESFP: ["ISFJ", "ISTJ"], ISTP: ["ESFJ", "ESTJ"], ESTP: ["ISFJ", "ISTJ"],
+};
+const MBTI_GOOD_PAIRS: Record<string, string[]> = {
+  INFJ: ["INFP", "ENFJ"], ENFP: ["INFP", "ENFJ"], INFP: ["ENFP", "INFJ"], ENFJ: ["ENFP", "INFJ"],
+  INTJ: ["ENTJ", "INTP"], ENTJ: ["INTJ", "ENTP"], INTP: ["INTJ", "ENTP"], ENTP: ["ENTJ", "INTP"],
+  ISFJ: ["ISTJ", "ESFJ"], ESFJ: ["ISFJ", "ESTJ"], ISTJ: ["ISFJ", "ESTJ"], ESTJ: ["ISTJ", "ESFJ"],
+  ISFP: ["ESFP", "ISTP"], ESFP: ["ISFP", "ESTP"], ISTP: ["ISFP", "ESTP"], ESTP: ["ESFP", "ISTP"],
+};
+
+function computeCompatibility(myProfile: { mbti: string; interests: string[]; institution?: string; district?: string; religion?: string }, other: MatchProfile) {
+  const factors: { key: string; label_zh: string; label_en: string; score: number; max: number; emoji: string }[] = [];
+
+  // MBTI pairing
+  const golden = MBTI_GOLDEN_PAIRS[myProfile.mbti] || [];
+  const good = MBTI_GOOD_PAIRS[myProfile.mbti] || [];
+  let mbtiScore = 5;
+  let mbtiLabel = { zh: "一般配對", en: "Neutral match" };
+  if (golden.includes(other.mbti)) { mbtiScore = 25; mbtiLabel = { zh: "黃金配對 ✨", en: "Golden pair ✨" }; }
+  else if (good.includes(other.mbti)) { mbtiScore = 18; mbtiLabel = { zh: "好配對", en: "Great match" }; }
+  else if (myProfile.mbti === other.mbti) { mbtiScore = 15; mbtiLabel = { zh: "同類型", en: "Same type" }; }
+  factors.push({ key: "mbti", label_zh: `MBTI ${mbtiLabel.zh}`, label_en: `MBTI ${mbtiLabel.en}`, score: mbtiScore, max: 25, emoji: "🧠" });
+
+  // Shared interests
+  const shared = myProfile.interests.filter(i => other.interests.includes(i));
+  const interestScore = Math.min(shared.length * 10, 30);
+  factors.push({ key: "interests", label_zh: `${shared.length} 個共同興趣`, label_en: `${shared.length} shared interests`, score: interestScore, max: 30, emoji: "🎯" });
+
+  // Same institution
+  const sameSchool = myProfile.institution && myProfile.institution === other.institution;
+  factors.push({ key: "school", label_zh: sameSchool ? "同校" : "唔同校", label_en: sameSchool ? "Same school" : "Different school", score: sameSchool ? 15 : 0, max: 15, emoji: "🏫" });
+
+  // Same district
+  const sameDistrict = myProfile.district && myProfile.district === other.district;
+  factors.push({ key: "district", label_zh: sameDistrict ? "同區" : "唔同區", label_en: sameDistrict ? "Same district" : "Different district", score: sameDistrict ? 10 : 0, max: 10, emoji: "📍" });
+
+  // Same religion
+  const sameReligion = myProfile.religion && myProfile.religion === other.religion && myProfile.religion !== "none";
+  factors.push({ key: "religion", label_zh: sameReligion ? "相同信仰" : "信仰不同", label_en: sameReligion ? "Same faith" : "Different faith", score: sameReligion ? 5 : 0, max: 5, emoji: "🙏" });
+
+  // Base
+  factors.push({ key: "base", label_zh: "基礎分", label_en: "Base score", score: 15, max: 15, emoji: "💫" });
+
+  const total = Math.min(factors.reduce((s, f) => s + f.score, 0), 100);
+  return { total, factors, sharedInterests: shared };
+}
 
 function genderSign(g: "male" | "female" | "nonbinary") {
   if (g === "male") return <span className="text-blue-400">♂</span>;
@@ -527,6 +578,9 @@ export default function Dating() {
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [loadingDiscover, setLoadingDiscover] = useState(false);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [likedByProfiles, setLikedByProfiles] = useState<any[]>([]);
+  const [superLikesRemaining, setSuperLikesRemaining] = useState(3);
+  const [showCompatibility, setShowCompatibility] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -554,6 +608,22 @@ export default function Dating() {
       if (data.matches) setRealMatches(data.matches);
     }).catch(() => {}).finally(() => setLoadingMatches(false));
   }, [user?.id, tab]);
+
+  // Load who liked me
+  useEffect(() => {
+    if (!user?.id || tab !== 'liked') return;
+    getLikedBy(user.id).then(data => {
+      if (data.liked_by) setLikedByProfiles(data.liked_by);
+    }).catch(() => {});
+  }, [user?.id, tab]);
+
+  // Load super likes remaining
+  useEffect(() => {
+    if (!user?.id) return;
+    getSuperLikesRemaining(user.id).then(data => {
+      if (data.remaining !== undefined) setSuperLikesRemaining(data.remaining);
+    }).catch(() => {});
+  }, [user?.id]);
 
   // Poll for new messages when in a chat
   useEffect(() => {
@@ -638,16 +708,50 @@ export default function Dating() {
 
   const handleVibeCheck = () => {
     setSwipeDirection("right");
-    // Try real API if user and profile have IDs
     if (user?.id && currentProfile?.id && !currentProfile.id.startsWith("m")) {
-      createMatch(user.id, currentProfile.id).then(data => {
-        if (data.match) toast.success(lang === "zh" ? "已配對！去「配對」查看 🎉" : "Matched! Check your Matches tab 🎉");
-        else toast.success(t("dating.vibe_sent"));
+      likeUser(user.id, currentProfile.id, false).then(data => {
+        if (data.matched) {
+          toast.success(lang === "zh" ? "互相喜歡！已配對 🎉" : "Mutual like! You matched 🎉");
+          getMatches(user.id).then(d => { if (d.matches) setRealMatches(d.matches); });
+        } else {
+          toast.success(t("dating.vibe_sent"));
+        }
       }).catch(() => toast.success(t("dating.vibe_sent")));
     } else {
       toast.success(t("dating.vibe_sent"));
     }
     setTimeout(() => { setCurrentIndex(prev => prev + 1); setSwipeDirection(null); }, 300);
+  };
+  const handleSuperLike = () => {
+    if (superLikesRemaining <= 0) {
+      toast.error(lang === "zh" ? "今日已用完 Super Like" : "No Super Likes left today");
+      return;
+    }
+    setSwipeDirection("right");
+    if (user?.id && currentProfile?.id && !currentProfile.id.startsWith("m")) {
+      likeUser(user.id, currentProfile.id, true).then(data => {
+        setSuperLikesRemaining(prev => Math.max(0, prev - 1));
+        if (data.matched) {
+          toast.success(lang === "zh" ? "⭐ Super Like 配對成功！" : "⭐ Super Like matched!");
+          getMatches(user.id).then(d => { if (d.matches) setRealMatches(d.matches); });
+        } else {
+          toast.success(lang === "zh" ? "⭐ 已發送 Super Like！" : "⭐ Super Like sent!");
+        }
+      }).catch(() => toast.error(lang === "zh" ? "發送失敗" : "Failed"));
+    } else {
+      toast.success(lang === "zh" ? "⭐ 已發送 Super Like！" : "⭐ Super Like sent!");
+    }
+    setTimeout(() => { setCurrentIndex(prev => prev + 1); setSwipeDirection(null); }, 300);
+  };
+  const handleLikedByAccept = (profileId: string) => {
+    if (!user?.id) return;
+    likeUser(user.id, profileId, false).then(data => {
+      if (data.matched) {
+        toast.success(lang === "zh" ? "配對成功！🎉" : "Matched! 🎉");
+        getMatches(user.id).then(d => { if (d.matches) setRealMatches(d.matches); });
+      }
+      setLikedByProfiles(prev => prev.filter(p => p.profile.id !== profileId));
+    }).catch(() => {});
   };
   const handleSkip = () => {
     setSwipeDirection("left");
@@ -1153,9 +1257,10 @@ export default function Dating() {
             <div className="max-w-2xl mx-auto px-4 py-6">
               {/* Tabs */}
               <div className="flex gap-1 mb-6 bg-muted rounded-xl p-1">
-                {(["discover", "matches", "profile"] as DatingTab[]).map((t_) => (
-                  <button key={t_} onClick={() => setTab(t_)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t_ ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "matches" ? t("dating.tab.matches") : t("dating.tab.profile")}
+                {(["discover", "liked", "matches", "profile"] as DatingTab[]).map((t_) => (
+                  <button key={t_} onClick={() => setTab(t_)} className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all relative ${tab === t_ ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "liked" ? (lang === "zh" ? "喜歡你" : "Liked You") : t_ === "matches" ? t("dating.tab.matches") : t("dating.tab.profile")}
+                    {t_ === "liked" && likedByProfiles.length > 0 && <span className="absolute -top-1 -right-0.5 w-4 h-4 rounded-full bg-neon-coral text-white text-[9px] flex items-center justify-center">{likedByProfiles.length}</span>}
                   </button>
                 ))}
               </div>
@@ -1277,8 +1382,37 @@ export default function Dating() {
                           <div className="p-5">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{currentProfile.mbti} {genderSign(currentProfile.gender)}</span><span className="text-sm text-muted-foreground">· {currentProfile.institution}</span></div>
-                              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neon-emerald/10 text-neon-emerald text-xs font-semibold"><Sparkles className="w-3 h-3" />{currentProfile.compatibility}%</div>
+                              <button onClick={() => setShowCompatibility(!showCompatibility)} className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neon-emerald/10 text-neon-emerald text-xs font-semibold hover:bg-neon-emerald/20 transition-colors">
+                                <Sparkles className="w-3 h-3" />
+                                {(() => { const c = computeCompatibility({ mbti: selectedMbti, interests: selectedInterests, institution: user?.school, district: user?.district, religion: user?.religion }, currentProfile); return c.total; })()}%
+                              </button>
                             </div>
+                            {/* Compatibility breakdown */}
+                            <AnimatePresence>
+                              {showCompatibility && (() => {
+                                const compat = computeCompatibility({ mbti: selectedMbti, interests: selectedInterests, institution: user?.school, district: user?.district, religion: user?.religion }, currentProfile);
+                                return (
+                                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
+                                    <div className="p-3 rounded-xl bg-neon-emerald/5 border border-neon-emerald/15 space-y-2">
+                                      <p className="text-xs font-medium text-neon-emerald mb-1">{lang === "zh" ? "配對分析" : "Compatibility Breakdown"}</p>
+                                      {compat.factors.map(f => (
+                                        <div key={f.key} className="flex items-center gap-2">
+                                          <span className="text-sm w-5">{f.emoji}</span>
+                                          <span className="text-xs text-foreground flex-1">{lang === "zh" ? f.label_zh : f.label_en}</span>
+                                          <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-neon-emerald" style={{ width: `${(f.score / f.max) * 100}%` }} /></div>
+                                          <span className="text-[10px] text-muted-foreground w-8 text-right">+{f.score}</span>
+                                        </div>
+                                      ))}
+                                      {compat.sharedInterests.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1 pt-2 border-t border-neon-emerald/10">
+                                          {compat.sharedInterests.map(i => <span key={i} className="px-2 py-0.5 rounded-full bg-neon-emerald/10 text-neon-emerald text-[10px] font-medium">{i}</span>)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                );
+                              })()}
+                            </AnimatePresence>
                             <p className="text-sm text-muted-foreground mb-3">{currentProfile.major}</p>
                             {currentProfile.bio && <p className="text-sm text-foreground mb-4 leading-relaxed">{currentProfile.bio}</p>}
                             {currentProfile.icebreakers && currentProfile.icebreakers.length > 0 && (
@@ -1305,9 +1439,13 @@ export default function Dating() {
                               <div className="h-2 rounded-full bg-background overflow-hidden"><motion.div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" initial={{ width: 0 }} animate={{ width: `${currentProfile.blurLevel}%` }} transition={{ duration: 0.8, ease: "easeOut" }} /></div>
                               <p className="text-[10px] text-muted-foreground mt-1.5">{t("dating.reveal_desc")}</p>
                             </div>
-                            <div className="flex gap-3">
-                              <Button variant="outline" className="flex-1 h-12 rounded-xl text-base" onClick={handleSkip}><X className="w-5 h-5 mr-2 text-muted-foreground" />{t("dating.skip")}</Button>
-                              <Button className="flex-1 h-12 bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl text-base" onClick={handleVibeCheck}><Zap className="w-5 h-5 mr-2" />{t("dating.vibe_check")}</Button>
+                            <div className="flex gap-2">
+                              <Button variant="outline" className="flex-1 h-12 rounded-xl text-base" onClick={handleSkip}><X className="w-5 h-5 mr-1 text-muted-foreground" />{t("dating.skip")}</Button>
+                              <Button variant="outline" className="h-12 rounded-xl px-3 border-amber-400/40 hover:bg-amber-400/10" onClick={handleSuperLike} disabled={superLikesRemaining <= 0}>
+                                <Star className={`w-5 h-5 ${superLikesRemaining > 0 ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`} />
+                                <span className="text-[10px] text-muted-foreground ml-0.5">{superLikesRemaining}</span>
+                              </Button>
+                              <Button className="flex-1 h-12 bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl text-base" onClick={handleVibeCheck}><Zap className="w-5 h-5 mr-1" />{t("dating.vibe_check")}</Button>
                             </div>
                           </div>
                         </motion.div>
@@ -1327,6 +1465,52 @@ export default function Dating() {
                         ))}
                       </div>
                     </div>
+                  </motion.div>
+                )}
+
+                {/* LIKED YOU */}
+                {tab === "liked" && (
+                  <motion.div key="liked" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                    <h2 className="font-display text-lg font-bold text-foreground mb-2">{lang === "zh" ? "誰喜歡了你" : "Who Liked You"}</h2>
+                    <p className="text-xs text-muted-foreground mb-4">{lang === "zh" ? "呢啲用戶向你傳送咗 Vibe Check — 接受即配對！" : "These users sent you a Vibe Check — accept to match!"}</p>
+                    {likedByProfiles.length > 0 ? (
+                      <div className="space-y-3">
+                        {likedByProfiles.map((item) => (
+                          <div key={item.like_id} className={`p-4 rounded-2xl border bg-card overflow-hidden ${item.is_super ? "border-amber-400/40 ring-1 ring-amber-400/20" : "border-border"}`}>
+                            <div className="flex items-center gap-4">
+                              <BlurredAvatar blurLevel={0} mbti={item.profile.mbti} size="md" avatarUrl={item.profile.avatar_url} photos={item.profile.photos} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-display font-bold text-foreground">{item.profile.mbti} {genderSign(item.profile.gender)}</span>
+                                  {item.is_super && <span className="px-1.5 py-0.5 rounded-full bg-amber-400/15 text-amber-500 text-[10px] font-bold flex items-center gap-0.5"><Star className="w-2.5 h-2.5 fill-current" />Super</span>}
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">{item.profile.institution}{item.profile.faculty ? ` · ${item.profile.faculty}` : ""}</p>
+                                {item.profile.bio && <p className="text-xs text-foreground mt-1 line-clamp-2">{item.profile.bio}</p>}
+                                {item.profile.interests.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {item.profile.interests.slice(0, 4).map(i => <span key={i} className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] text-muted-foreground">{i}</span>)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <Button variant="outline" className="flex-1 h-9 rounded-xl text-sm" onClick={() => setLikedByProfiles(prev => prev.filter(p => p.like_id !== item.like_id))}>
+                                <X className="w-4 h-4 mr-1 text-muted-foreground" />{lang === "zh" ? "略過" : "Skip"}
+                              </Button>
+                              <Button className="flex-1 h-9 bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl text-sm" onClick={() => handleLikedByAccept(item.profile.id)}>
+                                <Heart className="w-4 h-4 mr-1" />{lang === "zh" ? "接受配對" : "Accept"}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-16 rounded-2xl border border-border bg-card">
+                        <Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" />
+                        <p className="text-lg font-medium text-foreground mb-2">{lang === "zh" ? "暫時冇人" : "No one yet"}</p>
+                        <p className="text-sm text-muted-foreground">{lang === "zh" ? "繼續完善你嘅檔案，吸引更多人！" : "Keep improving your profile to attract more people!"}</p>
+                      </div>
+                    )}
                   </motion.div>
                 )}
 
