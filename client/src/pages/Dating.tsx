@@ -6,7 +6,8 @@ import {
   Home, HeartHandshake, Wrench, User, Globe, Moon, Sun, LogOut,
   X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2, Timer,
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
-  BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain
+  BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
+  Mic, CheckCheck, Smile, Square, Play
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -214,12 +215,64 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mb
   );
 }
 
-function ChatBubble({ message, isMe, time }: { message: string; isMe: boolean; time: string }) {
+type ChatMsg = { text: string; isMe: boolean; time: string; type?: "text" | "gif" | "voice"; gifUrl?: string; voiceDuration?: number; read?: boolean };
+
+function ChatBubble({ msg }: { msg: ChatMsg }) {
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  // Simulate voice playback
+  const playVoice = () => {
+    if (playing) return;
+    setPlaying(true);
+    setProgress(0);
+    const dur = (msg.voiceDuration || 5) * 1000;
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      if (elapsed >= dur) { setPlaying(false); setProgress(0); return; }
+      setProgress((elapsed / dur) * 100);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
   return (
-    <div className={`flex ${isMe ? "justify-end" : "justify-start"} mb-3`}>
-      <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${isMe ? "bg-neon-coral text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"}`}>
-        <p className="text-sm">{message}</p>
-        <p className={`text-[10px] mt-1 ${isMe ? "text-white/60" : "text-muted-foreground"}`}>{time}</p>
+    <div className={`flex ${msg.isMe ? "justify-end" : "justify-start"} mb-3`}>
+      <div className={`max-w-[75%] ${msg.type === "gif" ? "rounded-2xl overflow-hidden" : `px-4 py-2.5 rounded-2xl ${msg.isMe ? "bg-neon-coral text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"}`}`}>
+        {msg.type === "gif" && msg.gifUrl ? (
+          <img src={msg.gifUrl} alt="GIF" className="w-48 h-auto rounded-2xl" />
+        ) : msg.type === "voice" ? (
+          <button onClick={playVoice} className="flex items-center gap-2 min-w-[160px]">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.isMe ? "bg-white/20" : "bg-foreground/10"}`}>
+              {playing ? <Square className="w-3 h-3" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+            </div>
+            <div className="flex-1">
+              <div className="h-1.5 rounded-full bg-current/20 overflow-hidden"><div className="h-full rounded-full bg-current/60 transition-all" style={{ width: `${playing ? progress : 0}%` }} /></div>
+              <span className={`text-[10px] mt-0.5 block ${msg.isMe ? "text-white/60" : "text-muted-foreground"}`}>{msg.voiceDuration || 5}s</span>
+            </div>
+          </button>
+        ) : (
+          <p className="text-sm">{msg.text}</p>
+        )}
+        <div className={`flex items-center gap-1 mt-1 ${msg.isMe ? "justify-end" : ""}`}>
+          <span className={`text-[10px] ${msg.isMe ? "text-white/60" : "text-muted-foreground"}`}>{msg.time}</span>
+          {msg.isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? "text-neon-cyan" : msg.isMe ? "text-white/40" : "text-muted-foreground/40"}`} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start mb-3">
+      <div className="px-4 py-3 rounded-2xl bg-muted rounded-bl-md">
+        <div className="flex gap-1">
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+        </div>
       </div>
     </div>
   );
@@ -228,11 +281,21 @@ function ChatBubble({ message, isMe, time }: { message: string; isMe: boolean; t
 export default function Dating() {
   const [tab, setTab] = useState<DatingTab>("discover");
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [profileSetup, setProfileSetup] = useState(false);
-  const [selectedSexuality, setSelectedSexuality] = useState<string[]>(["prefer_not_to_say"]);
-  const [selectedMbti, setSelectedMbti] = useState("");
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-  const [selectedIcebreakers, setSelectedIcebreakers] = useState<{ prompt: string; answer: string }[]>([]);
+  const [profileSetup, setProfileSetup] = useState(() => {
+    try { const d = JSON.parse(localStorage.getItem("unigo-dating-profile") || ""); return !!d.mbti; } catch { return false; }
+  });
+  const [selectedSexuality, setSelectedSexuality] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").sexuality || ["prefer_not_to_say"]; } catch { return ["prefer_not_to_say"]; }
+  });
+  const [selectedMbti, setSelectedMbti] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").mbti || ""; } catch { return ""; }
+  });
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").interests || []; } catch { return []; }
+  });
+  const [selectedIcebreakers, setSelectedIcebreakers] = useState<{ prompt: string; answer: string }[]>(() => {
+    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").icebreakers || []; } catch { return []; }
+  });
   const [editingIcebreakerIdx, setEditingIcebreakerIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -268,25 +331,32 @@ export default function Dating() {
   const [showFilters, setShowFilters] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState("");
-  const [chatMessages, setChatMessages] = useState<Record<string, { text: string; isMe: boolean; time: string }[]>>({
+  const [isTyping, setIsTyping] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [chatMessages, setChatMessages] = useState<Record<string, ChatMsg[]>>({
     m3: [
-      { text: "你好！見到你都鍾意攝影 📸", isMe: false, time: "3小時前" },
-      { text: "係呀！我平時鍾意去離島影日落", isMe: true, time: "3小時前" },
-      { text: "你鍾意去邊度影相？", isMe: false, time: "2小時前" },
+      { text: "你好！見到你都鍾意攝影 📸", isMe: false, time: "3小時前", read: true },
+      { text: "係呀！我平時鍾意去離島影日落", isMe: true, time: "3小時前", read: true },
+      { text: "", isMe: false, time: "2小時前", type: "voice", voiceDuration: 8, read: true },
+      { text: "你鍾意去邊度影相？", isMe: false, time: "2小時前", read: true },
     ],
     m4: [
-      { text: "你個 ENTJ 配我個 ENFP 好夾喎 😆", isMe: true, time: "2日前" },
-      { text: "係呀！MBTI compatibility 95% 🔥", isMe: false, time: "2日前" },
-      { text: "今晚一齊食飯？", isMe: false, time: "30分鐘前" },
+      { text: "你個 ENTJ 配我個 ENFP 好夾喎 😆", isMe: true, time: "2日前", read: true },
+      { text: "係呀！MBTI compatibility 95% 🔥", isMe: false, time: "2日前", read: true },
+      { text: "", isMe: false, time: "1日前", type: "gif", gifUrl: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDRjMnZ1YnUybGVqNG1qNnBkeXY0dXFjdWlxOGQ1Y2V5MDRxOWJuYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0MYt5jPR6QX5pnqM/giphy.gif", read: true },
+      { text: "今晚一齊食飯？", isMe: false, time: "30分鐘前", read: false },
     ],
     m5: [
-      { text: "你個 profile 好文青呀", isMe: true, time: "6小時前" },
-      { text: "哈哈多謝！你鍾意咩類型嘅電影？", isMe: false, time: "6小時前" },
-      { text: "你覺得呢套戲點？", isMe: false, time: "5小時前" },
+      { text: "你個 profile 好文青呀", isMe: true, time: "6小時前", read: true },
+      { text: "哈哈多謝！你鍾意咩類型嘅電影？", isMe: false, time: "6小時前", read: true },
+      { text: "你覺得呢套戲點？", isMe: false, time: "5小時前", read: true },
     ],
     m6: [
-      { text: "你都鍾意唱K！去邊間？", isMe: true, time: "2日前" },
-      { text: "下次一齊去唱K！", isMe: false, time: "1日前" },
+      { text: "你都鍾意唱K！去邊間？", isMe: true, time: "2日前", read: true },
+      { text: "", isMe: true, time: "2日前", type: "voice", voiceDuration: 12, read: true },
+      { text: "下次一齊去唱K！", isMe: false, time: "1日前", read: true },
     ],
   });
   const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(null);
@@ -329,13 +399,57 @@ export default function Dating() {
   };
   const handleSendMessage = () => {
     if (!chatMessage.trim() || !activeChatId) return;
-    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), { text: chatMessage, isMe: true, time: lang === "zh" ? "剛剛" : "Just now" }] }));
+    const newMsg: ChatMsg = { text: chatMessage, isMe: true, time: lang === "zh" ? "剛剛" : "Just now", read: false };
+    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), newMsg] }));
     setChatMessage("");
+    // Simulate read receipt after 1s
+    setTimeout(() => {
+      setChatMessages(prev => {
+        const msgs = [...(prev[activeChatId] || [])];
+        const last = msgs[msgs.length - 1];
+        if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true };
+        return { ...prev, [activeChatId]: msgs };
+      });
+    }, 1000);
+    // Simulate typing indicator + reply after 2-4s
+    setTimeout(() => setIsTyping(true), 1500);
+    setTimeout(() => {
+      setIsTyping(false);
+      const replies = lang === "zh"
+        ? ["哈哈真係？😂", "好呀！", "有意思 🤔", "我都覺得！", "可以再講多啲嗎？"]
+        : ["Haha really? 😂", "Sure!", "Interesting 🤔", "I agree!", "Tell me more?"];
+      const reply: ChatMsg = { text: replies[Math.floor(Math.random() * replies.length)], isMe: false, time: lang === "zh" ? "剛剛" : "Just now", read: true };
+      setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), reply] }));
+    }, 2500 + Math.random() * 2000);
+  };
+  const handleSendGif = (url: string) => {
+    if (!activeChatId) return;
+    const msg: ChatMsg = { text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "gif", gifUrl: url, read: false };
+    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), msg] }));
+    setShowGifPicker(false);
+    setTimeout(() => setChatMessages(prev => { const msgs = [...(prev[activeChatId] || [])]; const last = msgs[msgs.length - 1]; if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true }; return { ...prev, [activeChatId]: msgs }; }), 1000);
+  };
+  const handleVoiceRecord = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      if (!activeChatId || recordingTime < 1) return;
+      const msg: ChatMsg = { text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "voice", voiceDuration: recordingTime, read: false };
+      setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), msg] }));
+      setRecordingTime(0);
+      setTimeout(() => setChatMessages(prev => { const msgs = [...(prev[activeChatId] || [])]; const last = msgs[msgs.length - 1]; if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true }; return { ...prev, [activeChatId]: msgs }; }), 1000);
+    } else {
+      setIsRecording(true);
+      setRecordingTime(0);
+      const start = Date.now();
+      const tick = () => { if (!document.querySelector("[data-recording]")) return; setRecordingTime(Math.floor((Date.now() - start) / 1000)); requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }
   };
   const handleSaveProfile = () => {
     if (!selectedMbti) { toast.error(t("dating.error.mbti")); return; }
     if (selectedInterests.length < 3) { toast.error(t("dating.error.interests")); return; }
     updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality.join(","), interests: selectedInterests, icebreakers: selectedIcebreakers });
+    localStorage.setItem("unigo-dating-profile", JSON.stringify({ mbti: selectedMbti, sexuality: selectedSexuality, interests: selectedInterests, icebreakers: selectedIcebreakers }));
     setProfileSetup(true);
     setShowPreview(true);
     toast.success(t("dating.profile_saved"));
@@ -403,13 +517,50 @@ export default function Dating() {
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
                 <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />{t("dating.photo_clarity")} {activeChat.blurLevel}% · {t("dating.send_more")} {20 - activeChat.messages} {t("dating.to_fully_unlock")}</div></div>
-                {(chatMessages[activeChatId] || []).map((msg, idx) => (<ChatBubble key={idx} message={msg.text} isMe={msg.isMe} time={msg.time} />))}
+                {(chatMessages[activeChatId] || []).map((msg, idx) => (<ChatBubble key={idx} msg={msg} />))}
+                {isTyping && <TypingIndicator />}
               </div>
               <div className="p-4 border-t border-border bg-card/50">
-                <div className="flex items-center gap-3">
-                  <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder={t("dating.msg_input")} className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-neon-coral/30" />
-                  <Button onClick={handleSendMessage} disabled={!chatMessage.trim()} className="bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl px-4" size="sm"><Send className="w-4 h-4" /></Button>
-                </div>
+                <AnimatePresence>
+                  {showGifPicker && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden">
+                      <div className="flex items-center justify-between mb-2"><span className="text-xs font-medium text-foreground">GIFs</span><button onClick={() => setShowGifPicker(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button></div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDRjMnZ1YnUybGVqNG1qNnBkeXY0dXFjdWlxOGQ1Y2V5MDRxOWJuYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0MYt5jPR6QX5pnqM/giphy.gif",
+                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzVpMWRjZGMyN3BpY3Q2ZWRqMHlxcGJ4OWdxdnNhZGN0MXRhNSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKU8RvQuomFfUUU/giphy.gif",
+                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmRnNXV5NjF5MXBxZDZ2NzVpNnN0ZWlicTlrYWVxOW5jZ2xoeSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/XD9o33QG9QLmg/giphy.gif",
+                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMnM5NXV0dWF5YmtpaGRuMXZ5YTlwMjZnZXdpcXVoMjBoYmk3cyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/5GoVLqeAOo6PK/giphy.gif",
+                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZjQ4eHlhN3dkcXF2ZjdyaWVqeHN3YWx6cDU4YnRxZ2Q2ZjdzciZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l3q2K5jinAlChoCLS/giphy.gif",
+                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNnVqeGhqOGRoN2N2OGtjcmF0amVnNTlxZHkydHE3Mm1kY21nNCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT9IgG50Fb7Mi/giphy.gif",
+                        ].map((url, i) => (
+                          <button key={i} onClick={() => handleSendGif(url)} className="rounded-lg overflow-hidden border border-border hover:border-neon-coral/50 transition-all hover:scale-105">
+                            <img src={url} alt="GIF" className="w-full h-20 object-cover" />
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {isRecording ? (
+                  <div data-recording className="flex items-center gap-3">
+                    <div className="flex-1 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-destructive/10 border border-destructive/30">
+                      <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                      <span className="text-sm font-medium text-destructive">{lang === "zh" ? "錄音中" : "Recording"} {recordingTime}s</span>
+                      <div className="flex-1 flex items-center gap-0.5">{Array.from({ length: 20 }).map((_, i) => (<span key={i} className="w-1 rounded-full bg-destructive/40" style={{ height: `${6 + Math.random() * 14}px`, animationDelay: `${i * 50}ms` }} />))}</div>
+                    </div>
+                    <Button onClick={handleVoiceRecord} className="bg-destructive hover:bg-destructive/90 text-white rounded-xl px-4" size="sm"><Send className="w-4 h-4" /></Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowGifPicker(!showGifPicker)} className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${showGifPicker ? "bg-neon-coral/10 text-neon-coral" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}><Smile className="w-5 h-5" /></button>
+                    <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder={t("dating.msg_input")} className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-neon-coral/30" />
+                    {chatMessage.trim() ? (
+                      <Button onClick={handleSendMessage} className="bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl px-4" size="sm"><Send className="w-4 h-4" /></Button>
+                    ) : (
+                      <button onClick={handleVoiceRecord} className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-neon-coral hover:bg-neon-coral/10 transition-colors"><Mic className="w-5 h-5" /></button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -708,7 +859,7 @@ export default function Dating() {
                         <>
                           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">{t("dating.profile.active")}</p></motion.div>
                           <button onClick={() => setShowPreview(!showPreview)} className="w-full h-12 rounded-xl font-medium text-sm border border-neon-cyan/30 bg-neon-cyan/5 text-neon-cyan hover:bg-neon-cyan/10 transition-all flex items-center justify-center gap-2">
-                            <Eye className="w-4 h-4" />{showPreview ? (lang === "zh" ? "收起預覽" : "Hide Preview") : (lang === "zh" ? "👁 以第三者視角預覽我嘅交友檔案" : "👁 Preview My Profile as Others See It")}
+                            <Eye className="w-4 h-4" />{showPreview ? (lang === "zh" ? "收起預覽" : "Hide Preview") : (lang === "zh" ? "預覽我的交友檔案" : "👁 Preview My Profile as Others See It")}
                           </button>
                         </>
                       )}
