@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Shield, Heart, Sparkles, MessageCircle, Users, ChevronLeft, ChevronRight,
   Home, HeartHandshake, Wrench, User, Globe, Moon, Sun, LogOut,
-  X, Settings, Eye, Zap, Send, ImageOff,
+  X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2,
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain
 } from "lucide-react";
@@ -36,6 +36,7 @@ interface MatchProfile {
   lastMessage?: string;
   lastMessageTime?: string;
   unread?: number;
+  icebreakers?: { prompt: string; answer: string }[];
 }
 
 const SEXUALITY_OPTIONS = [
@@ -129,9 +130,22 @@ const AGE_OPTIONS = [
   { key: "27+", zh: "27歲以上", en: "27+" },
 ];
 
+const ICEBREAKER_PROMPTS = [
+  { key: "food_opinion", zh: "我最有爭議嘅食物觀點係...", en: "My most controversial food opinion is..." },
+  { key: "perfect_date", zh: "我理想嘅約會係...", en: "My perfect first date would be..." },
+  { key: "useless_talent", zh: "我最冇用嘅特長係...", en: "My most useless talent is..." },
+  { key: "guilty_pleasure", zh: "我嘅秘密guilty pleasure係...", en: "My guilty pleasure is..." },
+  { key: "hill_to_die", zh: "我會死守嘅一個觀點係...", en: "A hill I will die on..." },
+  { key: "worst_pickup", zh: "我聽過最差嘅pickup line係...", en: "The worst pickup line I've heard..." },
+  { key: "superpower", zh: "如果我有一個超能力...", en: "If I had one superpower..." },
+  { key: "red_flag", zh: "我嘅green flag係...", en: "My biggest green flag is..." },
+  { key: "3am_thought", zh: "我凌晨3點會諗嘅問題係...", en: "The question that keeps me up at 3am..." },
+  { key: "exam_stress", zh: "我考試壓力最大嗰時會...", en: "When exam stress hits, I..." },
+];
+
 const MOCK_PROFILES: MatchProfile[] = [
-  { id: "m1", gender: "female", age: 21, mbti: "INFJ", institution: "HKU", faculty: "Social Sciences", major: "Psychology", district: "central_western", relationshipType: "long_term", religion: "none", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92 },
-  { id: "m2", gender: "male", age: 22, mbti: "ENTP", institution: "CUHK", faculty: "Business", major: "Business", district: "sha_tin", relationshipType: "casual", religion: "christian", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87 },
+  { id: "m1", gender: "female", age: 21, mbti: "INFJ", institution: "HKU", faculty: "Social Sciences", major: "Psychology", district: "central_western", relationshipType: "long_term", religion: "none", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92, icebreakers: [{ prompt: "food_opinion", answer: "菠蘿放喺pizza上面係正確嘅 🍍" }, { prompt: "3am_thought", answer: "如果平行宇宙存在，另一個我係咪已經搵到soulmate？" }] },
+  { id: "m2", gender: "male", age: 22, mbti: "ENTP", institution: "CUHK", faculty: "Business", major: "Business", district: "sha_tin", relationshipType: "casual", religion: "christian", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87, icebreakers: [{ prompt: "useless_talent", answer: "可以用兩隻手同時寫唔同嘅字 ✌️" }] },
   { id: "m3", gender: "female", age: 20, mbti: "ISFP", institution: "PolyU", faculty: "Design", major: "Design", district: "kowloon_city", relationshipType: "friends_first", religion: "buddhist", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2 },
   { id: "m4", gender: "male", age: 24, mbti: "ENTJ", institution: "HKUST", faculty: "Engineering", major: "Engineering", district: "sai_kung", relationshipType: "long_term", religion: "none", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1 },
   { id: "m5", gender: "nonbinary", age: 23, mbti: "INFP", institution: "CityU", faculty: "Creative Media", major: "Creative Media", district: "kowloon_city", relationshipType: "not_sure", religion: "spiritual", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0 },
@@ -217,6 +231,8 @@ export default function Dating() {
   const [selectedSexuality, setSelectedSexuality] = useState("prefer_not_to_say");
   const [selectedMbti, setSelectedMbti] = useState("");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [selectedIcebreakers, setSelectedIcebreakers] = useState<{ prompt: string; answer: string }[]>([]);
+  const [editingIcebreakerIdx, setEditingIcebreakerIdx] = useState<number | null>(null);
   const [filterSexuality, setFilterSexuality] = useState("all");
   const [filterInstitution, setFilterInstitution] = useState("all");
   const [filterFaculty, setFilterFaculty] = useState("all");
@@ -295,7 +311,7 @@ export default function Dating() {
   const handleSaveProfile = () => {
     if (!selectedMbti) { toast.error(t("dating.error.mbti")); return; }
     if (selectedInterests.length < 3) { toast.error(t("dating.error.interests")); return; }
-    updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality, interests: selectedInterests });
+    updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality, interests: selectedInterests, icebreakers: selectedIcebreakers });
     setProfileSetup(true);
     toast.success(t("dating.profile_saved"));
   };
@@ -503,6 +519,19 @@ export default function Dating() {
                             </div>
                             <p className="text-sm text-muted-foreground mb-3">{currentProfile.major}</p>
                             {currentProfile.bio && <p className="text-sm text-foreground mb-4 leading-relaxed">{currentProfile.bio}</p>}
+                            {currentProfile.icebreakers && currentProfile.icebreakers.length > 0 && (
+                              <div className="space-y-2 mb-4">
+                                {currentProfile.icebreakers.map((ib, idx) => {
+                                  const prompt = ICEBREAKER_PROMPTS.find(p => p.key === ib.prompt);
+                                  return (
+                                    <div key={idx} className="p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15">
+                                      <p className="text-[11px] font-medium text-neon-lavender mb-1 flex items-center gap-1"><MessageSquare className="w-3 h-3" />{prompt ? (lang === "zh" ? prompt.zh : prompt.en) : ib.prompt}</p>
+                                      <p className="text-sm text-foreground">{ib.answer}</p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                             <div className="flex flex-wrap gap-2 mb-4">
                               {SEXUALITY_OPTIONS.find(s => s.key === currentProfile.sexuality) && (
                                 <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-neon-lavender/10 text-neon-lavender text-xs font-medium">{lang === "zh" ? SEXUALITY_OPTIONS.find(s => s.key === currentProfile.sexuality)?.zh : SEXUALITY_OPTIONS.find(s => s.key === currentProfile.sexuality)?.en}</span>
@@ -600,6 +629,46 @@ export default function Dating() {
                             </button>);
                           })}
                         </div>
+                      </div>
+                      {/* Icebreaker Prompts */}
+                      <div className="p-4 rounded-xl border border-border bg-card">
+                        <label className="text-sm font-medium text-foreground mb-1 block flex items-center gap-1.5"><MessageSquare className="w-4 h-4 text-neon-lavender" />{lang === "zh" ? "破冰問題" : "Icebreaker Prompts"}</label>
+                        <p className="text-xs text-muted-foreground mb-3">{lang === "zh" ? "回答 1-2 個問題，畀人更容易開始傾偈" : "Answer 1-2 prompts so others can start a conversation"}</p>
+                        {selectedIcebreakers.map((ib, idx) => {
+                          const prompt = ICEBREAKER_PROMPTS.find(p => p.key === ib.prompt);
+                          return (
+                            <div key={idx} className="mb-3 p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-medium text-neon-lavender">{prompt ? (lang === "zh" ? prompt.zh : prompt.en) : ib.prompt}</p>
+                                <button onClick={() => setSelectedIcebreakers(prev => prev.filter((_, i) => i !== idx))} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                              {editingIcebreakerIdx === idx ? (
+                                <div className="flex gap-2">
+                                  <input type="text" value={ib.answer} onChange={(e) => setSelectedIcebreakers(prev => prev.map((item, i) => i === idx ? { ...item, answer: e.target.value } : item))}
+                                    className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground outline-none focus:border-neon-lavender" maxLength={100} autoFocus
+                                    onKeyDown={(e) => { if (e.key === "Enter") setEditingIcebreakerIdx(null); }}
+                                  />
+                                  <button onClick={() => setEditingIcebreakerIdx(null)} className="px-3 py-2 rounded-lg bg-neon-lavender text-white text-xs font-medium">✓</button>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-foreground cursor-pointer hover:text-neon-lavender transition-colors" onClick={() => setEditingIcebreakerIdx(idx)}>{ib.answer || (lang === "zh" ? "點擊輸入你嘅回答..." : "Tap to write your answer...")}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {selectedIcebreakers.length < 2 && (
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] text-muted-foreground">{lang === "zh" ? "揀一個問題：" : "Pick a prompt:"}</p>
+                            <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto">
+                              {ICEBREAKER_PROMPTS.filter(p => !selectedIcebreakers.some(ib => ib.prompt === p.key)).map(p => (
+                                <button key={p.key} onClick={() => { setSelectedIcebreakers(prev => [...prev, { prompt: p.key, answer: "" }]); setEditingIcebreakerIdx(selectedIcebreakers.length); }}
+                                  className="text-left px-3 py-2 rounded-lg bg-muted/50 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-all flex items-center gap-2">
+                                  <Plus className="w-3 h-3 flex-shrink-0" />{lang === "zh" ? p.zh : p.en}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <Button onClick={handleSaveProfile} className="w-full h-12 bg-neon-coral hover:bg-neon-coral/90 text-white font-medium rounded-xl text-base">{t("dating.profile.save")}</Button>
                       {profileSetup && (<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">{t("dating.profile.active")}</p></motion.div>)}

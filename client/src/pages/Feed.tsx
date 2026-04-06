@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Shield, MessageCircle, Heart, Share2, TrendingUp, BookOpen, Compass,
   DollarSign, Send, Ghost, School, GraduationCap, Plus, Search,
-  LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench, X
+  LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench, X, Flame
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,7 +12,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 
-type Category = "all" | "trending" | "non-jupas" | "mbti" | "missed" | "salary";
+type Category = "all" | "trending" | "confessions" | "non-jupas" | "mbti" | "missed" | "salary";
 type PrivacyMode = "ghost" | "campus" | "major";
 
 interface Post {
@@ -49,6 +49,11 @@ const MOCK_POSTS: Post[] = [
   { id: "6", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "trending", content: "學校飯堂又加價 😤 一碟燒味飯要 $48 係咪搶錢", likes: 521, comments: 156, timeMinutes: 180, liked: false },
   { id: "7", author: "CUHK · CS · INTP", authorTag: "CUHK · CS · INTP", privacyMode: "major", category: "non-jupas", content: "副學士轉 CUHK CS 嘅經驗分享：Portfolio 比 GPA 更重要，面試問咗好多 project 嘅嘢", likes: 178, comments: 45, timeMinutes: 1440, liked: false },
   { id: "8", author: "HKUST · ENFJ", authorTag: "HKUST · ENFJ", privacyMode: "campus", category: "mbti", content: "MBTI 測試話我係 ENFJ 但我覺得自己好 introverted 🤔 有冇人都係咁？", likes: 134, comments: 78, timeMinutes: 360, liked: false },
+  { id: "9", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "confessions", content: "我偷偷鍾意咗同組嘅 project partner 成個sem，但佢有女朋友... 每次做 group project 都好掙扎 😔", likes: 412, comments: 89, timeMinutes: 45, liked: false },
+  { id: "10", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "confessions", content: "考試作弊被抓到但教授冇report，只係同我講「下次唔好再咁」。我到而家都覺得好內疚 😞", likes: 267, comments: 134, timeMinutes: 240, liked: false },
+  { id: "11", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "confessions", content: "其實我轉咗系三次，爸媽以為我一直讀緊 Business，但我偷偷轉咗去讀 Fine Arts 🎨", likes: 589, comments: 201, timeMinutes: 600, liked: false },
+  { id: "12", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "confessions", content: "每日都喺圖書館扮溫書，其實係因為唔想返宿舍面對 roommate。好想申請轉房但唔知點開口 🥲", likes: 345, comments: 67, timeMinutes: 150, liked: false },
+  { id: "13", author: "匿名", authorTag: "匿名", privacyMode: "ghost", category: "confessions", content: "我係全班唯一一個仲未搵到 intern 嘅人，LinkedIn 上面見到同學個個都好叻，自信心跌到谷底 💔", likes: 623, comments: 178, timeMinutes: 420, liked: false },
 ];
 
 const privacyIcons: Record<PrivacyMode, typeof Ghost> = {
@@ -90,6 +95,7 @@ export default function Feed() {
   const categories = [
     { key: "all" as Category, label: t("feed.cat.all"), icon: TrendingUp },
     { key: "trending" as Category, label: t("feed.cat.trending"), icon: TrendingUp },
+    { key: "confessions" as Category, label: t("feed.cat.confessions"), icon: Flame },
     { key: "non-jupas" as Category, label: "Non-JUPAS", icon: BookOpen },
     { key: "mbti" as Category, label: "MBTI", icon: Compass },
     { key: "missed" as Category, label: t("feed.cat.missed"), icon: HeartHandshake },
