@@ -73,19 +73,3 @@ export async function deleteMessage(messageId: string, userId: string, forBoth: 
   });
   return res.json();
 }
-
-export async function unmatch(matchId: string, userId: string) {
-  const res = await fetch(`${API}?action=unmatch`, {
-    method: 'POST', headers: headers(),
-    body: JSON.stringify({ match_id: matchId, user_id: userId }),
-  });
-  return res.json();
-}
-
-export async function deleteMessage(messageId: string, userId: string, forBoth: boolean) {
-  const res = await fetch(`${API}?action=delete-message`, {
-    method: 'POST', headers: headers(),
-    body: JSON.stringify({ message_id: messageId, user_id: userId, for_both: forBoth }),
-  });
-  return res.json();
-}
