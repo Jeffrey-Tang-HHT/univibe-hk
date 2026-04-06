@@ -448,6 +448,14 @@ export default function Dating() {
   const [loadingDiscover, setLoadingDiscover] = useState(false);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll to bottom when messages change or chat opens
+  useEffect(() => {
+    if (activeChatId && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "auto" });
+    }
+  }, [activeChatId, chatMessages[activeChatId || ""]?.length]);
 
   // Load real discover profiles
   useEffect(() => {
@@ -767,6 +775,7 @@ export default function Dating() {
                   />
                 ))}
                 {isTyping && <TypingIndicator />}
+                <div ref={chatEndRef} />
               </div>
               <div className="p-4 border-t border-border bg-card/50">
                 {/* Reply bar */}
