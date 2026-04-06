@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
       const allUsers = await supabaseQuery('users', {
         filters: `id=neq.${user_id}&mbti=not.is.null`,
-        select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,last_seen'
+        select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,photos,last_seen'
       });
 
       const matches = await supabaseQuery('matches', {
@@ -58,26 +58,31 @@ export default async function handler(req, res) {
         .filter(u => !matchedIds.has(u.id))
         .filter(u => !blockedIds.has(u.id))
         .filter(u => u.interests && u.interests.length >= 3)
-        .map(u => ({
-          id: u.id,
-          gender: u.gender || 'other',
-          age: u.age || 20,
-          mbti: u.mbti,
-          institution: u.school || '',
-          faculty: u.faculty || '',
-          major: u.faculty || '',
-          district: u.district || '',
-          relationshipType: u.relationship_type || '',
-          religion: u.religion || '',
-          interests: u.interests || [],
-          bio: u.bio || '',
-          sexuality: u.sexuality || '',
-          blurLevel: 0,
-          messages: 0,
-          compatibility: Math.floor(60 + Math.random() * 35),
-          avatar_url: u.avatar_url || null,
-          last_seen: u.last_seen || null,
-        }));
+        .map(u => {
+          let photos = [];
+          try { photos = typeof u.photos === 'string' ? JSON.parse(u.photos) : (Array.isArray(u.photos) ? u.photos : []); } catch { photos = []; }
+          return {
+            id: u.id,
+            gender: u.gender || 'other',
+            age: u.age || 20,
+            mbti: u.mbti,
+            institution: u.school || '',
+            faculty: u.faculty || '',
+            major: u.faculty || '',
+            district: u.district || '',
+            relationshipType: u.relationship_type || '',
+            religion: u.religion || '',
+            interests: u.interests || [],
+            bio: u.bio || '',
+            sexuality: u.sexuality || '',
+            blurLevel: 0,
+            messages: 0,
+            compatibility: Math.floor(60 + Math.random() * 35),
+            avatar_url: u.avatar_url || null,
+            photos: photos.filter(Boolean),
+            last_seen: u.last_seen || null,
+          };
+        });
 
       return res.status(200).json({ profiles: available });
     }
@@ -117,7 +122,7 @@ export default async function handler(req, res) {
 
         const partners = await supabaseQuery('users', {
           filters: `id=eq.${partnerId}`,
-          select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,last_seen'
+          select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,photos,last_seen'
         });
         const partner = partners[0] || null;
 

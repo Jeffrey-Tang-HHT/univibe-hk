@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, getOnlineStatus } from "@/lib/chat";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus } from "@/lib/chat";
 
 type DatingTab = "discover" | "matches" | "profile";
 
@@ -42,6 +42,7 @@ interface MatchProfile {
   icebreakers?: { prompt: string; answer: string }[];
   matchedAt?: number;
   avatar_url?: string;
+  photos?: string[];
   last_seen?: string;
 }
 
@@ -190,7 +191,7 @@ function genderSign(g: "male" | "female" | "nonbinary") {
   return <span className="text-purple-400">⚧</span>;
 }
 
-function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl }: { blurLevel: number; mbti: string; size?: "sm" | "md" | "lg"; avatarUrl?: string }) {
+function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl, photos }: { blurLevel: number; mbti: string; size?: "sm" | "md" | "lg"; avatarUrl?: string; photos?: string[] }) {
   const { t } = useLanguage();
   const clarity = blurLevel / 100;
   const blurPx = Math.max(0, 20 * (1 - clarity));
@@ -199,11 +200,30 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl }: { blurLevel:
   const hue2 = (hue1 + 120) % 360;
   const hue3 = (hue1 + 60) % 360;
 
+  // Build photos list from photos array or single avatarUrl
+  const allPhotos = (photos && photos.length > 0) ? photos.filter(Boolean) : (avatarUrl ? [avatarUrl] : []);
+  const hasPhotos = allPhotos.length > 0;
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const touchStartX = useRef(0);
+  const safeIndex = Math.min(photoIndex, Math.max(allPhotos.length - 1, 0));
+
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (allPhotos.length <= 1) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0 && safeIndex < allPhotos.length - 1) setPhotoIndex(safeIndex + 1);
+      else if (diff < 0 && safeIndex > 0) setPhotoIndex(safeIndex - 1);
+    }
+  };
+
   return (
-    <div className={`${dim} rounded-2xl overflow-hidden relative flex-shrink-0`}>
-      {avatarUrl ? (
-        <img src={avatarUrl} alt="" className="w-full h-full object-cover" style={{
-          filter: `blur(${blurPx}px)`, transition: "filter 0.5s ease", transform: "scale(1.1)",
+    <div className={`${dim} rounded-2xl overflow-hidden relative flex-shrink-0`}
+      onTouchStart={size === "lg" ? handleTouchStart : undefined}
+      onTouchEnd={size === "lg" ? handleTouchEnd : undefined}>
+      {hasPhotos ? (
+        <img src={allPhotos[safeIndex]} alt="" className="w-full h-full object-cover" style={{
+          filter: `blur(${blurPx}px)`, transition: "filter 0.5s ease, opacity 0.3s ease", transform: "scale(1.1)",
         }} />
       ) : (
         <div className="w-full h-full" style={{
@@ -211,10 +231,29 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg", avatarUrl }: { blurLevel:
           filter: `blur(${blurPx}px)`, transition: "filter 0.5s ease", transform: "scale(1.1)",
         }} />
       )}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`font-display font-bold text-white/80 ${size === "lg" ? "text-5xl" : size === "md" ? "text-lg" : "text-sm"}`}
-          style={{ filter: `blur(${Math.max(0, blurPx * 0.6)}px)` }}>{mbti}</span>
-      </div>
+      {/* Only show MBTI text if NO photos uploaded */}
+      {!hasPhotos && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={`font-display font-bold text-white/80 ${size === "lg" ? "text-5xl" : size === "md" ? "text-lg" : "text-sm"}`}
+            style={{ filter: `blur(${Math.max(0, blurPx * 0.6)}px)` }}>{mbti}</span>
+        </div>
+      )}
+      {/* Photo dots indicator for lg size with multiple photos */}
+      {size === "lg" && allPhotos.length > 1 && (
+        <div className="absolute top-3 left-0 right-0 flex justify-center gap-1.5 z-10">
+          {allPhotos.map((_, i) => (
+            <button key={i} onClick={() => setPhotoIndex(i)}
+              className={`h-1 rounded-full transition-all ${i === safeIndex ? "w-6 bg-white" : "w-1.5 bg-white/50"}`} />
+          ))}
+        </div>
+      )}
+      {/* Tap zones for lg size with multiple photos */}
+      {size === "lg" && allPhotos.length > 1 && (
+        <>
+          <button className="absolute left-0 top-0 bottom-0 w-1/3 z-[5]" onClick={() => safeIndex > 0 && setPhotoIndex(safeIndex - 1)} />
+          <button className="absolute right-0 top-0 bottom-0 w-1/3 z-[5]" onClick={() => safeIndex < allPhotos.length - 1 && setPhotoIndex(safeIndex + 1)} />
+        </>
+      )}
       {size === "lg" && (
         <div className={`absolute bottom-3 right-3 px-2.5 py-1 rounded-full text-white text-xs font-medium backdrop-blur-sm flex items-center gap-1.5 ${blurLevel >= 100 ? "bg-neon-emerald/80" : "bg-black/50"}`}>
           {blurLevel < 100 ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
@@ -575,6 +614,7 @@ export default function Dating() {
         matchedAt: new Date(m.created_at).getTime(),
         _matchId: m.match_id,
         avatar_url: m.partner?.avatar_url || undefined,
+        photos: (() => { try { const p = m.partner?.photos; return typeof p === 'string' ? JSON.parse(p) : (Array.isArray(p) ? p : []); } catch { return []; } })().filter(Boolean),
         last_seen: m.partner?.last_seen || undefined,
       }));
     }
@@ -654,6 +694,7 @@ export default function Dating() {
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingPhotoIndex, setUploadingPhotoIndex] = useState(-1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const prevMatchCountRef = useRef(0);
   const prevMsgCountsRef = useRef<Record<string, number>>({});
@@ -719,12 +760,15 @@ export default function Dating() {
     }
     setUploadingPhoto(true);
     try {
-      // Resize client-side
       const resized = await resizeImage(file, 600, 600);
-      const result = await uploadAvatar(resized);
-      if (result.success && result.avatar_url) {
+      const idx = uploadingPhotoIndex >= 0 ? uploadingPhotoIndex : undefined;
+      const result = await uploadAvatar(resized, idx);
+      if (result.success && result.photos) {
+        updateProfile({ avatar_url: result.avatar_url, photos: result.photos });
+        toast.success(lang === 'zh' ? '相片已上傳！' : 'Photo uploaded!');
+      } else if (result.success && result.avatar_url) {
         updateProfile({ avatar_url: result.avatar_url });
-        toast.success(lang === 'zh' ? '頭像已上傳！' : 'Photo uploaded!');
+        toast.success(lang === 'zh' ? '相片已上傳！' : 'Photo uploaded!');
       } else {
         toast.error(lang === 'zh' ? '上傳失敗' : 'Upload failed');
       }
@@ -732,8 +776,26 @@ export default function Dating() {
       toast.error(lang === 'zh' ? '上傳失敗' : 'Upload failed');
     } finally {
       setUploadingPhoto(false);
+      setUploadingPhotoIndex(-1);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleDeletePhotoAt = async (index: number) => {
+    try {
+      const result = await deletePhoto(index);
+      if (result.success) {
+        updateProfile({ avatar_url: result.avatar_url || null, photos: result.photos || [] });
+        toast.success(lang === 'zh' ? '已刪除相片' : 'Photo deleted');
+      }
+    } catch {
+      toast.error(lang === 'zh' ? '刪除失敗' : 'Delete failed');
+    }
+  };
+
+  const triggerPhotoUpload = (index: number) => {
+    setUploadingPhotoIndex(index);
+    setTimeout(() => fileInputRef.current?.click(), 50);
   };
 
   const handleBlock = () => {
@@ -879,7 +941,7 @@ export default function Dating() {
               <div className="hidden lg:flex items-center gap-4 p-4 border-b border-border">
                 <button onClick={() => setActiveChatId(null)} className="text-muted-foreground hover:text-foreground"><ChevronLeft className="w-5 h-5" /></button>
                 <div className="relative">
-                  <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="sm" avatarUrl={activeChat.avatar_url} />
+                  <BlurredAvatar blurLevel={activeChat.blurLevel} mbti={activeChat.mbti} size="sm" avatarUrl={activeChat.avatar_url} photos={activeChat.photos} />
                   {(() => { const s = getOnlineStatus(activeChat.last_seen || null, lang); return s.online ? <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-neon-emerald border-2 border-card" /> : null; })()}
                 </div>
                 <div>
@@ -1147,7 +1209,7 @@ export default function Dating() {
                         <motion.div key={currentProfile.id + currentIndex} initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: swipeDirection ? 0 : 1, scale: swipeDirection ? 0.9 : 1, x: swipeDirection === "left" ? -200 : swipeDirection === "right" ? 200 : 0, rotate: swipeDirection === "left" ? -10 : swipeDirection === "right" ? 10 : 0 }}
                           transition={{ duration: 0.3 }} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-                          <BlurredAvatar blurLevel={currentProfile.blurLevel} mbti={currentProfile.mbti} size="lg" avatarUrl={currentProfile.avatar_url} />
+                          <BlurredAvatar blurLevel={currentProfile.blurLevel} mbti={currentProfile.mbti} size="lg" avatarUrl={currentProfile.avatar_url} photos={currentProfile.photos} />
                           <div className="p-5">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{currentProfile.mbti} {genderSign(currentProfile.gender)}</span><span className="text-sm text-muted-foreground">· {currentProfile.institution}</span></div>
@@ -1220,7 +1282,7 @@ export default function Dating() {
                         return (
                         <button key={profile.id} onClick={() => { setActiveChatId(profile.id); setActiveMatchId((profile as any)._matchId || profile.id); }} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group ${timeLeft.urgent ? "border-destructive/40" : "border-border"}`}>
                           <div className="relative">
-                            <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" avatarUrl={profile.avatar_url} />
+                            <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" avatarUrl={profile.avatar_url} photos={profile.photos} />
                             {(profile.unread || 0) > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center">{profile.unread}</div>}
                             {getOnlineStatus(profile.last_seen || null, lang).online && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-neon-emerald border-2 border-card" />}
                           </div>
@@ -1251,34 +1313,52 @@ export default function Dating() {
                     <h2 className="font-display text-lg font-bold text-foreground mb-2">{t("dating.profile.title")}</h2>
                     <p className="text-xs text-muted-foreground mb-6">{t("dating.profile.subtitle")}</p>
                     <div className="space-y-6">
-                      {/* Photo Upload */}
+                      {/* Photo Upload - 5 slots */}
                       <div className="p-4 rounded-xl border border-border bg-card">
-                        <label className="text-sm font-medium text-foreground mb-3 block flex items-center gap-1.5"><Camera className="w-4 h-4 text-neon-coral" />{lang === "zh" ? "交友頭像" : "Dating Photo"}</label>
-                        <p className="text-xs text-muted-foreground mb-3">{lang === "zh" ? "上傳你嘅頭像，配對時會模糊處理，聊天越多越清晰" : "Upload your photo — it starts blurred and reveals as you chat"}</p>
-                        <div className="flex items-center gap-4">
-                          <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-muted flex-shrink-0">
-                            {user?.avatar_url ? (
-                              <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                                <Camera className="w-8 h-8" />
+                        <label className="text-sm font-medium text-foreground mb-1 block flex items-center gap-1.5"><Camera className="w-4 h-4 text-neon-coral" />{lang === "zh" ? "交友相片" : "Dating Photos"}</label>
+                        <p className="text-xs text-muted-foreground mb-3">{lang === "zh" ? "最多上傳5張相片，配對時會模糊處理，聊天越多越清晰。左右滑動瀏覽" : "Upload up to 5 photos — they start blurred and reveal as you chat. Swipe to browse"}</p>
+                        <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
+                        <div className="grid grid-cols-3 gap-2">
+                          {[0, 1, 2, 3, 4].map((idx) => {
+                            const photos = user?.photos || [];
+                            const photoUrl = photos[idx];
+                            const isUploading = uploadingPhoto && uploadingPhotoIndex === idx;
+                            return (
+                              <div key={idx} className={`relative rounded-xl overflow-hidden bg-muted border-2 border-dashed transition-all ${idx === 0 ? "col-span-2 row-span-2 aspect-square" : "aspect-square"} ${photoUrl ? "border-transparent" : "border-border hover:border-neon-coral/40"}`}>
+                                {photoUrl ? (
+                                  <>
+                                    <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                                    <button onClick={() => handleDeletePhotoAt(idx)}
+                                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors">
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => triggerPhotoUpload(idx)}
+                                      className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors">
+                                      <Upload className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => triggerPhotoUpload(idx)} disabled={uploadingPhoto}
+                                    className="w-full h-full flex flex-col items-center justify-center text-muted-foreground hover:text-neon-coral transition-colors disabled:opacity-50">
+                                    <Camera className={idx === 0 ? "w-8 h-8 mb-1" : "w-5 h-5"} />
+                                    {idx === 0 && <span className="text-[10px] font-medium">{lang === "zh" ? "主相片" : "Main"}</span>}
+                                  </button>
+                                )}
+                                {isUploading && (
+                                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  </div>
+                                )}
+                                {idx === 0 && !photoUrl && (
+                                  <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-neon-coral/80 text-white text-[9px] font-medium">
+                                    {lang === "zh" ? "必填" : "Required"}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            {uploadingPhoto && (
-                              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
-                            <button onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}
-                              className="w-full py-2.5 rounded-xl font-medium text-sm border border-neon-coral/30 bg-neon-coral/5 text-neon-coral hover:bg-neon-coral/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                              <Upload className="w-4 h-4" />{user?.avatar_url ? (lang === "zh" ? "更換頭像" : "Change Photo") : (lang === "zh" ? "上傳頭像" : "Upload Photo")}
-                            </button>
-                            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">{lang === "zh" ? "JPEG / PNG · 最大 5MB" : "JPEG / PNG · Max 5MB"}</p>
-                          </div>
+                            );
+                          })}
                         </div>
+                        <p className="text-[10px] text-muted-foreground mt-2 text-center">{lang === "zh" ? "JPEG / PNG · 每張最大 5MB · 最多 5 張" : "JPEG / PNG · Max 5MB each · Up to 5 photos"}</p>
                       </div>
                       <div className="p-4 rounded-xl border border-border bg-card">
                         <label className="text-sm font-medium text-foreground mb-3 block">{t("dating.profile.sexuality")}</label>
@@ -1358,7 +1438,7 @@ export default function Dating() {
                           <p className="text-xs text-muted-foreground mb-3 text-center">{lang === "zh" ? "↓ 其他用戶會見到以下畫面 ↓" : "↓ This is what others see ↓"}</p>
                           <div className="rounded-2xl border-2 border-dashed border-neon-cyan/30 p-3">
                             <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-                              <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" avatarUrl={user?.avatar_url} />
+                              <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" avatarUrl={user?.avatar_url} photos={user?.photos} />
                               <div className="p-5">
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{selectedMbti} {user?.gender === "male" ? "♂" : user?.gender === "female" ? "♀" : "⚧"}</span><span className="text-sm text-muted-foreground">· {user?.institution || user?.school || "Your School"}</span></div>

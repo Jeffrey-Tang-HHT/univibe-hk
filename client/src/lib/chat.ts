@@ -103,10 +103,18 @@ export async function heartbeat(userId: string) {
   return res.json();
 }
 
-export async function uploadAvatar(imageBase64: string): Promise<{ success: boolean; avatar_url?: string }> {
+export async function uploadAvatar(imageBase64: string, index?: number): Promise<{ success: boolean; avatar_url?: string; photos?: string[]; index?: number }> {
   const res = await fetch('/api/upload-avatar', {
     method: 'POST', headers: authHeaders(),
-    body: JSON.stringify({ image_base64: imageBase64 }),
+    body: JSON.stringify({ image_base64: imageBase64, index: index ?? -1 }),
+  });
+  return res.json();
+}
+
+export async function deletePhoto(index: number): Promise<{ success: boolean; photos?: string[]; avatar_url?: string }> {
+  const res = await fetch('/api/upload-avatar', {
+    method: 'DELETE', headers: authHeaders(),
+    body: JSON.stringify({ index }),
   });
   return res.json();
 }

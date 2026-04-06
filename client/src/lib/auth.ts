@@ -6,6 +6,7 @@ export interface User {
   displayName?: string;
   display_name?: string;
   avatar_url?: string;
+  photos?: string[];
   gender?: string;
   sexuality?: string;
   school?: string;

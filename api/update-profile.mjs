@@ -1,6 +1,6 @@
 import { updateUser, getUserById } from './utils/supabase.mjs';
 import { verifyToken } from './utils/token.mjs';
-const ALLOWED_FIELDS = ['display_name', 'avatar_url', 'gender', 'sexuality', 'school', 'faculty', 'district', 'mbti', 'age', 'bio', 'relationship_type', 'religion', 'interests', 'language'];
+const ALLOWED_FIELDS = ['display_name', 'avatar_url', 'photos', 'gender', 'sexuality', 'school', 'faculty', 'district', 'mbti', 'age', 'bio', 'relationship_type', 'religion', 'interests', 'language'];
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, PATCH, OPTIONS');

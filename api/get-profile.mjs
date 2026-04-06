@@ -20,7 +20,10 @@ export default async function handler(req, res) {
     if (!user) return res.status(404).json({ error: '用戶不存在' });
 
     const { password_hash, ...profile } = user;
-    return res.status(200).json({ success: true, profile });
+    // Parse photos if it's a string
+    if (typeof profile.photos === 'string') { try { profile.photos = JSON.parse(profile.photos); } catch { profile.photos = []; } }
+    if (!Array.isArray(profile.photos)) profile.photos = [];
+    return res.status(200).json({ success: true, user: profile, profile });
   } catch (err) {
     console.error('Get profile error:', err);
     return res.status(500).json({ error: '獲取個人資料失敗' });
