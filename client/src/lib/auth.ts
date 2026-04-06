@@ -21,11 +21,11 @@ export interface User {
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem('univibe_token');
+  return localStorage.getItem('unigo_token');
 }
 
 export function getUser(): User | null {
-  const data = localStorage.getItem('univibe_user');
+  const data = localStorage.getItem('unigo_user');
   if (!data) return null;
   try { return JSON.parse(data); } catch { return null; }
 }
@@ -35,8 +35,8 @@ export function isLoggedIn(): boolean {
 }
 
 export function logout() {
-  localStorage.removeItem('univibe_token');
-  localStorage.removeItem('univibe_user');
+  localStorage.removeItem('unigo_token');
+  localStorage.removeItem('unigo_user');
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
   }
@@ -46,7 +46,7 @@ export function updateStoredUser(updates: Partial<User>) {
   const user = getUser();
   if (!user) return;
   const updated = { ...user, ...updates };
-  localStorage.setItem('univibe_user', JSON.stringify(updated));
+  localStorage.setItem('unigo_user', JSON.stringify(updated));
 }
 
 export async function fetchProfile(): Promise<User | null> {
@@ -59,13 +59,13 @@ export async function fetchProfile(): Promise<User | null> {
     });
     if (!res.ok) {
       if (res.status === 401) {
-        localStorage.removeItem('univibe_token');
-        localStorage.removeItem('univibe_user');
+        localStorage.removeItem('unigo_token');
+        localStorage.removeItem('unigo_user');
       }
       return null;
     }
     const data = await res.json();
-    localStorage.setItem('univibe_user', JSON.stringify(data.user));
+    localStorage.setItem('unigo_user', JSON.stringify(data.user));
     return data.user;
   } catch {
     return null;
@@ -88,8 +88,8 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
 
     if (!res.ok) {
       if (res.status === 401) {
-        localStorage.removeItem('univibe_token');
-        localStorage.removeItem('univibe_user');
+        localStorage.removeItem('unigo_token');
+        localStorage.removeItem('unigo_user');
       }
       return null;
     }
@@ -98,7 +98,7 @@ export async function updateProfile(updates: Record<string, any>): Promise<User 
     // API returns { success: true, profile: {...} }
     const profile = data.user || data.profile;
     if (profile) {
-      localStorage.setItem('univibe_user', JSON.stringify(profile));
+      localStorage.setItem('unigo_user', JSON.stringify(profile));
     }
     return profile;
   } catch {

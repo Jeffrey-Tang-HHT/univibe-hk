@@ -50,12 +50,12 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'UniVibe HK <onboarding@resend.dev>',
+        from: 'UniGo HK <onboarding@resend.dev>',
         to: [email],
-        subject: `UniVibe HK 驗證碼: ${code}`,
+        subject: `UniGo HK 驗證碼: ${code}`,
         html: `
           <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 30px; background: #1a1625; color: white; border-radius: 16px;">
-            <h1 style="text-align: center; color: #f43f5e;">UniVibe HK</h1>
+            <h1 style="text-align: center; color: #f43f5e;">UniGo HK</h1>
             <p style="text-align: center; color: #aaa; font-size: 14px;">香港大學生社交平台</p>
             <div style="background: #251e35; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
               <p style="color: #aaa; margin-bottom: 12px;">你的驗證碼:</p>

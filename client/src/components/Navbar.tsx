@@ -43,7 +43,7 @@ export default function Navbar() {
             <Shield className="w-4.5 h-4.5 text-white" />
           </div>
           <span className="font-display text-lg font-bold tracking-tight text-foreground">
-            UniVibe<span className="text-neon-coral"> HK</span>
+            UniGo<span className="text-neon-coral"> HK</span>
           </span>
         </a>
 

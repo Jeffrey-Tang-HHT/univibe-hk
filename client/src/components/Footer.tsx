@@ -42,7 +42,7 @@ export default function Footer() {
                 <Shield className="w-3.5 h-3.5 text-white" />
               </div>
               <span className="font-display text-base font-bold tracking-tight">
-                UniVibe<span className="text-neon-coral"> HK</span>
+                UniGo<span className="text-neon-coral"> HK</span>
               </span>
             </a>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-[220px]">

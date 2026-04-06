@@ -116,7 +116,7 @@ export default function Careers() {
 
           <AnimatedSection className="text-center mt-12">
             <p className="text-sm text-muted-foreground">
-              {t("careers.contact")} <a href="mailto:careers@univibeshk.com" className="text-neon-coral hover:underline">careers@univibeshk.com</a>
+              {t("careers.contact")} <a href="mailto:careers@unigohk.com" className="text-neon-coral hover:underline">careers@unigohk.com</a>
             </p>
           </AnimatedSection>
         </div>

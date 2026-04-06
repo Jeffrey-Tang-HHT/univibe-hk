@@ -53,8 +53,8 @@ function GPACalculator({ lang, onClose }: { lang: string; onClose: () => void })
       </div>
 
       {/* GPA Display */}
-      <div className="text-center mb-6 p-4 rounded-xl bg-gradient-to-r from-rose-500/10 to-pink-500/10 border border-rose-500/20">
-        <div className="text-4xl font-bold text-rose-500">{gpa().toFixed(2)}</div>
+      <div className="text-center mb-6 p-4 rounded-xl bg-primary/10 border border-primary/20">
+        <div className="text-4xl font-bold text-primary">{gpa().toFixed(2)}</div>
         <div className="text-sm text-muted-foreground mt-1">GPA / 4.3</div>
       </div>
 
@@ -67,19 +67,19 @@ function GPACalculator({ lang, onClose }: { lang: string; onClose: () => void })
               placeholder={lang === "zh" ? `科目 ${i + 1}` : `Course ${i + 1}`}
               value={course.name}
               onChange={e => updateCourse(i, "name", e.target.value)}
-              className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-rose-400 outline-none"
+              className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 outline-none"
             />
             <select
               value={course.credits}
               onChange={e => updateCourse(i, "credits", Number(e.target.value))}
-              className="w-16 h-9 px-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-rose-400 outline-none"
+              className="w-16 h-9 px-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
             >
               {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
             </select>
             <select
               value={course.grade}
               onChange={e => updateCourse(i, "grade", e.target.value)}
-              className="w-16 h-9 px-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-rose-400 outline-none"
+              className="w-16 h-9 px-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
             >
               {Object.keys(gradePoints).map(g => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -92,7 +92,7 @@ function GPACalculator({ lang, onClose }: { lang: string; onClose: () => void })
         ))}
       </div>
 
-      <button onClick={addCourse} className="flex items-center gap-2 text-sm text-rose-400 hover:text-rose-300">
+      <button onClick={addCourse} className="flex items-center gap-2 text-sm text-primary hover:text-primary/80">
         <Plus className="w-4 h-4" /> {lang === "zh" ? "新增科目" : "Add Course"}
       </button>
     </div>
@@ -139,7 +139,7 @@ function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void })
       </div>
 
       <div className="text-center">
-        <div className={`inline-block px-4 py-1 rounded-full text-xs font-medium mb-4 ${mode === "work" ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500"}`}>
+        <div className={`inline-block px-4 py-1 rounded-full text-xs font-medium mb-4 ${mode === "work" ? "bg-primary/10 text-primary" : "bg-emerald-500/10 text-emerald-500"}`}>
           {mode === "work" ? (lang === "zh" ? "專注時間" : "Focus") : (lang === "zh" ? "休息時間" : "Break")}
         </div>
 
@@ -148,7 +148,7 @@ function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void })
           <svg className="w-48 h-48 -rotate-90" viewBox="0 0 200 200">
             <circle cx="100" cy="100" r="90" fill="none" stroke="currentColor" className="text-muted/30" strokeWidth="8" />
             <circle cx="100" cy="100" r="90" fill="none" stroke="currentColor"
-              className={mode === "work" ? "text-rose-500" : "text-emerald-500"}
+              className={mode === "work" ? "text-primary" : "text-emerald-500"}
               strokeWidth="8" strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 90}`}
               strokeDashoffset={`${2 * Math.PI * 90 * (1 - progress / 100)}`}
@@ -168,7 +168,7 @@ function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void })
           </button>
           <button
             onClick={() => setIsRunning(!isRunning)}
-            className={`w-14 h-14 rounded-full flex items-center justify-center text-white ${mode === "work" ? "bg-rose-500 hover:bg-rose-600" : "bg-emerald-500 hover:bg-emerald-600"}`}
+            className={`w-14 h-14 rounded-full flex items-center justify-center text-white ${mode === "work" ? "bg-primary hover:bg-primary/90" : "bg-emerald-500 hover:bg-emerald-600"}`}
           >
             {isRunning ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
           </button>
@@ -223,16 +223,16 @@ function DeadlineTracker({ lang, onClose }: { lang: string; onClose: () => void 
           placeholder={lang === "zh" ? "新增 deadline..." : "Add deadline..."}
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
-          className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-rose-400 outline-none"
+          className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 outline-none"
           onKeyDown={e => e.key === "Enter" && addDeadline()}
         />
         <input
           type="date"
           value={newDate}
           onChange={e => setNewDate(e.target.value)}
-          className="h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground focus:border-rose-400 outline-none"
+          className="h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
         />
-        <button onClick={addDeadline} className="h-9 w-9 rounded-lg bg-rose-500 text-white flex items-center justify-center hover:bg-rose-600">
+        <button onClick={addDeadline} className="h-9 w-9 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90">
           <Plus className="w-4 h-4" />
         </button>
       </div>
@@ -295,24 +295,24 @@ function ExpenseTracker({ lang, onClose }: { lang: string; onClose: () => void }
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
       </div>
 
-      <div className="text-center mb-4 p-4 rounded-xl bg-gradient-to-r from-rose-500/10 to-pink-500/10 border border-rose-500/20">
+      <div className="text-center mb-4 p-4 rounded-xl bg-primary/10 border border-primary/20">
         <div className="text-sm text-muted-foreground">{lang === "zh" ? "今日總支出" : "Today's Total"}</div>
-        <div className="text-3xl font-bold text-rose-500">HK${total}</div>
+        <div className="text-3xl font-bold text-primary">HK${total}</div>
       </div>
 
       <div className="flex gap-2 mb-4">
         <input type="text" placeholder={lang === "zh" ? "項目" : "Item"} value={newItem} onChange={e => setNewItem(e.target.value)}
-          className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-rose-400 outline-none"
+          className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 outline-none"
           onKeyDown={e => e.key === "Enter" && addExpense()}
         />
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
           <input type="number" placeholder="0" value={newAmount} onChange={e => setNewAmount(e.target.value)}
-            className="w-24 h-9 pl-7 pr-3 rounded-lg bg-background border border-border text-sm text-foreground focus:border-rose-400 outline-none"
+            className="w-24 h-9 pl-7 pr-3 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
             onKeyDown={e => e.key === "Enter" && addExpense()}
           />
         </div>
-        <button onClick={addExpense} className="h-9 w-9 rounded-lg bg-rose-500 text-white flex items-center justify-center hover:bg-rose-600">
+        <button onClick={addExpense} className="h-9 w-9 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90">
           <Plus className="w-4 h-4" />
         </button>
       </div>
@@ -321,7 +321,7 @@ function ExpenseTracker({ lang, onClose }: { lang: string; onClose: () => void }
         {expenses.map(e => (
           <div key={e.id} className="flex items-center justify-between p-3 rounded-xl border border-border bg-card">
             <span className="text-sm text-foreground">{e.item}</span>
-            <span className="text-sm font-medium text-rose-500">-HK${e.amount}</span>
+            <span className="text-sm font-medium text-primary">-HK${e.amount}</span>
           </div>
         ))}
       </div>
@@ -343,7 +343,7 @@ export default function Tools() {
   }
 
   const tools = [
-    { key: "gpa" as ActiveTool, icon: Calculator, label: lang === "zh" ? "GPA 計算器" : "GPA Calculator", desc: lang === "zh" ? "計算你的學期 GPA" : "Calculate your semester GPA", color: "from-rose-500 to-pink-500" },
+    { key: "gpa" as ActiveTool, icon: Calculator, label: lang === "zh" ? "GPA 計算器" : "GPA Calculator", desc: lang === "zh" ? "計算你的學期 GPA" : "Calculate your semester GPA", color: "from-primary to-primary" },
     { key: "pomodoro" as ActiveTool, icon: Timer, label: lang === "zh" ? "番茄鐘" : "Pomodoro Timer", desc: lang === "zh" ? "25分鐘專注，5分鐘休息" : "25min focus, 5min break", color: "from-orange-500 to-amber-500" },
     { key: "deadline" as ActiveTool, icon: CalendarDays, label: lang === "zh" ? "Deadline 追蹤器" : "Deadline Tracker", desc: lang === "zh" ? "追蹤作業和考試日期" : "Track assignment & exam dates", color: "from-blue-500 to-cyan-500" },
     { key: "expense" as ActiveTool, icon: DollarSign, label: lang === "zh" ? "消費記錄" : "Expense Tracker", desc: lang === "zh" ? "記錄每日支出" : "Track daily expenses", color: "from-emerald-500 to-teal-500" },
@@ -359,7 +359,7 @@ export default function Tools() {
               <Shield className="w-4.5 h-4.5 text-white" />
             </div>
             <span className="font-display text-lg font-bold tracking-tight text-foreground">
-              UniVibe<span className="text-neon-coral"> HK</span>
+              UniGo<span className="text-neon-coral"> HK</span>
             </span>
           </a>
           <nav className="flex-1 space-y-1">
@@ -393,7 +393,7 @@ export default function Tools() {
           <div className="lg:hidden sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 px-4 py-3 flex items-center justify-between">
             <a href="/" className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-neon-coral flex items-center justify-center"><Shield className="w-3.5 h-3.5 text-white" /></div>
-              <span className="font-display text-base font-bold text-foreground">UniVibe<span className="text-neon-coral"> HK</span></span>
+              <span className="font-display text-base font-bold text-foreground">UniGo<span className="text-neon-coral"> HK</span></span>
             </a>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground" onClick={() => setLang(lang === "zh" ? "en" : "zh")}><Globe className="w-4 h-4" /></Button>
@@ -418,7 +418,7 @@ export default function Tools() {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.05 }}
                           onClick={() => setActiveTool(tool.key)}
-                          className="p-5 rounded-xl border border-border bg-card hover:border-rose-500/30 hover:shadow-lg hover:shadow-rose-500/5 transition-all text-left group"
+                          className="p-5 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all text-left group"
                         >
                           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${tool.color} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
                             <Icon className="w-5 h-5 text-white" />

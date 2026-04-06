@@ -94,7 +94,7 @@ const translations: Record<Language, Record<string, string>> = {
     "pricing.badge": "定價方案",
     "pricing.title1": "免費使用。",
     "pricing.title2": "Pro 制霸。",
-    "pricing.subtitle": "UniVibe HK 對所有認證學生免費。只需 HK$18/月即可解鎖高級功能。",
+    "pricing.subtitle": "UniGo HK 對所有認證學生免費。只需 HK$18/月即可解鎖高級功能。",
     "pricing.free": "免費版",
     "pricing.free.price": "HK$0",
     "pricing.free.period": "/月",
@@ -144,7 +144,7 @@ const translations: Record<Language, Record<string, string>> = {
     "cta.title1": "準備好加入",
     "cta.title2": "封閉花園",
     "cta.title3": "了嗎？",
-    "cta.subtitle": "UniVibe HK 即將推出。成為首批認證學生，體驗香港一直在等待的校園超級應用。",
+    "cta.subtitle": "UniGo HK 即將推出。成為首批認證學生，體驗香港一直在等待的校園超級應用。",
     "cta.waitlist": "加入社群",
     "cta.business": "企業合作洽詢",
 
@@ -160,7 +160,7 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.privacy": "隱私政策",
     "footer.terms": "服務條款",
     "footer.guidelines": "社群守則",
-    "footer.copyright": "UniVibe HK. 保留所有權利。",
+    "footer.copyright": "UniGo HK. 保留所有權利。",
     "footer.tagline": "由香港學生打造，為香港學生服務。",
 
     // Common
@@ -176,7 +176,7 @@ const translations: Record<Language, Record<string, string>> = {
     "login.verify.detected": "已偵測",
     "login.verify.cta": "驗證並加入",
     "login.verify.hint": "驗證碼已發送至你的電郵，10分鐘內有效",
-    "login.success.title": "歡迎加入 UniVibe！",
+    "login.success.title": "歡迎加入 UniGo！",
     "login.success.subtitle": "你的身份已驗證。正在進入社群...",
     "login.success.redirect": "正在跳轉至動態牆...",
     "login.error.invalid_email": "請使用有效的 .edu.hk 電郵地址",
@@ -324,13 +324,13 @@ const translations: Record<Language, Record<string, string>> = {
 
     // Dating
     "dating.badge": "Slow-Reveal Dating",
-    "dating.title1": "Personality First.",
-    "dating.title2": "Looks Later.",
+    "dating.title1": "Chat Before",
+    "dating.title2": "You See.",
     "dating.subtitle": "Designed to cure swiping fatigue. Prioritize shared academic struggles and genuine personality over appearance alone.",
     "dating.step1.title": "The Vibe Check",
     "dating.step1.desc": "Great exchange in an anonymous thread? Send a mutual \"Vibe Check\" to open a private chat. Forum interactions become real connections.",
     "dating.step2.title": "Blurred Match Profile",
-    "dating.step2.desc": "Create a dating profile with your MBTI, 3 hobbies, major, and heavily blurred photos. Personality first, appearance second.",
+    "dating.step2.desc": "Create a dating profile with your MBTI, 3 hobbies, major, and heavily blurred photos. Chat first, see later.",
     "dating.step3.title": "20-Message Unblur",
     "dating.step3.desc": "Chat with only MBTI and major visible. As you exchange messages, photos slowly come into focus. By message 20 — full reveal.",
     "dating.step4.title": "Group Swiping",
@@ -352,7 +352,7 @@ const translations: Record<Language, Record<string, string>> = {
     "pricing.badge": "Pricing",
     "pricing.title1": "Free to Use.",
     "pricing.title2": "Pro to Dominate.",
-    "pricing.subtitle": "UniVibe HK is free for all verified students. Unlock premium features for just HK$18/month.",
+    "pricing.subtitle": "UniGo HK is free for all verified students. Unlock premium features for just HK$18/month.",
     "pricing.free": "Free",
     "pricing.free.price": "HK$0",
     "pricing.free.period": "/month",
@@ -402,7 +402,7 @@ const translations: Record<Language, Record<string, string>> = {
     "cta.title1": "Ready to Join the",
     "cta.title2": "Walled Garden",
     "cta.title3": "?",
-    "cta.subtitle": "UniVibe HK is launching soon. Be among the first verified students to experience the campus super-app Hong Kong has been waiting for.",
+    "cta.subtitle": "UniGo HK is launching soon. Be among the first verified students to experience the campus super-app Hong Kong has been waiting for.",
     "cta.waitlist": "Join the Community",
     "cta.business": "Contact for Business",
 
@@ -418,7 +418,7 @@ const translations: Record<Language, Record<string, string>> = {
     "footer.privacy": "Privacy Policy",
     "footer.terms": "Terms of Service",
     "footer.guidelines": "Community Guidelines",
-    "footer.copyright": "UniVibe HK. All rights reserved.",
+    "footer.copyright": "UniGo HK. All rights reserved.",
     "footer.tagline": "Built for Hong Kong students, by Hong Kong students.",
 
     // Common
@@ -434,7 +434,7 @@ const translations: Record<Language, Record<string, string>> = {
     "login.verify.detected": "detected",
     "login.verify.cta": "Verify & Join",
     "login.verify.hint": "Code sent to your email. Valid for 10 minutes.",
-    "login.success.title": "Welcome to UniVibe!",
+    "login.success.title": "Welcome to UniGo!",
     "login.success.subtitle": "Your identity is verified. Entering the community...",
     "login.success.redirect": "Redirecting to feed...",
     "login.error.invalid_email": "Please use a valid .edu.hk email address",
@@ -489,7 +489,7 @@ const translations: Record<Language, Record<string, string>> = {
     "dating.error.mbti": "Please select your MBTI type",
     "dating.error.interests": "Please select at least 3 interests",
     "dating.profile_saved": "Dating profile saved!",
-    "dating.discover.subtitle": "Personality first, looks later ✨",
+    "dating.discover.subtitle": "Chat before you see ✨",
     "dating.filter.gender": "Gender",
     "dating.filter.gender.all": "All",
     "dating.filter.gender.male": "♂ Male",
@@ -532,7 +532,7 @@ const translations: Record<Language, Record<string, string>> = {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("univibe-lang");
+      const saved = localStorage.getItem("unigo-lang");
       if (saved === "en" || saved === "zh") return saved;
     }
     return "zh";
@@ -540,7 +540,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLang = useCallback((newLang: Language) => {
     setLangState(newLang);
-    localStorage.setItem("univibe-lang", newLang);
+    localStorage.setItem("unigo-lang", newLang);
   }, []);
 
   const t = useCallback(

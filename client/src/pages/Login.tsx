@@ -39,7 +39,7 @@ export default function Login() {
   useEffect(() => {
     // Detect theme: check localStorage, document class, or system preference
     const checkTheme = () => {
-      const stored = localStorage.getItem('theme') || localStorage.getItem('univibe_theme');
+      const stored = localStorage.getItem('theme') || localStorage.getItem('unigo_theme');
       if (stored === 'dark') return true;
       if (stored === 'light') return false;
       if (document.documentElement.classList.contains('dark')) return true;
@@ -151,10 +151,10 @@ export default function Login() {
       if (!res.ok) throw new Error(data.error || '註冊失敗');
       
       // Save session
-      localStorage.setItem('univibe_token', data.token);
-      localStorage.setItem('univibe_user', JSON.stringify(data.user));
+      localStorage.setItem('unigo_token', data.token);
+      localStorage.setItem('unigo_user', JSON.stringify(data.user));
       
-      setSuccess('註冊成功！歡迎加入 UniVibe HK 🎉');
+      setSuccess('註冊成功！歡迎加入 UniGo HK 🎉');
       setTimeout(() => window.location.href = '/feed', 1500);
     } catch (err: any) {
       setError(err.message);
@@ -181,8 +181,8 @@ export default function Login() {
       if (!res.ok) throw new Error(data.error || '登入失敗');
       
       // Save session
-      localStorage.setItem('univibe_token', data.token);
-      localStorage.setItem('univibe_user', JSON.stringify(data.user));
+      localStorage.setItem('unigo_token', data.token);
+      localStorage.setItem('unigo_user', JSON.stringify(data.user));
       
       setSuccess('登入成功！');
       setTimeout(() => window.location.href = '/feed', 800);
@@ -234,8 +234,8 @@ export default function Login() {
 
   // ============ SHARED UI COMPONENTS ============
   const inputClass = isDark
-    ? "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"
-    : "w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all";
+    ? "w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-primary/70 focus:ring-1 focus:ring-primary/50 transition-all"
+    : "w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-primary/70 focus:ring-1 focus:ring-primary/50 transition-all";
 
   // FIXED: eye button color — dark text in light mode, light text in dark mode
   const eyeButtonClass = isDark
@@ -248,7 +248,7 @@ export default function Login() {
     `w-full py-3 rounded-xl font-semibold text-white transition-all ${
       disabled
         ? isDark ? 'bg-white/10 cursor-not-allowed opacity-50' : 'bg-gray-200 cursor-not-allowed opacity-50 text-gray-400'
-        : 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98]'
+        : 'bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 active:scale-[0.98]'
     }`;
 
   const backButton = (target: AuthMode) => (
@@ -272,8 +272,8 @@ export default function Login() {
     <div className={`min-h-screen flex items-center justify-center p-4 transition-colors ${isDark ? 'bg-gradient-to-br from-[#1a1625] via-[#1e1a2e] to-[#251e35]' : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'}`}>
       {/* Background decoration */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl ${isDark ? 'bg-rose-500/10' : 'bg-rose-500/5'}`} />
-        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full blur-3xl ${isDark ? 'bg-pink-500/10' : 'bg-pink-500/5'}`} />
+        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full blur-3xl ${isDark ? 'bg-primary/10' : 'bg-primary/5'}`} />
+        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full blur-3xl ${isDark ? 'bg-accent/10' : 'bg-accent/5'}`} />
       </div>
 
       <motion.div
@@ -284,8 +284,8 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <a href="/" className="inline-block">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
-              UniVibe HK
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              UniGo HK
             </h1>
           </a>
           <p className={isDark ? "text-white/50 mt-1 text-sm" : "text-gray-500 mt-1 text-sm"}>香港大學生社交平台</p>
@@ -298,12 +298,12 @@ export default function Login() {
             {/* ========== CHOOSE: Login or Register ========== */}
             {mode === 'choose' && (
               <motion.div key="choose" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
-                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} text-center mb-6`}>歡迎來到 UniVibe</h2>
+                <h2 className={`text-xl font-bold ${isDark ? "text-white" : "text-gray-900"} text-center mb-6`}>歡迎來到 UniGo</h2>
                 
                 <div className="space-y-3">
                   <button
                     onClick={() => { setMode('login'); setError(''); }}
-                    className="w-full py-4 rounded-xl font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all"
+                    className="w-full py-4 rounded-xl font-semibold text-white bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 active:scale-[0.98] transition-all"
                   >
                     <div className="flex items-center justify-center gap-2">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
@@ -385,7 +385,7 @@ export default function Login() {
 
                 <p className={isDark ? "text-center text-white/40 text-sm mt-4" : "text-center text-gray-500 text-sm mt-4"}>
                   還沒有帳號？{' '}
-                  <button onClick={() => { setMode('register-email'); setError(''); setSuccess(''); }} className="text-rose-400 hover:text-rose-300">
+                  <button onClick={() => { setMode('register-email'); setError(''); setSuccess(''); }} className="text-primary hover:text-primary/80">
                     立即註冊
                   </button>
                 </p>
@@ -432,7 +432,7 @@ export default function Login() {
 
                 <p className={isDark ? "text-center text-white/40 text-sm mt-4" : "text-center text-gray-500 text-sm mt-4"}>
                   已有帳號？{' '}
-                  <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-rose-400 hover:text-rose-300">
+                  <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-primary hover:text-primary/80">
                     登入
                   </button>
                 </p>
@@ -457,7 +457,7 @@ export default function Login() {
                       value={digit}
                       onChange={e => handleCodeChange(i, e.target.value)}
                       onKeyDown={e => handleCodeKeyDown(i, e)}
-                      className={isDark ? "w-12 h-14 text-center text-xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all" : "w-12 h-14 text-center text-xl font-bold bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/50 transition-all"}
+                      className={isDark ? "w-12 h-14 text-center text-xl font-bold bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-primary/70 focus:ring-1 focus:ring-primary/50 transition-all" : "w-12 h-14 text-center text-xl font-bold bg-gray-100 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-primary/70 focus:ring-1 focus:ring-primary/50 transition-all"}
                     />
                   ))}
                 </div>
@@ -480,7 +480,7 @@ export default function Login() {
 
                 <p className={isDark ? "text-center text-white/40 text-sm mt-3" : "text-center text-gray-500 text-sm mt-3"}>
                   {cooldown > 0 ? `${cooldown}秒後可重新發送` : (
-                    <button onClick={handleSendCode} className="text-rose-400 hover:text-rose-300">重新發送驗證碼</button>
+                    <button onClick={handleSendCode} className="text-primary hover:text-primary/80">重新發送驗證碼</button>
                   )}
                 </p>
               </motion.div>
@@ -580,7 +580,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className={isDark ? "text-center text-white/20 text-xs mt-6" : "text-center text-gray-300 text-xs mt-6"}>
-          UniVibe HK © 2026 · 保護你的隱私
+          UniGo HK © 2026 · 保護你的隱私
         </p>
       </motion.div>
     </div>

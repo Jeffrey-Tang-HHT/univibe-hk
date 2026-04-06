@@ -3,12 +3,12 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench,
-  Mail, School, BookOpen, MapPin, Heart, Brain, Calendar, Edit3, Save, X, Camera
+  Mail, School, BookOpen, MapPin, Heart, Brain, Calendar, Edit3, Save, X, Camera, Palette, Check
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme, COLOR_THEMES } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 import { getUser, updateStoredUser, updateProfile, type User as UserType } from "@/lib/auth";
 
@@ -76,7 +76,7 @@ const INTERESTS = [
 export default function Profile() {
   const { user, isLoggedIn, logout: doLogout, refreshUser } = useAuth();
   const { lang, setLang, t } = useLanguage();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, colorTheme, toggleTheme, setColorTheme } = useTheme();
   const [, setLocation] = useLocation();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -164,7 +164,7 @@ export default function Profile() {
     setInterests(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
-  const selectClass = "w-full h-10 px-3 rounded-xl bg-background border border-border text-sm text-foreground focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 outline-none transition-all";
+  const selectClass = "w-full h-10 px-3 rounded-xl bg-background border border-border text-sm text-foreground focus:border-primary/70 focus:ring-2 focus:ring-primary/20 outline-none transition-all";
   const inputClass = selectClass;
 
   return (
@@ -174,7 +174,7 @@ export default function Profile() {
         <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 border-r border-border bg-card/50 p-4">
           <a href="/" className="flex items-center gap-2.5 mb-8 px-2">
             <div className="w-8 h-8 rounded-lg bg-neon-coral flex items-center justify-center"><Shield className="w-4.5 h-4.5 text-white" /></div>
-            <span className="font-display text-lg font-bold tracking-tight text-foreground">UniVibe<span className="text-neon-coral"> HK</span></span>
+            <span className="font-display text-lg font-bold tracking-tight text-foreground">UniGo<span className="text-neon-coral"> HK</span></span>
           </a>
           <nav className="flex-1 space-y-1">
             <a href="/feed" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Home className="w-4 h-4" /> {t("feed.nav.feed")}</a>
@@ -197,7 +197,7 @@ export default function Profile() {
           <div className="lg:hidden sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50 px-4 py-3 flex items-center justify-between">
             <a href="/" className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-neon-coral flex items-center justify-center"><Shield className="w-3.5 h-3.5 text-white" /></div>
-              <span className="font-display text-base font-bold text-foreground">UniVibe<span className="text-neon-coral"> HK</span></span>
+              <span className="font-display text-base font-bold text-foreground">UniGo<span className="text-neon-coral"> HK</span></span>
             </a>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground" onClick={() => setLang(lang === "zh" ? "en" : "zh")}><Globe className="w-4 h-4" /></Button>
@@ -209,7 +209,7 @@ export default function Profile() {
             {/* Profile Header */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-6">
               <div className="relative inline-block mb-3">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center text-white text-2xl font-bold">
+                <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold">
                   {(displayName || user?.username || "U").charAt(0).toUpperCase()}
                 </div>
               </div>
@@ -219,7 +219,7 @@ export default function Profile() {
                 <Mail className="w-3 h-3" /> {user?.email}
               </p>
               {!editing && (
-                <button onClick={() => setEditing(true)} className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 transition-colors">
+                <button onClick={() => setEditing(true)} className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors">
                   <Edit3 className="w-4 h-4" /> {lang === "zh" ? "編輯個人資料" : "Edit Profile"}
                 </button>
               )}
@@ -248,7 +248,7 @@ export default function Profile() {
                     <div className="flex gap-2">
                       {GENDERS.map(g => (
                         <button key={g.value} onClick={() => setGender(g.value)}
-                          className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${gender === g.value ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                          className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${gender === g.value ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
                         >{lang === "zh" ? g.labelZh : g.labelEn}</button>
                       ))}
                     </div>
@@ -302,7 +302,7 @@ export default function Profile() {
                     <div className="grid grid-cols-4 gap-1.5">
                       {MBTI_TYPES.map(m => (
                         <button key={m} onClick={() => setMbti(m)}
-                          className={`py-1.5 rounded-lg text-xs font-medium transition-all ${mbti === m ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                          className={`py-1.5 rounded-lg text-xs font-medium transition-all ${mbti === m ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
                         >{m}</button>
                       ))}
                     </div>
@@ -330,7 +330,7 @@ export default function Profile() {
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">{lang === "zh" ? "個人簡介" : "Bio"}</label>
                     <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} maxLength={200}
-                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground resize-none focus:border-primary/70 focus:ring-2 focus:ring-primary/20 outline-none"
                       placeholder={lang === "zh" ? "介紹一下你自己..." : "Tell us about yourself..."}
                     />
                     <p className="text-xs text-muted-foreground text-right">{bio.length}/200</p>
@@ -342,7 +342,7 @@ export default function Profile() {
                     <div className="flex flex-wrap gap-2">
                       {INTERESTS.map(item => (
                         <button key={item.key} onClick={() => toggleInterest(item.key)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${interests.includes(item.key) ? "bg-rose-500 text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${interests.includes(item.key) ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}
                         >{item.emoji} {lang === "zh" ? item.zh : item.en}</button>
                       ))}
                     </div>
@@ -350,7 +350,7 @@ export default function Profile() {
 
                   {/* Save */}
                   <button onClick={handleSave} disabled={saving}
-                    className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                    className="w-full py-3 rounded-xl font-semibold text-white bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                   >
                     <Save className="w-4 h-4" /> {saving ? (lang === "zh" ? "儲存中..." : "Saving...") : (lang === "zh" ? "儲存" : "Save")}
                   </button>
@@ -394,7 +394,7 @@ export default function Profile() {
                         {interests.map(key => {
                           const item = INTERESTS.find(i => i.key === key);
                           return item ? (
-                            <span key={key} className="px-2.5 py-1 rounded-full text-xs bg-rose-500/10 text-rose-500">
+                            <span key={key} className="px-2.5 py-1 rounded-full text-xs bg-primary/10 text-primary">
                               {item.emoji} {lang === "zh" ? item.zh : item.en}
                             </span>
                           ) : null;
@@ -405,6 +405,35 @@ export default function Profile() {
                 </div>
               )}
             </motion.div>
+
+            {/* Color Theme Picker */}
+            {!editing && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                className="mt-4 rounded-xl border border-border bg-card p-5"
+              >
+                <h3 className="font-bold text-foreground mb-1 flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-primary" /> {lang === "zh" ? "主題色彩" : "Theme Color"}
+                </h3>
+                <p className="text-xs text-muted-foreground mb-3">{lang === "zh" ? "選擇你喜歡的配色方案" : "Choose your preferred color scheme"}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {COLOR_THEMES.map(ct => (
+                    <button
+                      key={ct.id}
+                      onClick={() => setColorTheme(ct.id)}
+                      className={`relative flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                        colorTheme === ct.id
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      }`}
+                    >
+                      <span className="w-4 h-4 rounded-full flex-shrink-0 ring-1 ring-black/10" style={{ background: ct.preview }} />
+                      <span className="truncate">{lang === "zh" ? ct.label.zh : ct.label.en}</span>
+                      {colorTheme === ct.id && <Check className="w-3 h-3 text-primary absolute top-1.5 right-1.5" />}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
             {/* Danger Zone */}
             {!editing && (

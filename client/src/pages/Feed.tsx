@@ -137,7 +137,7 @@ export default function Feed() {
               <Shield className="w-4.5 h-4.5 text-white" />
             </div>
             <span className="font-display text-lg font-bold tracking-tight text-foreground">
-              UniVibe<span className="text-neon-coral"> HK</span>
+              UniGo<span className="text-neon-coral"> HK</span>
             </span>
           </a>
 
@@ -182,7 +182,7 @@ export default function Feed() {
               <div className="w-7 h-7 rounded-lg bg-neon-coral flex items-center justify-center">
                 <Shield className="w-3.5 h-3.5 text-white" />
               </div>
-              <span className="font-display text-base font-bold text-foreground">UniVibe<span className="text-neon-coral"> HK</span></span>
+              <span className="font-display text-base font-bold text-foreground">UniGo<span className="text-neon-coral"> HK</span></span>
             </a>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>

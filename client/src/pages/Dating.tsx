@@ -309,7 +309,7 @@ export default function Dating() {
         <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 border-r border-border bg-card/50 p-4">
           <a href="/" className="flex items-center gap-2.5 mb-8 px-2">
             <div className="w-8 h-8 rounded-lg bg-neon-coral flex items-center justify-center"><Shield className="w-4.5 h-4.5 text-white" /></div>
-            <span className="font-display text-lg font-bold tracking-tight text-foreground">UniVibe<span className="text-neon-coral"> HK</span></span>
+            <span className="font-display text-lg font-bold tracking-tight text-foreground">UniGo<span className="text-neon-coral"> HK</span></span>
           </a>
           <nav className="flex-1 space-y-1">
             <a href="/feed" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Home className="w-4 h-4" /> {t("feed.nav.feed")}</a>
@@ -337,7 +337,7 @@ export default function Dating() {
               </>
             ) : (
               <>
-                <a href="/" className="flex items-center gap-2"><div className="w-7 h-7 rounded-lg bg-neon-coral flex items-center justify-center"><Shield className="w-3.5 h-3.5 text-white" /></div><span className="font-display text-base font-bold text-foreground">UniVibe<span className="text-neon-coral"> HK</span></span></a>
+                <a href="/" className="flex items-center gap-2"><div className="w-7 h-7 rounded-lg bg-neon-coral flex items-center justify-center"><Shield className="w-3.5 h-3.5 text-white" /></div><span className="font-display text-base font-bold text-foreground">UniGo<span className="text-neon-coral"> HK</span></span></a>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground" onClick={() => setLang(lang === "zh" ? "en" : "zh")}><Globe className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground" onClick={toggleTheme}>{theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</Button>

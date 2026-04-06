@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'univibe_token' || e.key === 'univibe_user') {
+      if (e.key === 'unigo_token' || e.key === 'unigo_user') {
         refreshUser();
       }
     };
