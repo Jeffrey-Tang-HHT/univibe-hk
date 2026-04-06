@@ -7,14 +7,14 @@ import {
   X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2, Timer,
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
-  Mic, CheckCheck, Smile, Square, Play
+  Mic, CheckCheck, Smile, Square, Play, UserX, MoreVertical
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime } from "@/lib/chat";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage } from "@/lib/chat";
 
 type DatingTab = "discover" | "matches" | "profile";
 
@@ -218,11 +218,11 @@ function BlurredAvatar({ blurLevel, mbti, size = "lg" }: { blurLevel: number; mb
 
 type ChatMsg = { text: string; isMe: boolean; time: string; type?: "text" | "gif" | "voice"; gifUrl?: string; voiceDuration?: number; read?: boolean };
 
-function ChatBubble({ msg }: { msg: ChatMsg }) {
+function ChatBubble({ msg, onDelete }: { msg: ChatMsg; onDelete?: (forBoth: boolean) => void }) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showMenu, setShowMenu] = useState(false);
 
-  // Simulate voice playback
   const playVoice = () => {
     if (playing) return;
     setPlaying(true);
@@ -239,12 +239,13 @@ function ChatBubble({ msg }: { msg: ChatMsg }) {
   };
 
   return (
-    <div className={`flex ${msg.isMe ? "justify-end" : "justify-start"} mb-3`}>
-      <div className={`max-w-[75%] ${msg.type === "gif" ? "rounded-2xl overflow-hidden" : `px-4 py-2.5 rounded-2xl ${msg.isMe ? "bg-neon-coral text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"}`}`}>
-        {msg.type === "gif" && msg.gifUrl ? (
-          <img src={msg.gifUrl} alt="GIF" className="w-48 h-auto rounded-2xl" />
-        ) : msg.type === "voice" ? (
-          <button onClick={playVoice} className="flex items-center gap-2 min-w-[160px]">
+    <div className={`flex ${msg.isMe ? "justify-end" : "justify-start"} mb-3 relative group`}>
+      <div
+        className={`max-w-[75%] relative ${msg.type === "gif" ? "rounded-2xl overflow-hidden" : `px-4 py-2.5 rounded-2xl ${msg.isMe ? "bg-neon-coral text-white rounded-br-md" : "bg-muted text-foreground rounded-bl-md"}`}`}
+        onClick={() => onDelete && setShowMenu(!showMenu)}
+      >
+        {msg.type === "voice" ? (
+          <button onClick={(e) => { e.stopPropagation(); playVoice(); }} className="flex items-center gap-2 min-w-[160px]">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.isMe ? "bg-white/20" : "bg-foreground/10"}`}>
               {playing ? <Square className="w-3 h-3" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
             </div>
@@ -261,6 +262,28 @@ function ChatBubble({ msg }: { msg: ChatMsg }) {
           {msg.isMe && <CheckCheck className={`w-3 h-3 ${msg.read ? "text-neon-cyan" : msg.isMe ? "text-white/40" : "text-muted-foreground/40"}`} />}
         </div>
       </div>
+      {/* Delete menu */}
+      <AnimatePresence>
+        {showMenu && onDelete && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className={`absolute ${msg.isMe ? "right-0" : "left-0"} top-full mt-1 z-50 bg-card border border-border rounded-xl shadow-lg overflow-hidden min-w-[160px]`}
+          >
+            <button onClick={(e) => { e.stopPropagation(); onDelete(false); setShowMenu(false); }}
+              className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-2">
+              <X className="w-3.5 h-3.5" />{msg.isMe ? "Delete for me" : "Delete for me"}
+            </button>
+            {msg.isMe && (
+              <button onClick={(e) => { e.stopPropagation(); onDelete(true); setShowMenu(false); }}
+                className="w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5" />Delete for everyone
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -530,6 +553,53 @@ export default function Dating() {
       }, 2500 + Math.random() * 2000);
     }
   };
+  const [showUnmatchConfirm, setShowUnmatchConfirm] = useState(false);
+  const [hiddenMsgIds, setHiddenMsgIds] = useState<Set<string>>(new Set());
+
+  const handleUnmatch = () => {
+    if (!activeChatId) return;
+    const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
+    const matchId = (matchProfile as any)?._matchId || activeMatchId;
+    if (user?.id && matchId && !matchId.startsWith("m")) {
+      unmatch(matchId, user.id).then(() => {
+        toast.success(lang === "zh" ? "已取消配對" : "Unmatched");
+        setActiveChatId(null);
+        setActiveMatchId(null);
+        setShowUnmatchConfirm(false);
+        // Refresh matches
+        getMatches(user.id).then(data => { if (data.matches) setRealMatches(data.matches); });
+      }).catch(() => toast.error(lang === "zh" ? "操作失敗" : "Failed"));
+    } else {
+      // Mock unmatch
+      toast.success(lang === "zh" ? "已取消配對" : "Unmatched");
+      setActiveChatId(null);
+      setShowUnmatchConfirm(false);
+    }
+  };
+
+  const handleDeleteMsg = (msgIndex: number, forBoth: boolean) => {
+    if (!activeChatId) return;
+    const msgs = chatMessages[activeChatId] || [];
+    const msg = msgs[msgIndex];
+    if (!msg) return;
+
+    if (forBoth && (msg as any).id && user?.id) {
+      // Delete from Supabase
+      deleteMessage((msg as any).id, user.id, true).catch(() => {});
+    }
+
+    if (forBoth) {
+      // Remove from state entirely
+      setChatMessages(prev => ({
+        ...prev,
+        [activeChatId]: (prev[activeChatId] || []).filter((_, i) => i !== msgIndex)
+      }));
+    } else {
+      // Hide locally only
+      setHiddenMsgIds(prev => new Set([...prev, `${activeChatId}-${msgIndex}`]));
+    }
+  };
+
   const handleInsertEmoji = (emoji: string) => {
     setChatMessage(prev => prev + emoji);
     setShowEmojiPicker(false);
@@ -599,7 +669,7 @@ export default function Dating() {
               <>
                 <button onClick={() => setActiveChatId(null)} className="flex items-center gap-2 text-foreground"><ChevronLeft className="w-5 h-5" /><span className="font-medium text-sm">{t("dating.back")}</span></button>
                 {activeChat && <span className="font-display font-bold text-sm">{activeChat.mbti} {genderSign(activeChat.gender)} · {activeChat.institution}</span>}
-                <div className="w-10" />
+                <button onClick={() => setShowUnmatchConfirm(true)} className="text-muted-foreground hover:text-destructive"><UserX className="w-5 h-5" /></button>
               </>
             ) : (
               <>
@@ -625,10 +695,31 @@ export default function Dating() {
                     <span className="text-[10px] text-muted-foreground">{activeChat.messages}/20 {t("dating.msg_unlock")}</span>
                   </div>
                 </div>
+                <button onClick={() => setShowUnmatchConfirm(true)} className="ml-auto text-muted-foreground hover:text-destructive transition-colors" title={lang === "zh" ? "取消配對" : "Unmatch"}><UserX className="w-5 h-5" /></button>
               </div>
+              {/* Unmatch confirmation */}
+              <AnimatePresence>
+                {showUnmatchConfirm && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowUnmatchConfirm(false)}>
+                    <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-card rounded-2xl border border-border p-6 max-w-sm w-full shadow-xl" onClick={e => e.stopPropagation()}>
+                      <div className="text-center">
+                        <UserX className="w-12 h-12 text-destructive mx-auto mb-3" />
+                        <h3 className="font-display font-bold text-lg text-foreground mb-2">{lang === "zh" ? "確認取消配對？" : "Unmatch?"}</h3>
+                        <p className="text-sm text-muted-foreground mb-5">{lang === "zh" ? "所有對話記錄將被永久刪除，此操作無法撤銷。" : "All chat messages will be permanently deleted. This cannot be undone."}</p>
+                        <div className="flex gap-3">
+                          <button onClick={() => setShowUnmatchConfirm(false)} className="flex-1 py-3 rounded-xl font-medium text-sm border border-border hover:bg-muted transition-colors">{lang === "zh" ? "取消" : "Cancel"}</button>
+                          <button onClick={handleUnmatch} className="flex-1 py-3 rounded-xl font-medium text-sm bg-destructive text-white hover:bg-destructive/90 transition-colors">{lang === "zh" ? "取消配對" : "Unmatch"}</button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
                 <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />{t("dating.photo_clarity")} {activeChat.blurLevel}% · {t("dating.send_more")} {20 - activeChat.messages} {t("dating.to_fully_unlock")}</div></div>
-                {(chatMessages[activeChatId] || []).map((msg, idx) => (<ChatBubble key={idx} msg={msg} />))}
+                {(chatMessages[activeChatId] || []).filter((_, idx) => !hiddenMsgIds.has(`${activeChatId}-${idx}`)).map((msg, idx) => (
+                  <ChatBubble key={idx} msg={msg} onDelete={(forBoth) => handleDeleteMsg(idx, forBoth)} />
+                ))}
                 {isTyping && <TypingIndicator />}
               </div>
               <div className="p-4 border-t border-border bg-card/50">
@@ -672,7 +763,7 @@ export default function Dating() {
               <div className="flex gap-1 mb-6 bg-muted rounded-xl p-1">
                 {(["discover", "matches", "profile"] as DatingTab[]).map((t_) => (
                   <button key={t_} onClick={() => setTab(t_)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === t_ ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "matches" ? `${t("dating.tab.matches")} (${matchedProfiles.length})` : t("dating.tab.profile")}
+                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "matches" ? t("dating.tab.matches") : t("dating.tab.profile")}
                   </button>
                 ))}
               </div>
@@ -1021,7 +1112,8 @@ export default function Dating() {
         </main>
       </div>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — hidden when in chat */}
+      {!activeChatId && (
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card/90 backdrop-blur-xl border-t border-border z-40">
         <div className="flex items-center justify-around py-2">
           <a href="/feed" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Home className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.feed")}</span></a>
@@ -1030,6 +1122,7 @@ export default function Dating() {
           <a href="/profile" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><User className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.profile")}</span></a>
         </div>
       </div>
+      )}
     </div>
   );
 }
