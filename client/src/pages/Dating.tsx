@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -332,9 +332,10 @@ export default function Dating() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatMessage, setChatMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const recordingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMsg[]>>({
     m3: [
       { text: "你好！見到你都鍾意攝影 📸", isMe: false, time: "3小時前", read: true },
@@ -345,7 +346,6 @@ export default function Dating() {
     m4: [
       { text: "你個 ENTJ 配我個 ENFP 好夾喎 😆", isMe: true, time: "2日前", read: true },
       { text: "係呀！MBTI compatibility 95% 🔥", isMe: false, time: "2日前", read: true },
-      { text: "", isMe: false, time: "1日前", type: "gif", gifUrl: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDRjMnZ1YnUybGVqNG1qNnBkeXY0dXFjdWlxOGQ1Y2V5MDRxOWJuYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0MYt5jPR6QX5pnqM/giphy.gif", read: true },
       { text: "今晚一齊食飯？", isMe: false, time: "30分鐘前", read: false },
     ],
     m5: [
@@ -422,17 +422,15 @@ export default function Dating() {
       setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), reply] }));
     }, 2500 + Math.random() * 2000);
   };
-  const handleSendGif = (url: string) => {
-    if (!activeChatId) return;
-    const msg: ChatMsg = { text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "gif", gifUrl: url, read: false };
-    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), msg] }));
-    setShowGifPicker(false);
-    setTimeout(() => setChatMessages(prev => { const msgs = [...(prev[activeChatId] || [])]; const last = msgs[msgs.length - 1]; if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true }; return { ...prev, [activeChatId]: msgs }; }), 1000);
+  const handleInsertEmoji = (emoji: string) => {
+    setChatMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
   };
   const handleVoiceRecord = () => {
     if (isRecording) {
+      if (recordingRef.current) clearInterval(recordingRef.current);
       setIsRecording(false);
-      if (!activeChatId || recordingTime < 1) return;
+      if (!activeChatId || recordingTime < 1) { setRecordingTime(0); return; }
       const msg: ChatMsg = { text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "voice", voiceDuration: recordingTime, read: false };
       setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), msg] }));
       setRecordingTime(0);
@@ -440,9 +438,7 @@ export default function Dating() {
     } else {
       setIsRecording(true);
       setRecordingTime(0);
-      const start = Date.now();
-      const tick = () => { if (!document.querySelector("[data-recording]")) return; setRecordingTime(Math.floor((Date.now() - start) / 1000)); requestAnimationFrame(tick); };
-      requestAnimationFrame(tick);
+      recordingRef.current = setInterval(() => setRecordingTime(prev => prev + 1), 1000);
     }
   };
   const handleSaveProfile = () => {
@@ -522,20 +518,12 @@ export default function Dating() {
               </div>
               <div className="p-4 border-t border-border bg-card/50">
                 <AnimatePresence>
-                  {showGifPicker && (
+                  {showEmojiPicker && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden">
-                      <div className="flex items-center justify-between mb-2"><span className="text-xs font-medium text-foreground">GIFs</span><button onClick={() => setShowGifPicker(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button></div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {["https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcDRjMnZ1YnUybGVqNG1qNnBkeXY0dXFjdWlxOGQ1Y2V5MDRxOWJuYiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l0MYt5jPR6QX5pnqM/giphy.gif",
-                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzVpMWRjZGMyN3BpY3Q2ZWRqMHlxcGJ4OWdxdnNhZGN0MXRhNSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3o7TKU8RvQuomFfUUU/giphy.gif",
-                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmRnNXV5NjF5MXBxZDZ2NzVpNnN0ZWlicTlrYWVxOW5jZ2xoeSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/XD9o33QG9QLmg/giphy.gif",
-                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMnM5NXV0dWF5YmtpaGRuMXZ5YTlwMjZnZXdpcXVoMjBoYmk3cyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/5GoVLqeAOo6PK/giphy.gif",
-                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZjQ4eHlhN3dkcXF2ZjdyaWVqeHN3YWx6cDU4YnRxZ2Q2ZjdzciZlcD12MV9naWZzX3NlYXJjaCZjdD1n/l3q2K5jinAlChoCLS/giphy.gif",
-                          "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNnVqeGhqOGRoN2N2OGtjcmF0amVnNTlxZHkydHE3Mm1kY21nNCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT9IgG50Fb7Mi/giphy.gif",
-                        ].map((url, i) => (
-                          <button key={i} onClick={() => handleSendGif(url)} className="rounded-lg overflow-hidden border border-border hover:border-neon-coral/50 transition-all hover:scale-105">
-                            <img src={url} alt="GIF" className="w-full h-20 object-cover" />
-                          </button>
+                      <div className="flex items-center justify-between mb-2"><span className="text-xs font-medium text-foreground">{lang === "zh" ? "表情符號" : "Emoji"}</span><button onClick={() => setShowEmojiPicker(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button></div>
+                      <div className="grid grid-cols-8 gap-1">
+                        {["😀","😂","🥰","😍","😘","🤗","😎","🤔","😅","🥺","😭","🤣","❤️","🔥","✨","💯","👍","👏","🙌","💪","🎉","🎵","☕","🍜","📸","🌸","💕","🫶","😊","🤭","😏","🙈","💀","🫠","🥲","😤","👀","💬","🌙","⭐"].map(emoji => (
+                          <button key={emoji} onClick={() => handleInsertEmoji(emoji)} className="w-9 h-9 rounded-lg hover:bg-muted flex items-center justify-center text-lg transition-colors">{emoji}</button>
                         ))}
                       </div>
                     </motion.div>
@@ -552,7 +540,7 @@ export default function Dating() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setShowGifPicker(!showGifPicker)} className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${showGifPicker ? "bg-neon-coral/10 text-neon-coral" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}><Smile className="w-5 h-5" /></button>
+                    <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${showEmojiPicker ? "bg-neon-coral/10 text-neon-coral" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}><Smile className="w-5 h-5" /></button>
                     <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} placeholder={t("dating.msg_input")} className="flex-1 bg-muted rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-neon-coral/30" />
                     {chatMessage.trim() ? (
                       <Button onClick={handleSendMessage} className="bg-neon-coral hover:bg-neon-coral/90 text-white rounded-xl px-4" size="sm"><Send className="w-4 h-4" /></Button>
