@@ -104,10 +104,11 @@ function CommentSection({ postId, lang }: { postId: string; lang: string }) {
           )}
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <div className="flex gap-1 mb-1.5">
+              <div className="flex gap-1.5 mb-1.5">
                 {(["ghost", "campus", "major"] as PrivacyMode[]).map(m => {
                   const I = privacyIcons[m];
-                  return <button key={m} onClick={() => setPrivacy(m)} className={`p-1 rounded-md transition-all ${privacy === m ? privacyColors[m] : "text-muted-foreground hover:text-foreground"}`}><I className="w-3 h-3" /></button>;
+                  const label = m === "ghost" ? (lang === "zh" ? "匿名" : "Anon") : m === "campus" ? (lang === "zh" ? "校園" : "School") : (lang === "zh" ? "學科" : "Major");
+                  return <button key={m} onClick={() => setPrivacy(m)} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${privacy === m ? privacyColors[m] + " ring-1 ring-current/20" : "bg-muted/50 text-muted-foreground hover:text-foreground"}`}><I className="w-2.5 h-2.5" />{label}</button>;
                 })}
               </div>
               <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()}
