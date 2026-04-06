@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Shield, Heart, Sparkles, MessageCircle, Users, ChevronLeft, ChevronRight,
   Home, HeartHandshake, Wrench, User, Globe, Moon, Sun, LogOut,
-  X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2, Timer, AlertTriangle,
+  X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2, Timer,
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain
 } from "lucide-react";
@@ -37,7 +37,7 @@ interface MatchProfile {
   lastMessageTime?: string;
   unread?: number;
   icebreakers?: { prompt: string; answer: string }[];
-  matchedAt?: number; // timestamp in ms for 48hr expiry
+  matchedAt?: number;
 }
 
 const SEXUALITY_OPTIONS = [
@@ -229,14 +229,13 @@ export default function Dating() {
   const [tab, setTab] = useState<DatingTab>("discover");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [profileSetup, setProfileSetup] = useState(false);
-  const [selectedSexuality, setSelectedSexuality] = useState("prefer_not_to_say");
+  const [selectedSexuality, setSelectedSexuality] = useState<string[]>(["prefer_not_to_say"]);
   const [selectedMbti, setSelectedMbti] = useState("");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [selectedIcebreakers, setSelectedIcebreakers] = useState<{ prompt: string; answer: string }[]>([]);
   const [editingIcebreakerIdx, setEditingIcebreakerIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
-  // 48hr match expiry helper
   const MATCH_EXPIRY_MS = 48 * 60 * 60 * 1000;
   const getTimeRemaining = (matchedAt?: number) => {
     if (!matchedAt) return { hours: 48, minutes: 0, expired: false, urgent: false };
@@ -245,6 +244,18 @@ export default function Dating() {
     const hours = Math.floor(remaining / (60 * 60 * 1000));
     const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
     return { hours, minutes, expired: remaining <= 0, urgent: hours < 6 };
+  };
+
+  const toggleSexuality = (key: string) => {
+    setSelectedSexuality(prev => {
+      if (key === "prefer_not_to_say") return ["prefer_not_to_say"];
+      const without = prev.filter(k => k !== "prefer_not_to_say");
+      if (without.includes(key)) {
+        const result = without.filter(k => k !== key);
+        return result.length === 0 ? ["prefer_not_to_say"] : result;
+      }
+      return [...without, key];
+    });
   };
   const [filterSexuality, setFilterSexuality] = useState("all");
   const [filterInstitution, setFilterInstitution] = useState("all");
@@ -324,7 +335,7 @@ export default function Dating() {
   const handleSaveProfile = () => {
     if (!selectedMbti) { toast.error(t("dating.error.mbti")); return; }
     if (selectedInterests.length < 3) { toast.error(t("dating.error.interests")); return; }
-    updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality, interests: selectedInterests, icebreakers: selectedIcebreakers });
+    updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality.join(","), interests: selectedInterests, icebreakers: selectedIcebreakers });
     setProfileSetup(true);
     setShowPreview(true);
     toast.success(t("dating.profile_saved"));
@@ -631,7 +642,7 @@ export default function Dating() {
                       <div className="p-4 rounded-xl border border-border bg-card">
                         <label className="text-sm font-medium text-foreground mb-3 block">{t("dating.profile.sexuality")}</label>
                         <div className="flex flex-wrap gap-2">
-                          {SEXUALITY_OPTIONS.map((opt) => (<button key={opt.key} onClick={() => setSelectedSexuality(opt.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedSexuality === opt.key ? "bg-neon-lavender text-white shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? opt.zh : opt.en}</button>))}
+                          {SEXUALITY_OPTIONS.map((opt) => (<button key={opt.key} onClick={() => toggleSexuality(opt.key)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedSexuality.includes(opt.key) ? "bg-neon-lavender text-white shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{lang === "zh" ? opt.zh : opt.en}</button>))}
                         </div>
                       </div>
                       <div className="p-4 rounded-xl border border-border bg-card">
@@ -669,8 +680,7 @@ export default function Dating() {
                                 <div className="flex gap-2">
                                   <input type="text" value={ib.answer} onChange={(e) => setSelectedIcebreakers(prev => prev.map((item, i) => i === idx ? { ...item, answer: e.target.value } : item))}
                                     className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-sm text-foreground outline-none focus:border-neon-lavender" maxLength={100} autoFocus
-                                    onKeyDown={(e) => { if (e.key === "Enter") setEditingIcebreakerIdx(null); }}
-                                  />
+                                    onKeyDown={(e) => { if (e.key === "Enter") setEditingIcebreakerIdx(null); }} />
                                   <button onClick={() => setEditingIcebreakerIdx(null)} className="px-3 py-2 rounded-lg bg-neon-lavender text-white text-xs font-medium">✓</button>
                                 </div>
                               ) : (
@@ -694,40 +704,55 @@ export default function Dating() {
                         )}
                       </div>
                       <Button onClick={handleSaveProfile} className="w-full h-12 bg-neon-coral hover:bg-neon-coral/90 text-white font-medium rounded-xl text-base">{t("dating.profile.save")}</Button>
-                      {profileSetup && (<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">{t("dating.profile.active")}</p></motion.div>)}
+                      {profileSetup && (
+                        <>
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">{t("dating.profile.active")}</p></motion.div>
+                          <button onClick={() => setShowPreview(!showPreview)} className="w-full h-12 rounded-xl font-medium text-sm border border-neon-cyan/30 bg-neon-cyan/5 text-neon-cyan hover:bg-neon-cyan/10 transition-all flex items-center justify-center gap-2">
+                            <Eye className="w-4 h-4" />{showPreview ? (lang === "zh" ? "收起預覽" : "Hide Preview") : (lang === "zh" ? "👁 以第三者視角預覽我嘅交友檔案" : "👁 Preview My Profile as Others See It")}
+                          </button>
+                        </>
+                      )}
                       {showPreview && profileSetup && (
-                        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
-                          <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5"><Eye className="w-4 h-4 text-neon-cyan" />{lang === "zh" ? "其他用戶會見到：" : "Others will see:"}</h3>
-                            <button onClick={() => setShowPreview(false)} className="text-xs text-muted-foreground hover:text-foreground">{lang === "zh" ? "收起" : "Hide"}</button>
-                          </div>
-                          <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
-                            <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" />
-                            <div className="p-5">
-                              <div className="flex items-center gap-2 mb-2"><span className="font-display text-xl font-bold text-foreground">{selectedMbti} {user?.gender === "male" ? "♂" : user?.gender === "female" ? "♀" : "⚧"}</span><span className="text-sm text-muted-foreground">· {user?.institution || "HKU"}</span></div>
-                              <p className="text-sm text-muted-foreground mb-3">{user?.faculty || user?.major || ""}</p>
-                              {selectedIcebreakers.filter(ib => ib.answer).map((ib, idx) => {
-                                const prompt = ICEBREAKER_PROMPTS.find(p => p.key === ib.prompt);
-                                return (
-                                  <div key={idx} className="p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15 mb-2">
-                                    <p className="text-[11px] font-medium text-neon-lavender mb-1 flex items-center gap-1"><MessageSquare className="w-3 h-3" />{prompt ? (lang === "zh" ? prompt.zh : prompt.en) : ib.prompt}</p>
-                                    <p className="text-sm text-foreground">{ib.answer}</p>
-                                  </div>
-                                );
-                              })}
-                              <div className="flex flex-wrap gap-2 mb-3">
-                                {SEXUALITY_OPTIONS.find(s => s.key === selectedSexuality) && selectedSexuality !== "prefer_not_to_say" && (
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-neon-lavender/10 text-neon-lavender text-xs font-medium">{lang === "zh" ? SEXUALITY_OPTIONS.find(s => s.key === selectedSexuality)?.zh : SEXUALITY_OPTIONS.find(s => s.key === selectedSexuality)?.en}</span>
-                                )}
-                                {selectedInterests.map(key => {
-                                  const item = INTEREST_OPTIONS.find(i => i.key === key);
-                                  return item ? <span key={key} className="px-2.5 py-1 rounded-full bg-muted text-xs text-muted-foreground font-medium">{lang === "zh" ? item.zh : key}</span> : null;
+                        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}>
+                          <p className="text-xs text-muted-foreground mb-3 text-center">{lang === "zh" ? "↓ 其他用戶會見到以下畫面 ↓" : "↓ This is what others see ↓"}</p>
+                          <div className="rounded-2xl border-2 border-dashed border-neon-cyan/30 p-3">
+                            <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+                              <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" />
+                              <div className="p-5">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2"><span className="font-display text-xl font-bold text-foreground">{selectedMbti} {user?.gender === "male" ? "♂" : user?.gender === "female" ? "♀" : "⚧"}</span><span className="text-sm text-muted-foreground">· {user?.institution || user?.school || "Your School"}</span></div>
+                                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neon-emerald/10 text-neon-emerald text-xs font-semibold"><Sparkles className="w-3 h-3" />—%</div>
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-3">{user?.faculty || ""}</p>
+                                {user?.bio && <p className="text-sm text-foreground mb-4 leading-relaxed">{user.bio}</p>}
+                                {selectedIcebreakers.filter(ib => ib.answer).map((ib, idx) => {
+                                  const prompt = ICEBREAKER_PROMPTS.find(p => p.key === ib.prompt);
+                                  return (
+                                    <div key={idx} className="p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15 mb-2">
+                                      <p className="text-[11px] font-medium text-neon-lavender mb-1 flex items-center gap-1"><MessageSquare className="w-3 h-3" />{prompt ? (lang === "zh" ? prompt.zh : prompt.en) : ib.prompt}</p>
+                                      <p className="text-sm text-foreground">{ib.answer}</p>
+                                    </div>
+                                  );
                                 })}
-                              </div>
-                              <div className="p-3 rounded-xl bg-muted/50">
-                                <div className="flex items-center justify-between text-xs text-muted-foreground mb-2"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> {t("dating.photo_clarity")}</span><span className="font-medium">85%</span></div>
-                                <div className="h-2 rounded-full bg-background overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: "85%" }} /></div>
-                                <p className="text-[10px] text-muted-foreground mt-1.5">{lang === "zh" ? "你嘅相片會模糊處理" : "Your photo will be blurred"}</p>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                  {selectedSexuality.filter(s => s !== "prefer_not_to_say").map(s => {
+                                    const opt = SEXUALITY_OPTIONS.find(o => o.key === s);
+                                    return opt ? <span key={s} className="inline-flex items-center px-2.5 py-1 rounded-full bg-neon-lavender/10 text-neon-lavender text-xs font-medium">{lang === "zh" ? opt.zh : opt.en}</span> : null;
+                                  })}
+                                  {selectedInterests.map(key => {
+                                    const item = INTEREST_OPTIONS.find(i => i.key === key);
+                                    return item ? <span key={key} className="px-2.5 py-1 rounded-full bg-muted text-xs text-muted-foreground font-medium">{lang === "zh" ? item.zh : key}</span> : null;
+                                  })}
+                                </div>
+                                <div className="p-3 rounded-xl bg-muted/50">
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-2"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> {t("dating.photo_clarity")}</span><span className="font-medium">85%</span></div>
+                                  <div className="h-2 rounded-full bg-background overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: "85%" }} /></div>
+                                  <p className="text-[10px] text-muted-foreground mt-1.5">{lang === "zh" ? "你嘅相片會模糊處理" : "Your photo will be blurred"}</p>
+                                </div>
+                                <div className="flex gap-3 mt-4">
+                                  <div className="flex-1 h-12 rounded-xl border border-border flex items-center justify-center text-base text-muted-foreground"><X className="w-5 h-5 mr-2" />{t("dating.skip")}</div>
+                                  <div className="flex-1 h-12 rounded-xl bg-neon-coral/20 flex items-center justify-center text-base text-neon-coral"><Zap className="w-5 h-5 mr-2" />{t("dating.vibe_check")}</div>
+                                </div>
                               </div>
                             </div>
                           </div>
