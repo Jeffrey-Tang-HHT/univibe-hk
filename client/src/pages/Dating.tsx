@@ -631,27 +631,14 @@ export default function Dating() {
     }
   };
 
-  const handleDeleteMsg = (msgIndex: number, forBoth: boolean) => {
-    if (!activeChatId) return;
-    const msgs = chatMessages[activeChatId] || [];
-    const msg = msgs[msgIndex];
-    if (!msg) return;
+  const handleDeleteMsg = (msgId: string, forBoth: boolean) => {
+    if (!activeChatId || !user?.id || !msgId) return;
 
-    if (forBoth && (msg as any).id && user?.id) {
-      // Delete from Supabase
-      deleteMessage((msg as any).id, user.id, true).catch(() => {});
-    }
+    // Immediately hide from UI by message ID
+    setHiddenMsgIds(prev => new Set([...prev, msgId]));
 
-    if (forBoth) {
-      // Remove from state entirely
-      setChatMessages(prev => ({
-        ...prev,
-        [activeChatId]: (prev[activeChatId] || []).filter((_, i) => i !== msgIndex)
-      }));
-    } else {
-      // Hide locally only
-      setHiddenMsgIds(prev => new Set([...prev, `${activeChatId}-${msgIndex}`]));
-    }
+    // Call API to persist the deletion
+    deleteMessage(msgId, user.id, forBoth).catch(() => {});
   };
 
   const handleInsertEmoji = (emoji: string) => {
@@ -771,9 +758,9 @@ export default function Dating() {
               </AnimatePresence>
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
                 <div className="flex justify-center mb-6"><div className="px-4 py-2 rounded-full bg-muted/50 text-xs text-muted-foreground flex items-center gap-2"><Eye className="w-3 h-3" />{t("dating.photo_clarity")} {activeChat.blurLevel}% · {t("dating.send_more")} {20 - activeChat.messages} {t("dating.to_fully_unlock")}</div></div>
-                {(chatMessages[activeChatId] || []).filter((_, idx) => !hiddenMsgIds.has(`${activeChatId}-${idx}`)).map((msg, idx) => (
-                  <ChatBubble key={idx} msg={msg} lang={lang}
-                    onDelete={(forBoth) => handleDeleteMsg(idx, forBoth)}
+                {(chatMessages[activeChatId] || []).filter((msg) => !hiddenMsgIds.has((msg as any).id || '')).map((msg, idx) => (
+                  <ChatBubble key={(msg as any).id || idx} msg={msg} lang={lang}
+                    onDelete={(forBoth) => handleDeleteMsg((msg as any).id, forBoth)}
                     onReply={() => setReplyingTo(msg.type === "voice" ? "🎤 Voice note" : msg.text)}
                     onCopy={() => { navigator.clipboard.writeText(msg.text); toast.success(lang === "zh" ? "已複製" : "Copied"); }}
                   />
