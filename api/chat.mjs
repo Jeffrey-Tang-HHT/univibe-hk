@@ -179,7 +179,7 @@ export default async function handler(req, res) {
 
       const messages = await supabaseQuery('messages', {
         filters: `match_id=eq.${match_id}&order=created_at.asc`,
-        select: 'id,sender_id,content,type,voice_duration,read,created_at'
+        select: 'id,sender_id,content,type,voice_duration,read,created_at,deleted_by'
       });
 
       await supabaseQuery('messages', {
@@ -189,20 +189,90 @@ export default async function handler(req, res) {
       });
 
       return res.status(200).json({
-        messages: messages.map(m => ({
-          id: m.id,
-          text: m.content,
-          type: m.type,
-          voice_duration: m.voice_duration,
-          isMe: m.sender_id === user_id,
-          read: m.read,
-          time: m.created_at,
-          sender_id: m.sender_id,
-        }))
+        messages: messages
+          .filter(m => {
+            // Filter out messages deleted "for me"
+            const deletedBy = m.deleted_by || [];
+            return !deletedBy.includes(user_id);
+          })
+          .map(m => ({
+            id: m.id,
+            text: m.content,
+            type: m.type,
+            voice_duration: m.voice_duration,
+            isMe: m.sender_id === user_id,
+            read: m.read,
+            time: m.created_at,
+            sender_id: m.sender_id,
+          }))
       });
     }
 
-    return res.status(400).json({ error: 'Unknown action. Use ?action=discover|create-match|get-matches|send-message|get-messages' });
+    // ========== UNMATCH ==========
+    if (action === 'unmatch' && req.method === 'POST') {
+      const { match_id, user_id } = req.body;
+      if (!match_id || !user_id) return res.status(400).json({ error: 'Missing match_id or user_id' });
+
+      // Verify user is part of this match
+      const matches = await supabaseQuery('matches', {
+        filters: `id=eq.${match_id}&or=(user1_id.eq.${user_id},user2_id.eq.${user_id})`
+      });
+      if (matches.length === 0) return res.status(403).json({ error: 'Not part of this match' });
+
+      // Delete all messages for this match
+      await supabaseQuery('messages', {
+        method: 'DELETE',
+        filters: `match_id=eq.${match_id}`
+      });
+
+      // Delete the match
+      await supabaseQuery('matches', {
+        method: 'DELETE',
+        filters: `id=eq.${match_id}`
+      });
+
+      return res.status(200).json({ success: true });
+    }
+
+    // ========== DELETE MESSAGE ==========
+    if (action === 'delete-message' && req.method === 'POST') {
+      const { message_id, user_id, for_both } = req.body;
+      if (!message_id || !user_id) return res.status(400).json({ error: 'Missing message_id or user_id' });
+
+      if (for_both) {
+        // Delete for everyone — only the sender can do this
+        const msgs = await supabaseQuery('messages', {
+          filters: `id=eq.${message_id}&sender_id=eq.${user_id}`
+        });
+        if (msgs.length === 0) return res.status(403).json({ error: 'Can only delete your own messages for everyone' });
+
+        await supabaseQuery('messages', {
+          method: 'DELETE',
+          filters: `id=eq.${message_id}`
+        });
+      } else {
+        // Delete for me — add user_id to deleted_by array
+        const msgs = await supabaseQuery('messages', {
+          filters: `id=eq.${message_id}`,
+          select: 'id,deleted_by'
+        });
+        if (msgs.length === 0) return res.status(404).json({ error: 'Message not found' });
+
+        const deletedBy = msgs[0].deleted_by || [];
+        if (!deletedBy.includes(user_id)) {
+          deletedBy.push(user_id);
+          await supabaseQuery('messages', {
+            method: 'PATCH',
+            filters: `id=eq.${message_id}`,
+            body: { deleted_by: deletedBy }
+          });
+        }
+      }
+
+      return res.status(200).json({ success: true });
+    }
+
+    return res.status(400).json({ error: 'Unknown action. Use ?action=discover|create-match|get-matches|send-message|get-messages|unmatch|delete-message' });
   } catch (err) {
     console.error('Chat API error:', err);
     return res.status(500).json({ error: 'Internal server error' });
