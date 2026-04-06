@@ -820,26 +820,32 @@ export default function Dating() {
       return;
     }
     setSendingImage(true);
-    try {
-      const resized = await resizeImage(file, 1200, 1200);
-      // Optimistic UI: show image immediately
-      const tempMsg: ChatMsg = { text: '📷', isMe: true, time: lang === 'zh' ? '剛剛' : 'Just now', type: 'image', imageUrl: resized, read: false };
-      setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), tempMsg] }));
 
-      // Send via API
-      const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
+    // Show preview INSTANTLY using object URL — no waiting for resize
+    const previewUrl = URL.createObjectURL(file);
+    const chatId = activeChatId;
+    const tempMsg: ChatMsg = { text: '📷', isMe: true, time: lang === 'zh' ? '剛剛' : 'Just now', type: 'image', imageUrl: previewUrl, read: false };
+    setChatMessages(prev => ({ ...prev, [chatId]: [...(prev[chatId] || []), tempMsg] }));
+
+    // Resize + upload in background
+    try {
+      const resized = await resizeImage(file, 800, 800);
+      const matchProfile = matchedProfiles.find(p => p.id === chatId);
       const matchId = (matchProfile as any)?._matchId || activeMatchId;
       if (user?.id && matchId && !matchId.startsWith('m')) {
         sendImageMessage(matchId, user.id, resized).then(data => {
           if (data.message) {
+            // Replace preview URL with server URL + mark as read
+            const serverUrl = data.message.image_url || resized;
             setTimeout(() => {
               setChatMessages(prev => {
-                const msgs = [...(prev[activeChatId] || [])];
-                const last = msgs[msgs.length - 1];
-                if (last?.isMe && last?.type === 'image') msgs[msgs.length - 1] = { ...last, read: true };
-                return { ...prev, [activeChatId]: msgs };
+                const msgs = [...(prev[chatId] || [])];
+                const idx = msgs.findLastIndex(m => m.isMe && m.type === 'image' && m.imageUrl === previewUrl);
+                if (idx >= 0) msgs[idx] = { ...msgs[idx], imageUrl: serverUrl, read: true };
+                return { ...prev, [chatId]: msgs };
               });
-            }, 1000);
+              URL.revokeObjectURL(previewUrl);
+            }, 500);
           }
         }).catch(() => toast.error(lang === 'zh' ? '發送失敗' : 'Send failed'));
       }
