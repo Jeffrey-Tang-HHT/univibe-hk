@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Shield, Heart, Sparkles, MessageCircle, Users, ChevronLeft, ChevronRight,
   Home, HeartHandshake, Wrench, User, Globe, Moon, Sun, LogOut,
-  X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2,
+  X, Settings, Eye, Zap, Send, ImageOff, MessageSquare, Plus, Trash2, Timer, AlertTriangle,
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain
 } from "lucide-react";
@@ -37,6 +37,7 @@ interface MatchProfile {
   lastMessageTime?: string;
   unread?: number;
   icebreakers?: { prompt: string; answer: string }[];
+  matchedAt?: number; // timestamp in ms for 48hr expiry
 }
 
 const SEXUALITY_OPTIONS = [
@@ -146,10 +147,10 @@ const ICEBREAKER_PROMPTS = [
 const MOCK_PROFILES: MatchProfile[] = [
   { id: "m1", gender: "female", age: 21, mbti: "INFJ", institution: "HKU", faculty: "Social Sciences", major: "Psychology", district: "central_western", relationshipType: "long_term", religion: "none", interests: ["Reading", "Hiking", "Coffee"], bio: "鍾意行山同飲咖啡，搵緊一個可以一齊傾通宵嘅人 ☕", blurLevel: 30, messages: 0, sexuality: "bisexual", compatibility: 92, icebreakers: [{ prompt: "food_opinion", answer: "菠蘿放喺pizza上面係正確嘅 🍍" }, { prompt: "3am_thought", answer: "如果平行宇宙存在，另一個我係咪已經搵到soulmate？" }] },
   { id: "m2", gender: "male", age: 22, mbti: "ENTP", institution: "CUHK", faculty: "Business", major: "Business", district: "sha_tin", relationshipType: "casual", religion: "christian", interests: ["Debate", "Travel", "Music"], bio: "辯論隊嘅，鍾意周圍去旅行，識到新朋友最開心 🌍", blurLevel: 0, messages: 0, sexuality: "straight", compatibility: 87, icebreakers: [{ prompt: "useless_talent", answer: "可以用兩隻手同時寫唔同嘅字 ✌️" }] },
-  { id: "m3", gender: "female", age: 20, mbti: "ISFP", institution: "PolyU", faculty: "Design", major: "Design", district: "kowloon_city", relationshipType: "friends_first", religion: "buddhist", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2 },
-  { id: "m4", gender: "male", age: 24, mbti: "ENTJ", institution: "HKUST", faculty: "Engineering", major: "Engineering", district: "sai_kung", relationshipType: "long_term", religion: "none", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1 },
-  { id: "m5", gender: "nonbinary", age: 23, mbti: "INFP", institution: "CityU", faculty: "Creative Media", major: "Creative Media", district: "kowloon_city", relationshipType: "not_sure", religion: "spiritual", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0 },
-  { id: "m6", gender: "female", age: 21, mbti: "ESTJ", institution: "HKBU", faculty: "Journalism", major: "Journalism", district: "kowloon_city", relationshipType: "short_term", religion: "catholic", interests: ["News", "Running", "Karaoke"], bio: "新聞系，鍾意跑步同唱K 🎤", blurLevel: 45, messages: 8, sexuality: "straight", compatibility: 71, lastMessage: "下次一齊去唱K！", lastMessageTime: "1日前", unread: 0 },
+  { id: "m3", gender: "female", age: 20, mbti: "ISFP", institution: "PolyU", faculty: "Design", major: "Design", district: "kowloon_city", relationshipType: "friends_first", religion: "buddhist", interests: ["Art", "Photography", "Cooking"], bio: "設計系學生，平時鍾意影相同煮嘢食 📸", blurLevel: 60, messages: 12, sexuality: "pansexual", compatibility: 78, lastMessage: "你鍾意去邊度影相？", lastMessageTime: "2小時前", unread: 2, matchedAt: Date.now() - 2 * 60 * 60 * 1000 },
+  { id: "m4", gender: "male", age: 24, mbti: "ENTJ", institution: "HKUST", faculty: "Engineering", major: "Engineering", district: "sai_kung", relationshipType: "long_term", religion: "none", interests: ["Coding", "Gym", "Anime"], bio: "工程系，放學就去做gym或者睇anime 💪", blurLevel: 100, messages: 25, sexuality: "gay", compatibility: 95, lastMessage: "今晚一齊食飯？", lastMessageTime: "30分鐘前", unread: 1, matchedAt: Date.now() - 30 * 60 * 1000 },
+  { id: "m5", gender: "nonbinary", age: 23, mbti: "INFP", institution: "CityU", faculty: "Creative Media", major: "Creative Media", district: "kowloon_city", relationshipType: "not_sure", religion: "spiritual", interests: ["Writing", "Film", "Gaming"], bio: "文青一個，鍾意睇電影同打機 🎬", blurLevel: 15, messages: 3, sexuality: "queer", compatibility: 83, lastMessage: "你覺得呢套戲點？", lastMessageTime: "5小時前", unread: 0, matchedAt: Date.now() - 40 * 60 * 60 * 1000 },
+  { id: "m6", gender: "female", age: 21, mbti: "ESTJ", institution: "HKBU", faculty: "Journalism", major: "Journalism", district: "kowloon_city", relationshipType: "short_term", religion: "catholic", interests: ["News", "Running", "Karaoke"], bio: "新聞系，鍾意跑步同唱K 🎤", blurLevel: 45, messages: 8, sexuality: "straight", compatibility: 71, lastMessage: "下次一齊去唱K！", lastMessageTime: "1日前", unread: 0, matchedAt: Date.now() - 47 * 60 * 60 * 1000 },
   { id: "m7", gender: "male", age: 22, mbti: "ENFJ", institution: "EdUHK", faculty: "Education", major: "Education", district: "tai_po", relationshipType: "long_term", religion: "christian", interests: ["Music", "Cooking", "Travel"], bio: "未來老師一個，鍾意彈結他同煮嘢食 🎸", blurLevel: 20, messages: 0, sexuality: "straight", compatibility: 88 },
   { id: "m8", gender: "male", age: 25, mbti: "ISTP", institution: "LingU", faculty: "Translation", major: "Translation", district: "tuen_mun", relationshipType: "casual", religion: "none", interests: ["Gaming", "Coffee", "Film"], bio: "翻譯系，安靜但打機好認真 🎮", blurLevel: 0, messages: 0, sexuality: "bisexual", compatibility: 75 },
 ];
@@ -233,6 +234,18 @@ export default function Dating() {
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [selectedIcebreakers, setSelectedIcebreakers] = useState<{ prompt: string; answer: string }[]>([]);
   const [editingIcebreakerIdx, setEditingIcebreakerIdx] = useState<number | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // 48hr match expiry helper
+  const MATCH_EXPIRY_MS = 48 * 60 * 60 * 1000;
+  const getTimeRemaining = (matchedAt?: number) => {
+    if (!matchedAt) return { hours: 48, minutes: 0, expired: false, urgent: false };
+    const elapsed = Date.now() - matchedAt;
+    const remaining = Math.max(0, MATCH_EXPIRY_MS - elapsed);
+    const hours = Math.floor(remaining / (60 * 60 * 1000));
+    const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+    return { hours, minutes, expired: remaining <= 0, urgent: hours < 6 };
+  };
   const [filterSexuality, setFilterSexuality] = useState("all");
   const [filterInstitution, setFilterInstitution] = useState("all");
   const [filterFaculty, setFilterFaculty] = useState("all");
@@ -313,6 +326,7 @@ export default function Dating() {
     if (selectedInterests.length < 3) { toast.error(t("dating.error.interests")); return; }
     updateProfile({ mbti: selectedMbti, sexuality: selectedSexuality, interests: selectedInterests, icebreakers: selectedIcebreakers });
     setProfileSetup(true);
+    setShowPreview(true);
     toast.success(t("dating.profile_saved"));
   };
 
@@ -572,10 +586,17 @@ export default function Dating() {
                 {tab === "matches" && (
                   <motion.div key="matches" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                     <h2 className="font-display text-lg font-bold text-foreground mb-2">{t("dating.matches.title")}</h2>
-                    <p className="text-xs text-muted-foreground mb-5">{t("dating.matches.subtitle")}</p>
+                    <p className="text-xs text-muted-foreground mb-3">{t("dating.matches.subtitle")}</p>
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-neon-coral/5 border border-neon-coral/15 mb-4">
+                      <Timer className="w-4 h-4 text-neon-coral flex-shrink-0" />
+                      <p className="text-xs text-muted-foreground">{lang === "zh" ? "配對會喺 48 小時後過期。盡快傾偈！" : "Matches expire after 48 hours. Start chatting!"}</p>
+                    </div>
                     <div className="space-y-2">
-                      {matchedProfiles.map((profile) => (
-                        <button key={profile.id} onClick={() => setActiveChatId(profile.id)} className="w-full flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-all text-left group">
+                      {matchedProfiles.map((profile) => {
+                        const timeLeft = getTimeRemaining(profile.matchedAt);
+                        if (timeLeft.expired) return null;
+                        return (
+                        <button key={profile.id} onClick={() => setActiveChatId(profile.id)} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group ${timeLeft.urgent ? "border-destructive/40" : "border-border"}`}>
                           <div className="relative">
                             <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" />
                             {(profile.unread || 0) > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center">{profile.unread}</div>}
@@ -587,11 +608,13 @@ export default function Dating() {
                             <div className="flex items-center gap-3 mt-2">
                               <div className="flex items-center gap-1.5"><div className="h-1 w-12 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${profile.blurLevel}%` }} /></div><span className="text-[10px] text-muted-foreground">{profile.blurLevel}%</span></div>
                               <span className="text-[10px] text-neon-coral font-medium">{profile.messages}/20 {t("dating.messages_short")}</span>
+                              <span className={`text-[10px] font-medium flex items-center gap-0.5 ml-auto ${timeLeft.urgent ? "text-destructive" : "text-muted-foreground"}`}><Timer className="w-3 h-3" />{timeLeft.hours}h {timeLeft.minutes}m</span>
                             </div>
                           </div>
                           <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                         </button>
-                      ))}
+                        );
+                      })}
                       {matchedProfiles.length === 0 && (
                         <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">{t("dating.matches.no_matches")}</p><p className="text-sm text-muted-foreground mb-4">{t("dating.matches.go_discover")}</p><Button onClick={() => setTab("discover")} className="bg-neon-coral hover:bg-neon-coral/90 text-white">{t("dating.matches.start")}</Button></div>
                       )}
@@ -672,6 +695,44 @@ export default function Dating() {
                       </div>
                       <Button onClick={handleSaveProfile} className="w-full h-12 bg-neon-coral hover:bg-neon-coral/90 text-white font-medium rounded-xl text-base">{t("dating.profile.save")}</Button>
                       {profileSetup && (<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl bg-neon-emerald/10 border border-neon-emerald/20"><p className="text-sm text-neon-emerald font-medium">{t("dating.profile.active")}</p></motion.div>)}
+                      {showPreview && profileSetup && (
+                        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5"><Eye className="w-4 h-4 text-neon-cyan" />{lang === "zh" ? "其他用戶會見到：" : "Others will see:"}</h3>
+                            <button onClick={() => setShowPreview(false)} className="text-xs text-muted-foreground hover:text-foreground">{lang === "zh" ? "收起" : "Hide"}</button>
+                          </div>
+                          <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+                            <BlurredAvatar blurLevel={85} mbti={selectedMbti} size="lg" />
+                            <div className="p-5">
+                              <div className="flex items-center gap-2 mb-2"><span className="font-display text-xl font-bold text-foreground">{selectedMbti} {user?.gender === "male" ? "♂" : user?.gender === "female" ? "♀" : "⚧"}</span><span className="text-sm text-muted-foreground">· {user?.institution || "HKU"}</span></div>
+                              <p className="text-sm text-muted-foreground mb-3">{user?.faculty || user?.major || ""}</p>
+                              {selectedIcebreakers.filter(ib => ib.answer).map((ib, idx) => {
+                                const prompt = ICEBREAKER_PROMPTS.find(p => p.key === ib.prompt);
+                                return (
+                                  <div key={idx} className="p-3 rounded-xl bg-neon-lavender/5 border border-neon-lavender/15 mb-2">
+                                    <p className="text-[11px] font-medium text-neon-lavender mb-1 flex items-center gap-1"><MessageSquare className="w-3 h-3" />{prompt ? (lang === "zh" ? prompt.zh : prompt.en) : ib.prompt}</p>
+                                    <p className="text-sm text-foreground">{ib.answer}</p>
+                                  </div>
+                                );
+                              })}
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                {SEXUALITY_OPTIONS.find(s => s.key === selectedSexuality) && selectedSexuality !== "prefer_not_to_say" && (
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-neon-lavender/10 text-neon-lavender text-xs font-medium">{lang === "zh" ? SEXUALITY_OPTIONS.find(s => s.key === selectedSexuality)?.zh : SEXUALITY_OPTIONS.find(s => s.key === selectedSexuality)?.en}</span>
+                                )}
+                                {selectedInterests.map(key => {
+                                  const item = INTEREST_OPTIONS.find(i => i.key === key);
+                                  return item ? <span key={key} className="px-2.5 py-1 rounded-full bg-muted text-xs text-muted-foreground font-medium">{lang === "zh" ? item.zh : key}</span> : null;
+                                })}
+                              </div>
+                              <div className="p-3 rounded-xl bg-muted/50">
+                                <div className="flex items-center justify-between text-xs text-muted-foreground mb-2"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> {t("dating.photo_clarity")}</span><span className="font-medium">85%</span></div>
+                                <div className="h-2 rounded-full bg-background overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: "85%" }} /></div>
+                                <p className="text-[10px] text-muted-foreground mt-1.5">{lang === "zh" ? "你嘅相片會模糊處理" : "Your photo will be blurred"}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
                     </div>
                   </motion.div>
                 )}
