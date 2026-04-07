@@ -14,91 +14,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 
-type ActiveTool = null | "gpa" | "pomodoro" | "deadline" | "exam" | "expense" | "notes" | "splitbill" | "gpasim" | "coursereview";
-
-// ==================== GPA CALCULATOR ====================
-function GPACalculator({ lang, onClose }: { lang: string; onClose: () => void }) {
-  const [courses, setCourses] = useState([
-    { name: "", credits: 3, grade: "A" },
-    { name: "", credits: 3, grade: "A" },
-    { name: "", credits: 3, grade: "A" },
-  ]);
-
-  const gradePoints: Record<string, number> = {
-    "A+": 4.3, "A": 4.0, "A-": 3.7,
-    "B+": 3.3, "B": 3.0, "B-": 2.7,
-    "C+": 2.3, "C": 2.0, "C-": 1.7,
-    "D+": 1.3, "D": 1.0, "F": 0,
-  };
-
-  const gpa = () => {
-    const totalCredits = courses.reduce((sum, c) => sum + c.credits, 0);
-    if (totalCredits === 0) return 0;
-    const totalPoints = courses.reduce((sum, c) => sum + c.credits * (gradePoints[c.grade] || 0), 0);
-    return totalPoints / totalCredits;
-  };
-
-  const addCourse = () => setCourses([...courses, { name: "", credits: 3, grade: "A" }]);
-  const removeCourse = (i: number) => setCourses(courses.filter((_, idx) => idx !== i));
-  const updateCourse = (i: number, field: string, value: any) => {
-    const updated = [...courses];
-    (updated[i] as any)[field] = value;
-    setCourses(updated);
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-foreground text-lg">{lang === "zh" ? "GPA 計算器" : "GPA Calculator"}</h3>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
-      </div>
-
-      {/* GPA Display */}
-      <div className="text-center mb-6 p-4 rounded-xl bg-primary/10 border border-primary/20">
-        <div className="text-4xl font-bold text-primary">{gpa().toFixed(2)}</div>
-        <div className="text-sm text-muted-foreground mt-1">GPA / 4.3</div>
-      </div>
-
-      {/* Courses */}
-      <div className="space-y-3 mb-4">
-        {courses.map((course, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder={lang === "zh" ? `科目 ${i + 1}` : `Course ${i + 1}`}
-              value={course.name}
-              onChange={e => updateCourse(i, "name", e.target.value)}
-              className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/70 outline-none"
-            />
-            <select
-              value={course.credits}
-              onChange={e => updateCourse(i, "credits", Number(e.target.value))}
-              className="w-16 h-9 px-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
-            >
-              {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-            <select
-              value={course.grade}
-              onChange={e => updateCourse(i, "grade", e.target.value)}
-              className="w-16 h-9 px-2 rounded-lg bg-background border border-border text-sm text-foreground focus:border-primary/70 outline-none"
-            >
-              {Object.keys(gradePoints).map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            {courses.length > 1 && (
-              <button onClick={() => removeCourse(i)} className="text-muted-foreground hover:text-red-400">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <button onClick={addCourse} className="flex items-center gap-2 text-sm text-primary hover:text-primary/80">
-        <Plus className="w-4 h-4" /> {lang === "zh" ? "新增科目" : "Add Course"}
-      </button>
-    </div>
-  );
-}
+type ActiveTool = null | "pomodoro" | "deadline" | "exam" | "expense" | "notes" | "splitbill" | "gpasim" | "coursereview";
 
 // ==================== POMODORO TIMER ====================
 function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void }) {
@@ -917,7 +833,6 @@ export default function Tools() {
   }
 
   const tools = [
-    { key: "gpa" as ActiveTool, icon: Calculator, label: lang === "zh" ? "GPA 計算器" : "GPA Calculator", desc: lang === "zh" ? "計算你的學期 GPA" : "Calculate your semester GPA", color: "from-primary to-primary" },
     { key: "gpasim" as ActiveTool, icon: Target, label: lang === "zh" ? "GPA 目標模擬" : "GPA Goal Sim", desc: lang === "zh" ? "睇吓要幾高分先達標" : "What grades do I need?", color: "from-violet-500 to-purple-500" },
     { key: "coursereview" as ActiveTool, icon: Star, label: lang === "zh" ? "課程評價" : "Course Reviews", desc: lang === "zh" ? "睇同學對科目嘅評價" : "Rate & review courses", color: "from-yellow-500 to-orange-400" },
     { key: "splitbill" as ActiveTool, icon: Users, label: lang === "zh" ? "AA制計算器" : "Split Bill", desc: lang === "zh" ? "食飯夾錢分帳" : "Split bills with friends", color: "from-pink-500 to-rose-500" },
@@ -1009,7 +924,6 @@ export default function Tools() {
                 </motion.div>
               ) : (
                 <motion.div key="tool" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                  {activeTool === "gpa" && <GPACalculator lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "gpasim" && <GPAGoalSimulator lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "coursereview" && <CourseReview lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "splitbill" && <SplitBillCalculator lang={lang} onClose={() => setActiveTool(null)} />}

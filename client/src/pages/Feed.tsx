@@ -14,14 +14,48 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 import { getPosts, createPost, togglePostLike, votePoll, getComments, addComment, deleteComment } from "@/lib/feed";
 
-type Category = "all" | "trending" | "confessions" | "non-jupas" | "mbti" | "missed" | "salary";
+type Category = "all" | "trending" | "confessions" | "non-jupas" | "mbti" | "missed" | "salary" | "hku" | "cuhk" | "hkust" | "polyu" | "cityu" | "hkbu" | "exam" | "intern" | "relationship" | "housing";
 type PrivacyMode = "ghost" | "campus" | "major";
+
+const REACTION_EMOJIS = [
+  { emoji: "❤️", key: "heart" },
+  { emoji: "😂", key: "laugh" },
+  { emoji: "😮", key: "wow" },
+  { emoji: "😢", key: "sad" },
+  { emoji: "😡", key: "angry" },
+  { emoji: "🔥", key: "fire" },
+];
+
+// Anonymous avatar system — random cute animal per post
+const ANON_ANIMALS = [
+  { zh: "柴犬", en: "Shiba", emoji: "🐕" }, { zh: "水獺", en: "Otter", emoji: "🦦" },
+  { zh: "貓咪", en: "Cat", emoji: "🐱" }, { zh: "兔子", en: "Bunny", emoji: "🐰" },
+  { zh: "企鵝", en: "Penguin", emoji: "🐧" }, { zh: "熊貓", en: "Panda", emoji: "🐼" },
+  { zh: "刺蝟", en: "Hedgehog", emoji: "🦔" }, { zh: "狐狸", en: "Fox", emoji: "🦊" },
+  { zh: "浣熊", en: "Raccoon", emoji: "🦝" }, { zh: "倉鼠", en: "Hamster", emoji: "🐹" },
+  { zh: "樹懶", en: "Sloth", emoji: "🦥" }, { zh: "鯨魚", en: "Whale", emoji: "🐳" },
+  { zh: "小鹿", en: "Deer", emoji: "🦌" }, { zh: "考拉", en: "Koala", emoji: "🐨" },
+];
+const ANON_COLORS = ["藍色", "粉紅", "紫色", "橙色", "綠色", "金色", "銀色", "紅色"];
+const ANON_COLORS_EN = ["Blue", "Pink", "Purple", "Orange", "Green", "Gold", "Silver", "Red"];
+function getAnonAvatar(postId: string, lang: string) {
+  // Deterministic from postId so same post always shows same avatar
+  const hash = postId.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+  const animal = ANON_ANIMALS[Math.abs(hash) % ANON_ANIMALS.length];
+  const colorIdx = Math.abs(hash >> 4) % ANON_COLORS.length;
+  return {
+    emoji: animal.emoji,
+    name: lang === "zh" ? `${ANON_COLORS[colorIdx]}${animal.zh}` : `${ANON_COLORS_EN[colorIdx]} ${animal.en}`,
+  };
+}
 
 interface Post {
   id: string; user_id?: string; author: string; authorTag: string; authorTag_en?: string;
   privacyMode: PrivacyMode; category: Category; content: string; image_url?: string;
   poll_question?: string; poll_options?: string[]; poll_votes?: Record<string, number>;
   poll_voters?: string[]; likes: number; comments: number; liked: boolean; created_at: string;
+  reactions?: Record<string, number>;
+  myReaction?: string;
 }
 interface Comment {
   id: string; user_id: string; author: string; authorTag: string; authorTag_en?: string;
@@ -179,7 +213,9 @@ export default function Feed() {
 
   const filteredPosts = searchQuery ? posts.filter(p => p.content.toLowerCase().includes(searchQuery.toLowerCase())) : posts;
 
-  const categories = [
+  const [boardTab, setBoardTab] = useState<"topics" | "schools">("topics");
+
+  const topicCategories = [
     { key: "all" as Category, label: t("feed.cat.all"), icon: TrendingUp },
     { key: "trending" as Category, label: t("feed.cat.trending"), icon: TrendingUp },
     { key: "confessions" as Category, label: t("feed.cat.confessions"), icon: Flame },
@@ -187,7 +223,20 @@ export default function Feed() {
     { key: "mbti" as Category, label: "MBTI", icon: Compass },
     { key: "missed" as Category, label: t("feed.cat.missed"), icon: HeartHandshake },
     { key: "salary" as Category, label: t("feed.cat.salary"), icon: DollarSign },
+    { key: "exam" as Category, label: lang === "zh" ? "考試攻略" : "Exams", icon: BookOpen },
+    { key: "intern" as Category, label: lang === "zh" ? "實習分享" : "Internships", icon: GraduationCap },
+    { key: "relationship" as Category, label: lang === "zh" ? "感情事" : "Relationships", icon: HeartHandshake },
+    { key: "housing" as Category, label: lang === "zh" ? "住宿" : "Housing", icon: Home },
   ];
+  const schoolCategories = [
+    { key: "hku" as Category, label: "HKU", icon: School },
+    { key: "cuhk" as Category, label: "CUHK", icon: School },
+    { key: "hkust" as Category, label: "HKUST", icon: School },
+    { key: "polyu" as Category, label: "PolyU", icon: School },
+    { key: "cityu" as Category, label: "CityU", icon: School },
+    { key: "hkbu" as Category, label: "HKBU", icon: School },
+  ];
+  const categories = boardTab === "schools" ? schoolCategories : topicCategories;
 
   const handleLike = async (id: string) => {
     setPosts(prev => prev.map(p => p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p));
@@ -277,6 +326,18 @@ export default function Feed() {
                 className="w-full h-10 pl-10 pr-4 rounded-xl bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground focus:border-neon-coral focus:ring-2 focus:ring-neon-coral/20 outline-none transition-all" />
             </div>
 
+            {/* Board tabs */}
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => { setBoardTab("topics"); setCategory("all"); }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${boardTab === "topics" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                {lang === "zh" ? "💬 話題版" : "💬 Topics"}
+              </button>
+              <button onClick={() => { setBoardTab("schools"); setCategory("hku"); }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${boardTab === "schools" ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                {lang === "zh" ? "🏫 學校版" : "🏫 Schools"}
+              </button>
+            </div>
+
             <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
               {categories.map((cat) => { const Icon = cat.icon; return (
                 <button key={cat.key} onClick={() => setCategory(cat.key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${category === cat.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}><Icon className="w-3 h-3" />{cat.label}</button>
@@ -361,14 +422,22 @@ export default function Feed() {
             ) : (
               <div className="space-y-4">
                 {filteredPosts.map((post, i) => {
-                  const Icon = privacyIcons[post.privacyMode];
                   const commentsOpen = expandedComments.has(post.id);
+                  const anon = post.privacyMode === "ghost" ? getAnonAvatar(post.id, lang) : null;
+                  const Icon = privacyIcons[post.privacyMode];
                   return (
                     <motion.article key={post.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                       className="p-5 rounded-xl border border-border bg-card hover:border-border/80 transition-all">
                       <div className="flex items-center gap-2.5 mb-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${privacyColors[post.privacyMode]}`}><Icon className="w-3.5 h-3.5" /></div>
-                        <div><span className="text-sm font-medium text-foreground">{lang === "zh" ? post.authorTag : (post.authorTag_en || post.authorTag)}</span><span className="text-xs text-muted-foreground ml-2">· {formatTimeAgo(post.created_at, lang)}</span></div>
+                        {anon ? (
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-base">{anon.emoji}</div>
+                        ) : (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${privacyColors[post.privacyMode]}`}><Icon className="w-3.5 h-3.5" /></div>
+                        )}
+                        <div>
+                          <span className="text-sm font-medium text-foreground">{anon ? anon.name : (lang === "zh" ? post.authorTag : (post.authorTag_en || post.authorTag))}</span>
+                          <span className="text-xs text-muted-foreground ml-2">· {formatTimeAgo(post.created_at, lang)}</span>
+                        </div>
                       </div>
                       <p className="text-sm text-foreground leading-relaxed mb-3">{post.content}</p>
                       {post.image_url && (
@@ -377,11 +446,37 @@ export default function Feed() {
                         </div>
                       )}
                       {post.poll_question && post.poll_options && <PollDisplay post={post} lang={lang} userId={user?.id} onVote={handleVotePoll} />}
-                      <div className="flex items-center gap-4 mt-3">
-                        <button onClick={() => handleLike(post.id)} className={`flex items-center gap-1.5 text-xs transition-colors ${post.liked ? "text-neon-coral" : "text-muted-foreground hover:text-neon-coral"}`}><Heart className={`w-4 h-4 ${post.liked ? "fill-current" : ""}`} />{post.likes}</button>
+                      {/* Multi-reactions */}
+                      <div className="flex items-center gap-1 mt-3 flex-wrap">
+                        {REACTION_EMOJIS.map(r => {
+                          const count = post.reactions?.[r.key] || 0;
+                          const isMine = post.myReaction === r.key;
+                          return (
+                            <button key={r.key} onClick={() => {
+                              setPosts(prev => prev.map(p => {
+                                if (p.id !== post.id) return p;
+                                const reactions = { ...(p.reactions || {}) };
+                                const wasMyReaction = p.myReaction === r.key;
+                                if (wasMyReaction) {
+                                  reactions[r.key] = Math.max((reactions[r.key] || 1) - 1, 0);
+                                  return { ...p, reactions, myReaction: undefined, likes: Math.max(p.likes - 1, 0) };
+                                } else {
+                                  if (p.myReaction) reactions[p.myReaction] = Math.max((reactions[p.myReaction] || 1) - 1, 0);
+                                  reactions[r.key] = (reactions[r.key] || 0) + 1;
+                                  return { ...p, reactions, myReaction: r.key, likes: p.myReaction ? p.likes : p.likes + 1 };
+                                }
+                              }));
+                              handleLike(post.id).catch(() => {});
+                            }}
+                              className={`flex items-center gap-0.5 px-2 py-1 rounded-full text-xs transition-all ${isMine ? "bg-primary/10 border border-primary/30 scale-105" : count > 0 ? "bg-muted border border-transparent" : "bg-transparent border border-transparent hover:bg-muted"}`}>
+                              <span className="text-sm">{r.emoji}</span>
+                              {count > 0 && <span className={`text-[10px] font-medium ${isMine ? "text-primary" : "text-muted-foreground"}`}>{count}</span>}
+                            </button>
+                          );
+                        })}
+                        <div className="flex-1" />
                         <button onClick={() => toggleComments(post.id)} className={`flex items-center gap-1.5 text-xs transition-colors ${commentsOpen ? "text-neon-cyan" : "text-muted-foreground hover:text-neon-cyan"}`}>
                           <MessageCircle className={`w-4 h-4 ${commentsOpen ? "fill-current" : ""}`} />{post.comments}
-                          {commentsOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
                         <button onClick={() => { navigator.clipboard.writeText(post.content); toast.success(lang === "zh" ? "已複製" : "Copied"); }} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"><Share2 className="w-4 h-4" /></button>
                       </div>

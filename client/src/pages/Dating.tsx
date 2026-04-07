@@ -8,7 +8,7 @@ import {
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
   Mic, CheckCheck, Smile, Square, Play, UserX, MoreVertical,
-  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus, Star, Crown
+  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus, Star, Crown, CalendarDays
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,7 +17,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, sendImageMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus, likeUser, getLikedBy, getSuperLikesRemaining } from "@/lib/chat";
 
-type DatingTab = "discover" | "matches" | "liked" | "profile";
+type DatingTab = "discover" | "matches" | "liked" | "profile" | "study";
 
 interface MatchProfile {
   id: string;
@@ -1335,6 +1335,26 @@ export default function Dating() {
                             </div>
                           );
                         })()}
+                        {/* Timetable overlap */}
+                        {(() => {
+                          const mySlots: string[] = (() => { try { return JSON.parse(localStorage.getItem("unigo-timetable") || "[]"); } catch { return []; } })();
+                          if (mySlots.length === 0) return null;
+                          // Mock partner slots based on their id
+                          const partnerHash = (activeChat.id || "").split("").reduce((a: number, c: string) => ((a << 3) + c.charCodeAt(0)) | 0, 0);
+                          const allSlots = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap(d => ["9-11", "11-1", "2-4", "4-6"].map(s => `${d}-${s}`));
+                          const partnerSlots = allSlots.filter((_, i) => ((partnerHash >> (i % 8)) & 1) === 1).slice(0, 5);
+                          const overlap = mySlots.filter(s => partnerSlots.includes(s));
+                          if (overlap.length === 0) return null;
+                          return (
+                            <div className="p-3 rounded-xl bg-neon-cyan/5 border border-neon-cyan/15">
+                              <p className="text-xs font-medium text-neon-cyan mb-1.5 flex items-center gap-1.5"><CalendarDays className="w-3 h-3" />{lang === "zh" ? `⏰ ${overlap.length} 個共同空堂` : `⏰ ${overlap.length} free slot overlap`}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {overlap.map(s => <span key={s} className="px-2 py-0.5 rounded text-[10px] bg-neon-cyan/10 text-neon-cyan font-medium">{s.replace("-", " ")}</span>)}
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mt-1.5">{lang === "zh" ? "可以約呢啲時間見面 👀" : "You could meet during these times 👀"}</p>
+                            </div>
+                          );
+                        })()}
                         {/* Actions */}
                         <div className="flex gap-2 pt-1">
                           <button onClick={() => setShowPartnerProfile(false)} className="flex-1 py-3 rounded-xl font-medium text-sm bg-primary text-white hover:bg-primary/90 transition-colors">{lang === "zh" ? "返回聊天" : "Back to Chat"}</button>
@@ -1468,9 +1488,9 @@ export default function Dating() {
             <div className="max-w-2xl mx-auto px-4 py-6">
               {/* Tabs */}
               <div className="flex gap-1 mb-6 bg-muted rounded-xl p-1">
-                {(["discover", "liked", "matches", "profile"] as DatingTab[]).map((t_) => (
-                  <button key={t_} onClick={() => setTab(t_)} className={`flex-1 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all relative ${tab === t_ ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "liked" ? (lang === "zh" ? "喜歡你" : "Liked You") : t_ === "matches" ? t("dating.tab.matches") : t("dating.tab.profile")}
+                {(["discover", "liked", "matches", "study", "profile"] as DatingTab[]).map((t_) => (
+                  <button key={t_} onClick={() => setTab(t_)} className={`flex-1 py-2.5 rounded-lg text-[10px] sm:text-sm font-medium transition-all relative ${tab === t_ ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                    {t_ === "discover" ? t("dating.tab.discover") : t_ === "liked" ? (lang === "zh" ? "喜歡你" : "Liked") : t_ === "matches" ? t("dating.tab.matches") : t_ === "study" ? (lang === "zh" ? "📚 溫書" : "📚 Study") : t("dating.tab.profile")}
                     {t_ === "liked" && likedByProfiles.length > 0 && <span className="absolute -top-1 -right-0.5 w-4 h-4 rounded-full bg-neon-coral text-white text-[9px] flex items-center justify-center">{likedByProfiles.length}</span>}
                   </button>
                 ))}
@@ -1762,6 +1782,89 @@ export default function Dating() {
                       {matchedProfiles.length === 0 && (
                         <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">{t("dating.matches.no_matches")}</p><p className="text-sm text-muted-foreground mb-4">{t("dating.matches.go_discover")}</p><Button onClick={() => setTab("discover")} className="bg-neon-coral hover:bg-neon-coral/90 text-white">{t("dating.matches.start")}</Button></div>
                       )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* STUDY BUDDY */}
+                {tab === "study" && (
+                  <motion.div key="study" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                    <h2 className="font-display text-lg font-bold text-foreground mb-1">{lang === "zh" ? "📚 搵溫書拍檔" : "📚 Find Study Buddies"}</h2>
+                    <p className="text-xs text-muted-foreground mb-5">{lang === "zh" ? "搵同科同學一齊溫書、做 project" : "Find classmates to study or do projects with"}</p>
+
+                    {/* My timetable (simplified) */}
+                    <div className="p-4 rounded-xl border border-border bg-card mb-4">
+                      <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary" />{lang === "zh" ? "我嘅空堂" : "My Free Slots"}</h3>
+                      <p className="text-[10px] text-muted-foreground mb-2">{lang === "zh" ? "揀你有空嘅時段，幫你配對同時間有空嘅同學" : "Select your free slots to match with available classmates"}</p>
+                      <div className="grid grid-cols-6 gap-1 text-[10px]">
+                        <div />
+                        {["Mon", "Tue", "Wed", "Thu", "Fri"].map(d => <div key={d} className="text-center font-medium text-muted-foreground py-1">{d}</div>)}
+                        {["9-11", "11-1", "2-4", "4-6"].map(slot => (
+                          <>{/* Row */}
+                            <div className="text-right pr-1 text-muted-foreground py-1.5">{slot}</div>
+                            {["Mon", "Tue", "Wed", "Thu", "Fri"].map(day => {
+                              const key = `${day}-${slot}`;
+                              const stored = (() => { try { return JSON.parse(localStorage.getItem("unigo-timetable") || "[]"); } catch { return []; } })();
+                              const isSelected = stored.includes(key);
+                              return (
+                                <button key={key} onClick={() => {
+                                  const current: string[] = (() => { try { return JSON.parse(localStorage.getItem("unigo-timetable") || "[]"); } catch { return []; } })();
+                                  const updated = current.includes(key) ? current.filter((k: string) => k !== key) : [...current, key];
+                                  localStorage.setItem("unigo-timetable", JSON.stringify(updated));
+                                  // Force re-render
+                                  setTab("study");
+                                }}
+                                  className={`py-1.5 rounded transition-all ${isSelected ? "bg-neon-emerald/20 text-neon-emerald border border-neon-emerald/30" : "bg-muted/50 text-muted-foreground hover:bg-muted border border-transparent"}`}>
+                                  {isSelected ? "✓" : ""}
+                                </button>
+                              );
+                            })}
+                          </>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Study buddy cards */}
+                    <div className="space-y-3">
+                      {[
+                        { id: "sb1", name: "COMP3230 同學", major: "Computer Science", school: "HKU", mbti: "INTJ", freeSlots: ["Mon-2-4", "Wed-2-4", "Fri-11-1"], emoji: "💻", looking: lang === "zh" ? "搵人一齊做 OS assignment" : "Looking for OS assignment partner" },
+                        { id: "sb2", name: "FINA2010 同學", major: "Business", school: "CUHK", mbti: "ENFP", freeSlots: ["Tue-2-4", "Thu-11-1", "Fri-2-4"], emoji: "📊", looking: lang === "zh" ? "想搵人一齊溫 midterm" : "Study group for midterm" },
+                        { id: "sb3", name: "MATH2011 同學", major: "Mathematics", school: "HKUST", mbti: "INTP", freeSlots: ["Mon-11-1", "Wed-4-6", "Thu-2-4"], emoji: "📐", looking: lang === "zh" ? "幫人補習 Calculus，換你教我 Stats" : "Can tutor Calc, need Stats help" },
+                        { id: "sb4", name: "PSYC1001 同學", major: "Psychology", school: "HKU", mbti: "INFJ", freeSlots: ["Tue-11-1", "Wed-2-4"], emoji: "🧠", looking: lang === "zh" ? "搵人一齊寫 essay，互相 proofread" : "Essay writing buddy, mutual proofreading" },
+                      ].map(buddy => {
+                        const mySlots: string[] = (() => { try { return JSON.parse(localStorage.getItem("unigo-timetable") || "[]"); } catch { return []; } })();
+                        const overlap = buddy.freeSlots.filter(s => mySlots.includes(s));
+                        return (
+                          <div key={buddy.id} className="p-4 rounded-xl border border-border bg-card">
+                            <div className="flex items-start gap-3">
+                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg flex-shrink-0">{buddy.emoji}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-sm font-bold text-foreground">{buddy.name}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary">{buddy.mbti}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">{buddy.school} · {buddy.major}</p>
+                                <p className="text-xs text-foreground mt-1.5">{buddy.looking}</p>
+                                {/* Timetable overlap */}
+                                {overlap.length > 0 ? (
+                                  <div className="mt-2 p-2 rounded-lg bg-neon-emerald/5 border border-neon-emerald/15">
+                                    <p className="text-[10px] font-medium text-neon-emerald mb-1">⏰ {lang === "zh" ? `${overlap.length} 個共同空堂！` : `${overlap.length} overlapping free slots!`}</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {overlap.map(s => <span key={s} className="px-1.5 py-0.5 rounded text-[9px] bg-neon-emerald/10 text-neon-emerald font-medium">{s.replace("-", " ")}</span>)}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-muted-foreground mt-2">{lang === "zh" ? "未有共同空堂（填寫你嘅空堂睇吓）" : "No overlap yet — fill in your free slots above"}</p>
+                                )}
+                                <div className="flex gap-2 mt-3">
+                                  <button className="flex-1 py-2 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition-colors">{lang === "zh" ? "發訊息" : "Message"}</button>
+                                  <button className="py-2 px-3 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">{lang === "zh" ? "睇檔案" : "Profile"}</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </motion.div>
                 )}
