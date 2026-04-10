@@ -73,9 +73,22 @@ export function formatMessageTime(timestamp: string, lang: string): string {
 
 export async function unmatch(matchId: string, userId: string) {
   const res = await fetch(`${API}?action=unmatch`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ match_id: matchId, user_id: userId }),
   });
+  return res.json();
+}
+
+export async function rematchUser(matchId: string) {
+  const res = await fetch(`${API}?action=rematch`, {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ match_id: matchId }),
+  });
+  return res.json();
+}
+
+export async function getUnmatched(userId: string) {
+  const res = await fetch(`${API}?action=get-unmatched&user_id=${userId}`, { headers: authHeaders() });
   return res.json();
 }
 

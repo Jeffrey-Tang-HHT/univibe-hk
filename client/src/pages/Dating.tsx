@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, sendImageMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus, likeUser, getLikedBy, getSuperLikesRemaining } from "@/lib/chat";
+import { createMatch, getMatches, getMessages, sendMessage, sendVoiceMessage, sendImageMessage, discoverProfiles, formatMessageTime, unmatch, deleteMessage, blockUser, reportUser, heartbeat, uploadAvatar, deletePhoto, getOnlineStatus, likeUser, getLikedBy, getSuperLikesRemaining, rematchUser, getUnmatched } from "@/lib/chat";
 
 type DatingTab = "discover" | "matches" | "liked" | "profile";
 
@@ -527,16 +527,8 @@ export default function Dating() {
   });
   const [editingIcebreakerIdx, setEditingIcebreakerIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-
-  const MATCH_EXPIRY_MS = 48 * 60 * 60 * 1000;
-  const getTimeRemaining = (matchedAt?: number) => {
-    if (!matchedAt) return { hours: 48, minutes: 0, expired: false, urgent: false };
-    const elapsed = Date.now() - matchedAt;
-    const remaining = Math.max(0, MATCH_EXPIRY_MS - elapsed);
-    const hours = Math.floor(remaining / (60 * 60 * 1000));
-    const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
-    return { hours, minutes, expired: remaining <= 0, urgent: hours < 6 };
-  };
+  const [unmatchedList, setUnmatchedList] = useState<any[]>([]);
+  const [showUnmatchedSection, setShowUnmatchedSection] = useState(false);
 
   const toggleSexuality = (key: string) => {
     setSelectedSexuality(prev => {
@@ -1750,16 +1742,10 @@ export default function Dating() {
                   <motion.div key="matches" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                     <h2 className="font-display text-lg font-bold text-foreground mb-2">{t("dating.matches.title")}</h2>
                     <p className="text-xs text-muted-foreground mb-3">{t("dating.matches.subtitle")}</p>
-                    <div className="flex items-center gap-2 p-3 rounded-xl bg-neon-coral/5 border border-neon-coral/15 mb-4">
-                      <Timer className="w-4 h-4 text-neon-coral flex-shrink-0" />
-                      <p className="text-xs text-muted-foreground">{lang === "zh" ? "配對會喺 48 小時後過期。盡快傾偈！" : "Matches expire after 48 hours. Start chatting!"}</p>
-                    </div>
                     <div className="space-y-2">
                       {matchedProfiles.map((profile) => {
-                        const timeLeft = getTimeRemaining(profile.matchedAt);
-                        if (timeLeft.expired) return null;
                         return (
-                        <button key={profile.id} onClick={() => { setActiveChatId(profile.id); setActiveMatchId((profile as any)._matchId || profile.id); }} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group ${timeLeft.urgent ? "border-destructive/40" : "border-border"}`}>
+                        <button key={profile.id} onClick={() => { setActiveChatId(profile.id); setActiveMatchId((profile as any)._matchId || profile.id); }} className={`w-full flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/30 transition-all text-left group border-border`}>
                           <div className="relative">
                             <BlurredAvatar blurLevel={profile.blurLevel} mbti={profile.mbti} size="md" avatarUrl={profile.avatar_url} photos={profile.photos} />
                             {(profile.unread || 0) > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center">{profile.unread}</div>}
@@ -1772,7 +1758,6 @@ export default function Dating() {
                             <div className="flex items-center gap-3 mt-2">
                               <div className="flex items-center gap-1.5"><div className="h-1 w-12 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-neon-coral to-neon-cyan" style={{ width: `${profile.blurLevel}%` }} /></div><span className="text-[10px] text-muted-foreground">{profile.blurLevel}%</span></div>
                               <span className="text-[10px] text-neon-coral font-medium">{profile.messages}/20 {t("dating.messages_short")}</span>
-                              <span className={`text-[10px] font-medium flex items-center gap-0.5 ml-auto ${timeLeft.urgent ? "text-destructive" : "text-muted-foreground"}`}><Timer className="w-3 h-3" />{timeLeft.hours}h {timeLeft.minutes}m</span>
                             </div>
                           </div>
                           <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1783,6 +1768,38 @@ export default function Dating() {
                         <div className="text-center py-16 rounded-2xl border border-border bg-card"><Heart className="w-16 h-16 text-muted-foreground/20 mx-auto mb-4" /><p className="text-lg font-medium text-foreground mb-2">{t("dating.matches.no_matches")}</p><p className="text-sm text-muted-foreground mb-4">{t("dating.matches.go_discover")}</p><Button onClick={() => setTab("discover")} className="bg-neon-coral hover:bg-neon-coral/90 text-white">{t("dating.matches.start")}</Button></div>
                       )}
                     </div>
+                    {/* Unmatched section */}
+                    <button onClick={() => { setShowUnmatchedSection(!showUnmatchedSection); if (!showUnmatchedSection && user?.id) getUnmatched(user.id).then(d => setUnmatchedList(d.unmatched || [])); }} className="w-full mt-6 flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border text-sm text-muted-foreground hover:bg-muted/50 transition-colors">
+                      <span>{lang === "zh" ? "已取消配對" : "Unmatched"}</span>
+                      <ChevronRight className={`w-4 h-4 transition-transform ${showUnmatchedSection ? "rotate-90" : ""}`} />
+                    </button>
+                    {showUnmatchedSection && (
+                      <div className="space-y-2 mt-2">
+                        {unmatchedList.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">{lang === "zh" ? "暫無取消配對記錄" : "No unmatched profiles"}</p>}
+                        {unmatchedList.map((item: any) => {
+                          const p = item.partner;
+                          if (!p) return null;
+                          let photos: string[] = [];
+                          try { photos = typeof p.photos === 'string' ? JSON.parse(p.photos) : (Array.isArray(p.photos) ? p.photos : []); } catch { photos = []; }
+                          return (
+                            <div key={item.match_id} className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card">
+                              <BlurredAvatar blurLevel={0} mbti={p.mbti || "????"} size="md" avatarUrl={p.avatar_url} photos={photos.filter(Boolean)} />
+                              <div className="flex-1 min-w-0">
+                                <span className="font-display font-bold text-sm text-foreground">{p.mbti || "????"} {genderSign(p.gender)}</span>
+                                <span className="text-xs text-muted-foreground ml-2">· {p.school || ""}</span>
+                                <p className="text-xs text-muted-foreground mt-0.5">{p.faculty || ""}</p>
+                              </div>
+                              <Button size="sm" variant="outline" className="text-xs" onClick={() => {
+                                rematchUser(item.match_id).then(() => {
+                                  toast.success(lang === "zh" ? "已重新配對！" : "Rematched!");
+                                  if (user?.id) { getMatches(user.id).then(d => { if (d.matches) setRealMatches(d.matches); }); getUnmatched(user.id).then(d => setUnmatchedList(d.unmatched || [])); }
+                                }).catch(() => toast.error(lang === "zh" ? "操作失敗" : "Failed"));
+                              }}>{lang === "zh" ? "重新配對" : "Rematch"}</Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </motion.div>
                 )}
 

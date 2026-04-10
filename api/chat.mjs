@@ -108,6 +108,14 @@ export default async function handler(req, res) {
         filters: `user1_id=eq.${id1}&user2_id=eq.${id2}&status=eq.active`
       });
       if (existing.length > 0) return res.status(200).json({ match: existing[0], existing: true });
+      // Check for unmatched match to reactivate
+      const unmatched = await supabaseQuery('matches', {
+        filters: `user1_id=eq.${id1}&user2_id=eq.${id2}&status=eq.unmatched`
+      });
+      if (unmatched.length > 0) {
+        await supabaseQuery('matches', { method: 'PATCH', filters: `id=eq.${unmatched[0].id}`, body: { status: 'active', unmatched_by: null } });
+        return res.status(200).json({ match: { ...unmatched[0], status: 'active' }, existing: false });
+      }
       const result = await supabaseQuery('matches', { method: 'POST', body: { user1_id: id1, user2_id: id2, status: 'active' } });
       return res.status(201).json({ match: result[0], existing: false });
     }
@@ -192,10 +200,7 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Not part of this match' });
       }
 
-      if (new Date(match.expires_at) < new Date() && !match.last_message_at) {
-        await supabaseQuery('matches', { method: 'PATCH', filters: `id=eq.${match_id}`, body: { status: 'expired' } });
-        return res.status(410).json({ error: 'Match has expired' });
-      }
+
 
       // Sanitize text content
       const sanitizedContent = type === 'text' ? sanitizeContent(content, 5000) : (content || '');
@@ -249,12 +254,7 @@ export default async function handler(req, res) {
       if (type === 'image' && image_url) msgBody.image_url = image_url;
       const result = await supabaseQuery('messages', { method: 'POST', body: msgBody });
 
-      if (!match.last_message_at) {
-        await supabaseQuery('matches', {
-          method: 'PATCH', filters: `id=eq.${match_id}`,
-          body: { expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() }
-        });
-      }
+
 
       return res.status(201).json({ message: result[0] });
     }
@@ -304,9 +304,42 @@ export default async function handler(req, res) {
         filters: `id=eq.${match_id}&or=(user1_id.eq.${user.userId},user2_id.eq.${user.userId})`
       });
       if (matches.length === 0) return res.status(403).json({ error: 'Not part of this match' });
-      await supabaseQuery('messages', { method: 'DELETE', filters: `match_id=eq.${match_id}` });
-      await supabaseQuery('matches', { method: 'DELETE', filters: `id=eq.${match_id}` });
+      await supabaseQuery('matches', { method: 'PATCH', filters: `id=eq.${match_id}`, body: { status: 'unmatched', unmatched_by: user.userId } });
       return res.status(200).json({ success: true });
+    }
+
+    // ========== REMATCH ==========
+    if (action === 'rematch' && req.method === 'POST') {
+      const user = requireAuth(req, res); if (!user) return;
+      const { match_id } = req.body;
+      if (!match_id || !isValidUUID(match_id)) return res.status(400).json({ error: 'Invalid match_id' });
+      const matches = await supabaseQuery('matches', {
+        filters: `id=eq.${match_id}&status=eq.unmatched&or=(user1_id.eq.${user.userId},user2_id.eq.${user.userId})`
+      });
+      if (matches.length === 0) return res.status(403).json({ error: 'Match not found' });
+      await supabaseQuery('matches', { method: 'PATCH', filters: `id=eq.${match_id}`, body: { status: 'active', unmatched_by: null } });
+      return res.status(200).json({ success: true });
+    }
+
+    // ========== GET UNMATCHED ==========
+    if (action === 'get-unmatched' && req.method === 'GET') {
+      const user = requireAuth(req, res); if (!user) return;
+      const userId = user.userId;
+      const matches = await supabaseQuery('matches', {
+        filters: `status=eq.unmatched&or=(user1_id.eq.${userId},user2_id.eq.${userId})`,
+        select: '*'
+      });
+      const results = await Promise.all(matches.map(async (match) => {
+        const partnerId = match.user1_id === userId ? match.user2_id : match.user1_id;
+        const partners = await supabaseQuery('users', {
+          filters: `id=eq.${partnerId}`,
+          select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,photos,last_seen'
+        });
+        const partner = partners[0] || null;
+        if (!partner) return null;
+        return { match_id: match.id, partner, unmatched_by: match.unmatched_by, created_at: match.created_at };
+      }));
+      return res.status(200).json({ unmatched: results.filter(Boolean) });
     }
 
     // ========== DELETE MESSAGE ==========
@@ -407,7 +440,15 @@ export default async function handler(req, res) {
             filters: `or=(and(user1_id.eq.${likerId},user2_id.eq.${liked_id}),and(user1_id.eq.${liked_id},user2_id.eq.${likerId}))&status=eq.active`
           });
           if (existingMatch.length === 0) {
-            await supabaseQuery('matches', { method: 'POST', body: { user1_id: likerId, user2_id: liked_id, status: 'active' } });
+            // Check for unmatched match to reactivate
+            const unmatchedMatch = await supabaseQuery('matches', {
+              filters: `or=(and(user1_id.eq.${likerId},user2_id.eq.${liked_id}),and(user1_id.eq.${liked_id},user2_id.eq.${likerId}))&status=eq.unmatched`
+            });
+            if (unmatchedMatch.length > 0) {
+              await supabaseQuery('matches', { method: 'PATCH', filters: `id=eq.${unmatchedMatch[0].id}`, body: { status: 'active', unmatched_by: null } });
+            } else {
+              await supabaseQuery('matches', { method: 'POST', body: { user1_id: likerId, user2_id: liked_id, status: 'active' } });
+            }
             matched = true;
           }
         }
