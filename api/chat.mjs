@@ -1,24 +1,24 @@
 import { supabaseQuery } from './utils/supabase.mjs';
+import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent } from './utils/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const action = req.query.action;
+  const ip = getClientIP(req);
 
   try {
-    // ========== HEARTBEAT (update last_seen) ==========
+    // ========== HEARTBEAT ==========
     if (action === 'heartbeat' && req.method === 'POST') {
-      const { user_id } = req.body;
-      if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      if (!rateLimit(`heartbeat:${user.userId}`, 30, 60 * 1000)) return res.status(429).end();
       await supabaseQuery('users', {
         method: 'PATCH',
-        filters: `id=eq.${user_id}`,
+        filters: `id=eq.${user.userId}`,
         body: { last_seen: new Date().toISOString() }
       });
       return res.status(200).json({ success: true });
@@ -26,34 +26,34 @@ export default async function handler(req, res) {
 
     // ========== DISCOVER ==========
     if (action === 'discover' && req.method === 'GET') {
-      const { user_id } = req.query;
-      if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      const userId = user.userId;
 
       const allUsers = await supabaseQuery('users', {
-        filters: `id=neq.${user_id}&mbti=not.is.null`,
+        filters: `id=neq.${userId}&mbti=not.is.null`,
         select: 'id,username,display_name,gender,school,faculty,mbti,bio,sexuality,interests,age,district,relationship_type,religion,avatar_url,photos,last_seen'
       });
 
       const matches = await supabaseQuery('matches', {
-        filters: `or=(user1_id.eq.${user_id},user2_id.eq.${user_id})`,
+        filters: `or=(user1_id.eq.${userId},user2_id.eq.${userId})`,
         select: 'user1_id,user2_id'
       });
 
       const matchedIds = new Set();
       matches.forEach(m => {
-        if (m.user1_id !== user_id) matchedIds.add(m.user1_id);
-        if (m.user2_id !== user_id) matchedIds.add(m.user2_id);
+        if (m.user1_id !== userId) matchedIds.add(m.user1_id);
+        if (m.user2_id !== userId) matchedIds.add(m.user2_id);
       });
 
       let blockedIds = new Set();
       try {
         const blocks = await supabaseQuery('blocks', {
-          filters: `or=(blocker_id.eq.${user_id},blocked_id.eq.${user_id})`,
+          filters: `or=(blocker_id.eq.${userId},blocked_id.eq.${userId})`,
           select: 'blocker_id,blocked_id'
         });
         blocks.forEach(b => {
-          if (b.blocker_id !== user_id) blockedIds.add(b.blocker_id);
-          if (b.blocked_id !== user_id) blockedIds.add(b.blocked_id);
+          if (b.blocker_id !== userId) blockedIds.add(b.blocker_id);
+          if (b.blocked_id !== userId) blockedIds.add(b.blocked_id);
         });
       } catch (e) {}
 
@@ -92,8 +92,11 @@ export default async function handler(req, res) {
 
     // ========== CREATE MATCH ==========
     if (action === 'create-match' && req.method === 'POST') {
-      const { user1_id, user2_id } = req.body;
-      if (!user1_id || !user2_id) return res.status(400).json({ error: 'Missing user IDs' });
+      const user = requireAuth(req, res); if (!user) return;
+      const { user2_id } = req.body;
+      if (!isValidUUID(user2_id)) return res.status(400).json({ error: 'Invalid user ID' });
+
+      const user1_id = user.userId;
       const [id1, id2] = [user1_id, user2_id].sort();
       const existing = await supabaseQuery('matches', {
         filters: `user1_id=eq.${id1}&user2_id=eq.${id2}&status=eq.active`
@@ -105,8 +108,8 @@ export default async function handler(req, res) {
 
     // ========== GET MATCHES ==========
     if (action === 'get-matches' && req.method === 'GET') {
-      const userId = req.query.user_id;
-      if (!userId) return res.status(400).json({ error: 'Missing user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      const userId = user.userId;
 
       const matches = await supabaseQuery('matches', {
         filters: `status=eq.active&or=(user1_id.eq.${userId},user2_id.eq.${userId})`,
@@ -161,16 +164,25 @@ export default async function handler(req, res) {
 
     // ========== SEND MESSAGE ==========
     if (action === 'send-message' && req.method === 'POST') {
-      const { match_id, sender_id, content, type = 'text', voice_duration, image_base64 } = req.body;
-      if (!match_id || !sender_id) return res.status(400).json({ error: 'Missing required fields' });
+      const user = requireAuth(req, res); if (!user) return;
+      const senderId = user.userId;
+      const { match_id, content, type = 'text', voice_duration, image_base64 } = req.body;
+
+      if (!match_id || !isValidUUID(match_id)) return res.status(400).json({ error: 'Invalid match_id' });
       if (type === 'text' && !content?.trim()) return res.status(400).json({ error: 'Message content required' });
       if (type === 'image' && !image_base64) return res.status(400).json({ error: 'Missing image data' });
+
+      // Rate limit messages: 30 per minute per user
+      if (!rateLimit(`msg:${senderId}`, 30, 60 * 1000)) {
+        return res.status(429).json({ error: '訊息發送太快' });
+      }
 
       const matches = await supabaseQuery('matches', { filters: `id=eq.${match_id}&status=eq.active` });
       if (matches.length === 0) return res.status(404).json({ error: 'Match not found or expired' });
 
       const match = matches[0];
-      if (match.user1_id !== sender_id && match.user2_id !== sender_id) {
+      // Verify sender is part of this match
+      if (match.user1_id !== senderId && match.user2_id !== senderId) {
         return res.status(403).json({ error: 'Not part of this match' });
       }
 
@@ -179,12 +191,15 @@ export default async function handler(req, res) {
         return res.status(410).json({ error: 'Match has expired' });
       }
 
+      // Sanitize text content
+      const sanitizedContent = type === 'text' ? sanitizeContent(content, 5000) : (content || '');
+
       let image_url = null;
       if (type === 'image' && image_base64) {
-        // Upload image to Supabase Storage
         const imgMatches = image_base64.match(/^data:image\/(jpeg|png|webp|gif);base64,(.+)$/);
-        const mimeType = imgMatches ? `image/${imgMatches[1]}` : 'image/jpeg';
-        const raw = imgMatches ? imgMatches[2] : image_base64;
+        if (!imgMatches) return res.status(400).json({ error: 'Invalid image format. Only jpeg/png/webp/gif allowed.' });
+        const mimeType = `image/${imgMatches[1]}`;
+        const raw = imgMatches[2];
         const buffer = Buffer.from(raw, 'base64');
 
         if (buffer.length > 5 * 1024 * 1024) {
@@ -208,20 +223,18 @@ export default async function handler(req, res) {
               body: buffer,
             }
           );
-
           if (uploadRes.ok) {
             image_url = `${SUPABASE_URL}/storage/v1/object/public/chat-images/${fileName}`;
           } else {
-            // Fallback: store as data URL (truncated for safety)
-            image_url = `data:${mimeType};base64,${raw.substring(0, 800000)}`;
+            return res.status(500).json({ error: 'Image upload failed' });
           }
         } catch (e) {
-          image_url = `data:${mimeType};base64,${raw.substring(0, 800000)}`;
+          return res.status(500).json({ error: 'Image upload failed' });
         }
       }
 
-      const msgBody = { match_id, sender_id, content: content || (type === 'image' ? '📷' : ''), type };
-      if (type === 'voice' && voice_duration) msgBody.voice_duration = voice_duration;
+      const msgBody = { match_id, sender_id: senderId, content: sanitizedContent || (type === 'image' ? '📷' : ''), type };
+      if (type === 'voice' && voice_duration) msgBody.voice_duration = Math.min(Number(voice_duration) || 0, 300);
       if (type === 'image' && image_url) msgBody.image_url = image_url;
       const result = await supabaseQuery('messages', { method: 'POST', body: msgBody });
 
@@ -237,11 +250,14 @@ export default async function handler(req, res) {
 
     // ========== GET MESSAGES ==========
     if (action === 'get-messages' && req.method === 'GET') {
-      const { match_id, user_id } = req.query;
-      if (!match_id || !user_id) return res.status(400).json({ error: 'Missing match_id or user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      const userId = user.userId;
+      const { match_id } = req.query;
+
+      if (!match_id || !isValidUUID(match_id)) return res.status(400).json({ error: 'Invalid match_id' });
 
       const matches = await supabaseQuery('matches', {
-        filters: `id=eq.${match_id}&or=(user1_id.eq.${user_id},user2_id.eq.${user_id})`
+        filters: `id=eq.${match_id}&or=(user1_id.eq.${userId},user2_id.eq.${userId})`
       });
       if (matches.length === 0) return res.status(403).json({ error: 'Not part of this match' });
 
@@ -252,27 +268,29 @@ export default async function handler(req, res) {
 
       await supabaseQuery('messages', {
         method: 'PATCH',
-        filters: `match_id=eq.${match_id}&sender_id=neq.${user_id}&read=eq.false`,
+        filters: `match_id=eq.${match_id}&sender_id=neq.${userId}&read=eq.false`,
         body: { read: true }
       });
 
       return res.status(200).json({
         messages: messages
-          .filter(m => !(m.deleted_by || []).includes(user_id))
+          .filter(m => !(m.deleted_by || []).includes(userId))
           .map(m => ({
             id: m.id, text: m.content, type: m.type, voice_duration: m.voice_duration,
             image_url: m.image_url || null,
-            isMe: m.sender_id === user_id, read: m.read, time: m.created_at, sender_id: m.sender_id,
+            isMe: m.sender_id === userId, read: m.read, time: m.created_at, sender_id: m.sender_id,
           }))
       });
     }
 
     // ========== UNMATCH ==========
     if (action === 'unmatch' && req.method === 'POST') {
-      const { match_id, user_id } = req.body;
-      if (!match_id || !user_id) return res.status(400).json({ error: 'Missing match_id or user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      const { match_id } = req.body;
+      if (!match_id || !isValidUUID(match_id)) return res.status(400).json({ error: 'Invalid match_id' });
+
       const matches = await supabaseQuery('matches', {
-        filters: `id=eq.${match_id}&or=(user1_id.eq.${user_id},user2_id.eq.${user_id})`
+        filters: `id=eq.${match_id}&or=(user1_id.eq.${user.userId},user2_id.eq.${user.userId})`
       });
       if (matches.length === 0) return res.status(403).json({ error: 'Not part of this match' });
       await supabaseQuery('messages', { method: 'DELETE', filters: `match_id=eq.${match_id}` });
@@ -282,18 +300,20 @@ export default async function handler(req, res) {
 
     // ========== DELETE MESSAGE ==========
     if (action === 'delete-message' && req.method === 'POST') {
-      const { message_id, user_id, for_both } = req.body;
-      if (!message_id || !user_id) return res.status(400).json({ error: 'Missing message_id or user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      const { message_id, for_both } = req.body;
+      if (!message_id || !isValidUUID(message_id)) return res.status(400).json({ error: 'Invalid message_id' });
+
       if (for_both) {
-        const msgs = await supabaseQuery('messages', { filters: `id=eq.${message_id}&sender_id=eq.${user_id}` });
+        const msgs = await supabaseQuery('messages', { filters: `id=eq.${message_id}&sender_id=eq.${user.userId}` });
         if (msgs.length === 0) return res.status(403).json({ error: 'Can only delete your own messages' });
         await supabaseQuery('messages', { method: 'DELETE', filters: `id=eq.${message_id}` });
       } else {
         const msgs = await supabaseQuery('messages', { filters: `id=eq.${message_id}`, select: 'id,deleted_by' });
         if (msgs.length === 0) return res.status(404).json({ error: 'Message not found' });
         const deletedBy = msgs[0].deleted_by || [];
-        if (!deletedBy.includes(user_id)) {
-          deletedBy.push(user_id);
+        if (!deletedBy.includes(user.userId)) {
+          deletedBy.push(user.userId);
           await supabaseQuery('messages', { method: 'PATCH', filters: `id=eq.${message_id}`, body: { deleted_by: deletedBy } });
         }
       }
@@ -302,15 +322,17 @@ export default async function handler(req, res) {
 
     // ========== BLOCK USER ==========
     if (action === 'block' && req.method === 'POST') {
-      const { blocker_id, blocked_id } = req.body;
-      if (!blocker_id || !blocked_id) return res.status(400).json({ error: 'Missing user IDs' });
+      const user = requireAuth(req, res); if (!user) return;
+      const { blocked_id } = req.body;
+      if (!isValidUUID(blocked_id)) return res.status(400).json({ error: 'Invalid user ID' });
+      if (blocked_id === user.userId) return res.status(400).json({ error: 'Cannot block yourself' });
+
       try {
-        await supabaseQuery('blocks', { method: 'POST', body: { blocker_id, blocked_id } });
+        await supabaseQuery('blocks', { method: 'POST', body: { blocker_id: user.userId, blocked_id } });
       } catch (e) { /* already blocked */ }
 
-      // Also unmatch
       const matches = await supabaseQuery('matches', {
-        filters: `status=eq.active&or=(and(user1_id.eq.${blocker_id},user2_id.eq.${blocked_id}),and(user1_id.eq.${blocked_id},user2_id.eq.${blocker_id}))`,
+        filters: `status=eq.active&or=(and(user1_id.eq.${user.userId},user2_id.eq.${blocked_id}),and(user1_id.eq.${blocked_id},user2_id.eq.${user.userId}))`,
         select: 'id'
       });
       for (const match of matches) {
@@ -322,71 +344,77 @@ export default async function handler(req, res) {
 
     // ========== REPORT USER ==========
     if (action === 'report' && req.method === 'POST') {
-      const { reporter_id, reported_id, reason } = req.body;
-      if (!reporter_id || !reported_id) return res.status(400).json({ error: 'Missing user IDs' });
-      await supabaseQuery('reports', { method: 'POST', body: { reporter_id, reported_id, reason: reason || '' } });
+      const user = requireAuth(req, res); if (!user) return;
+      const { reported_id, reason } = req.body;
+      if (!isValidUUID(reported_id)) return res.status(400).json({ error: 'Invalid user ID' });
+      if (!rateLimit(`report:${user.userId}`, 10, 60 * 60 * 1000)) {
+        return res.status(429).json({ error: '舉報太頻繁' });
+      }
+      await supabaseQuery('reports', { method: 'POST', body: { reporter_id: user.userId, reported_id, reason: sanitizeContent(reason || '', 1000) } });
       return res.status(200).json({ success: true });
     }
 
-    // ========== LIKE USER (Vibe Check) ==========
+    // ========== LIKE USER ==========
     if (action === 'like-user' && req.method === 'POST') {
-      const { liker_id, liked_id, is_super = false } = req.body;
-      if (!liker_id || !liked_id) return res.status(400).json({ error: 'Missing user IDs' });
+      const user = requireAuth(req, res); if (!user) return;
+      const likerId = user.userId;
+      const { liked_id, is_super = false } = req.body;
+      if (!isValidUUID(liked_id)) return res.status(400).json({ error: 'Invalid user ID' });
+      if (liked_id === likerId) return res.status(400).json({ error: 'Cannot like yourself' });
 
-      // Check super like quota
+      // Rate limit likes
+      if (!rateLimit(`like:${likerId}`, 50, 60 * 60 * 1000)) {
+        return res.status(429).json({ error: '操作太頻繁' });
+      }
+
       if (is_super) {
-        const users = await supabaseQuery('users', { filters: `id=eq.${liker_id}`, select: 'super_likes_remaining,last_super_like_reset' });
+        const users = await supabaseQuery('users', { filters: `id=eq.${likerId}`, select: 'super_likes_remaining,last_super_like_reset' });
         const u = users[0];
         if (u) {
           const today = new Date().toISOString().split('T')[0];
           let remaining = u.super_likes_remaining ?? 3;
           if (u.last_super_like_reset !== today) {
-            remaining = 3; // Reset daily
-            await supabaseQuery('users', { method: 'PATCH', filters: `id=eq.${liker_id}`, body: { super_likes_remaining: 3, last_super_like_reset: today } });
+            remaining = 3;
+            await supabaseQuery('users', { method: 'PATCH', filters: `id=eq.${likerId}`, body: { super_likes_remaining: 3, last_super_like_reset: today } });
           }
           if (remaining <= 0) return res.status(400).json({ error: 'No super likes remaining today' });
-          await supabaseQuery('users', { method: 'PATCH', filters: `id=eq.${liker_id}`, body: { super_likes_remaining: remaining - 1 } });
+          await supabaseQuery('users', { method: 'PATCH', filters: `id=eq.${likerId}`, body: { super_likes_remaining: remaining - 1 } });
         }
       }
 
-      // Upsert like
       try {
-        await supabaseQuery('likes', { method: 'POST', body: { liker_id, liked_id, is_super } });
+        await supabaseQuery('likes', { method: 'POST', body: { liker_id: likerId, liked_id, is_super: !!is_super } });
       } catch (e) {
-        // Might already exist, update it
-        await supabaseQuery('likes', { method: 'PATCH', filters: `liker_id=eq.${liker_id}&liked_id=eq.${liked_id}`, body: { is_super } });
+        await supabaseQuery('likes', { method: 'PATCH', filters: `liker_id=eq.${likerId}&liked_id=eq.${liked_id}`, body: { is_super: !!is_super } });
       }
 
-      // Check for mutual like → auto-create match
       let matched = false;
       try {
-        const mutual = await supabaseQuery('likes', { filters: `liker_id=eq.${liked_id}&liked_id=eq.${liker_id}` });
+        const mutual = await supabaseQuery('likes', { filters: `liker_id=eq.${liked_id}&liked_id=eq.${likerId}` });
         if (mutual.length > 0) {
-          // Check if match already exists
           const existingMatch = await supabaseQuery('matches', {
-            filters: `or=(and(user1_id.eq.${liker_id},user2_id.eq.${liked_id}),and(user1_id.eq.${liked_id},user2_id.eq.${liker_id}))&status=eq.active`
+            filters: `or=(and(user1_id.eq.${likerId},user2_id.eq.${liked_id}),and(user1_id.eq.${liked_id},user2_id.eq.${likerId}))&status=eq.active`
           });
           if (existingMatch.length === 0) {
-            await supabaseQuery('matches', { method: 'POST', body: { user1_id: liker_id, user2_id: liked_id, status: 'active' } });
+            await supabaseQuery('matches', { method: 'POST', body: { user1_id: likerId, user2_id: liked_id, status: 'active' } });
             matched = true;
           }
         }
       } catch (e) {}
 
-      return res.status(200).json({ success: true, is_super, matched });
+      return res.status(200).json({ success: true, is_super: !!is_super, matched });
     }
 
-    // ========== GET LIKED BY (who liked me) ==========
+    // ========== GET LIKED BY ==========
     if (action === 'get-liked-by' && req.method === 'GET') {
-      const { user_id } = req.query;
-      if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+      const user = requireAuth(req, res); if (!user) return;
+      const userId = user.userId;
 
       const likes = await supabaseQuery('likes', {
-        filters: `liked_id=eq.${user_id}&order=created_at.desc`,
+        filters: `liked_id=eq.${userId}&order=created_at.desc`,
         select: '*'
       });
 
-      // Get liker profiles
       const results = await Promise.all(likes.map(async (like) => {
         try {
           const users = await supabaseQuery('users', {
@@ -398,49 +426,36 @@ export default async function handler(req, res) {
           let photos = [];
           try { photos = typeof u.photos === 'string' ? JSON.parse(u.photos) : (Array.isArray(u.photos) ? u.photos : []); } catch { photos = []; }
           return {
-            like_id: like.id,
-            is_super: like.is_super,
-            liked_at: like.created_at,
+            like_id: like.id, is_super: like.is_super, liked_at: like.created_at,
             profile: {
-              id: u.id,
-              gender: u.gender || 'other',
-              age: u.age || 20,
-              mbti: u.mbti || '????',
-              institution: u.school || '',
-              faculty: u.faculty || '',
-              interests: u.interests || [],
-              bio: u.bio || '',
-              sexuality: u.sexuality || '',
-              avatar_url: u.avatar_url || null,
-              photos: photos.filter(Boolean),
-              last_seen: u.last_seen || null,
+              id: u.id, gender: u.gender || 'other', age: u.age || 20, mbti: u.mbti || '????',
+              institution: u.school || '', faculty: u.faculty || '', interests: u.interests || [],
+              bio: u.bio || '', sexuality: u.sexuality || '', avatar_url: u.avatar_url || null,
+              photos: photos.filter(Boolean), last_seen: u.last_seen || null,
             }
           };
         } catch (e) { return null; }
       }));
 
-      // Also check which ones already matched (to filter out)
       let matchedIds = new Set();
       try {
         const matches = await supabaseQuery('matches', {
-          filters: `or=(user1_id.eq.${user_id},user2_id.eq.${user_id})&status=eq.active`,
+          filters: `or=(user1_id.eq.${userId},user2_id.eq.${userId})&status=eq.active`,
           select: 'user1_id,user2_id'
         });
         matches.forEach(m => {
-          if (m.user1_id !== user_id) matchedIds.add(m.user1_id);
-          if (m.user2_id !== user_id) matchedIds.add(m.user2_id);
+          if (m.user1_id !== userId) matchedIds.add(m.user1_id);
+          if (m.user2_id !== userId) matchedIds.add(m.user2_id);
         });
       } catch (e) {}
 
-      const filtered = results.filter(r => r && !matchedIds.has(r.profile.id));
-      return res.status(200).json({ liked_by: filtered });
+      return res.status(200).json({ liked_by: results.filter(r => r && !matchedIds.has(r.profile.id)) });
     }
 
     // ========== GET SUPER LIKES REMAINING ==========
     if (action === 'get-super-likes' && req.method === 'GET') {
-      const { user_id } = req.query;
-      if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
-      const users = await supabaseQuery('users', { filters: `id=eq.${user_id}`, select: 'super_likes_remaining,last_super_like_reset' });
+      const user = requireAuth(req, res); if (!user) return;
+      const users = await supabaseQuery('users', { filters: `id=eq.${user.userId}`, select: 'super_likes_remaining,last_super_like_reset' });
       const u = users[0];
       if (!u) return res.status(404).json({ error: 'User not found' });
       const today = new Date().toISOString().split('T')[0];

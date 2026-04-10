@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import { setCors, rateLimit, getClientIP } from './utils/security.mjs';
 
 const VERIFY_SECRET = process.env.VERIFY_SECRET;
 
@@ -18,18 +19,37 @@ function generateExpectedCodes(email, windowMinutes = 10) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const ip = getClientIP(req);
+
+  // Rate limit: 5 attempts per email per 10 min (prevents brute-force of 6-digit code)
+  if (!rateLimit(`verify:ip:${ip}`, 15, 10 * 60 * 1000)) {
+    return res.status(429).json({ error: '驗證嘗試太頻繁，請稍後再試' });
+  }
 
   try {
     const { email, code } = req.body;
     if (!email || !code) return res.status(400).json({ error: '請提供電郵和驗證碼' });
+    if (typeof email !== 'string' || typeof code !== 'string') {
+      return res.status(400).json({ error: '無效的輸入' });
+    }
 
-    const validCodes = generateExpectedCodes(email);
+    const emailLower = email.toLowerCase().trim();
+
+    // Per-email rate limit
+    if (!rateLimit(`verify:email:${emailLower}`, 5, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: '驗證嘗試太頻繁，請10分鐘後再試' });
+    }
+
+    // Only accept 6-digit codes
+    if (!/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: '驗證碼格式無效' });
+    }
+
+    const validCodes = generateExpectedCodes(emailLower);
     if (validCodes.includes(code)) {
       return res.status(200).json({ success: true, message: '驗證成功' });
     } else {

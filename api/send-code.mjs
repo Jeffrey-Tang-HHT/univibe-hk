@@ -1,9 +1,11 @@
 import { createHmac } from 'crypto';
 import { getUserByEmail } from './utils/supabase.mjs';
+import { setCors, rateLimit, getClientIP } from './utils/security.mjs';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const VERIFY_SECRET = process.env.VERIFY_SECRET;
-const TEST_EMAIL = 'hokhimtang@gmail.com';
+// Only allow test email bypass in development
+const TEST_EMAIL = process.env.NODE_ENV !== 'production' ? process.env.TEST_EMAIL : null;
 
 function generateCode(email) {
   const windowTime = Math.floor(Date.now() / (60 * 1000));
@@ -16,28 +18,38 @@ function generateCode(email) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
+  setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const ip = getClientIP(req);
+
+  // Rate limit: 3 codes per email per 10 min, 10 per IP per hour
+  if (!rateLimit(`sendcode:ip:${ip}`, 10, 60 * 60 * 1000)) {
+    return res.status(429).json({ error: '請求太頻繁，請稍後再試' });
+  }
+
   try {
     const { email } = req.body;
-    if (!email) return res.status(400).json({ error: '請提供電郵地址' });
+    if (!email || typeof email !== 'string') return res.status(400).json({ error: '請提供電郵地址' });
 
-    if (!email.endsWith('.edu.hk') && email !== TEST_EMAIL) {
+    const emailLower = email.toLowerCase().trim();
+
+    if (!emailLower.endsWith('.edu.hk') && emailLower !== TEST_EMAIL) {
       return res.status(400).json({ error: '請使用 .edu.hk 學校電郵' });
     }
 
-    // FIX: Check if email is already registered — prevent duplicate accounts
-    const existingUser = await getUserByEmail(email);
+    // Per-email rate limit
+    if (!rateLimit(`sendcode:email:${emailLower}`, 3, 10 * 60 * 1000)) {
+      return res.status(429).json({ error: '驗證碼發送太頻繁，請10分鐘後再試' });
+    }
+
+    const existingUser = await getUserByEmail(emailLower);
     if (existingUser) {
       return res.status(409).json({ error: '此電郵已被註冊，請直接登入' });
     }
 
-    const code = generateCode(email);
+    const code = generateCode(emailLower);
 
     if (!RESEND_API_KEY) {
       return res.status(500).json({ error: 'Email service not configured' });
@@ -50,9 +62,9 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'UniGo HK <onboarding@resend.dev>',
-        to: [email],
-        subject: `UniGo HK 驗證碼: ${code}`,
+        from: 'UniGo HK <noreply@yourdomain.com>',
+        to: [emailLower],
+        subject: `UniGo HK 驗證碼`,  // Don't put code in subject line
         html: `
           <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 30px; background: #1a1625; color: white; border-radius: 16px;">
             <h1 style="text-align: center; color: #f43f5e;">UniGo HK</h1>
@@ -61,7 +73,7 @@ export default async function handler(req, res) {
               <p style="color: #aaa; margin-bottom: 12px;">你的驗證碼:</p>
               <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #f43f5e;">${code}</div>
             </div>
-            <p style="text-align: center; color: #666; font-size: 12px;">此驗證碼10分鐘內有效</p>
+            <p style="text-align: center; color: #666; font-size: 12px;">此驗證碼10分鐘內有效。如非本人操作，請忽略此郵件。</p>
           </div>`
       })
     });
