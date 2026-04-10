@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
+import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
@@ -510,20 +511,26 @@ function resizeImage(file: File, maxW: number, maxH: number): Promise<string> {
 export default function Dating() {
   const [tab, setTab] = useState<DatingTab>("discover");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const getDatingLocal = () => { try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "{}"); } catch { return {}; } };
   const [profileSetup, setProfileSetup] = useState(() => {
-    try { const d = JSON.parse(localStorage.getItem("unigo-dating-profile") || ""); return !!d.mbti; } catch { return false; }
+    const d = getDatingLocal(); if (d.mbti) return true;
+    const u = getUser() as any; return !!(u?.mbti && u?.interests?.length >= 3);
   });
   const [selectedSexuality, setSelectedSexuality] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").sexuality || ["prefer_not_to_say"]; } catch { return ["prefer_not_to_say"]; }
+    const d = getDatingLocal(); if (d.sexuality) return d.sexuality;
+    const u = getUser() as any; const s = u?.sexuality; return s ? s.split(",") : ["prefer_not_to_say"];
   });
   const [selectedMbti, setSelectedMbti] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").mbti || ""; } catch { return ""; }
+    const d = getDatingLocal(); if (d.mbti) return d.mbti;
+    const u = getUser() as any; return u?.mbti || "";
   });
   const [selectedInterests, setSelectedInterests] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").interests || []; } catch { return []; }
+    const d = getDatingLocal(); if (d.interests?.length) return d.interests;
+    const u = getUser() as any; return u?.interests || [];
   });
   const [selectedIcebreakers, setSelectedIcebreakers] = useState<{ prompt: string; answer: string }[]>(() => {
-    try { return JSON.parse(localStorage.getItem("unigo-dating-profile") || "").icebreakers || []; } catch { return []; }
+    const d = getDatingLocal(); if (d.icebreakers?.length) return d.icebreakers;
+    return [];
   });
   const [editingIcebreakerIdx, setEditingIcebreakerIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -604,6 +611,26 @@ export default function Dating() {
       chatEndRef.current.scrollIntoView({ behavior: "auto" });
     }
   }, [activeChatId, chatMessages[activeChatId || ""]?.length]);
+
+  // Sync dating profile from server user data (handles login on new device)
+  useEffect(() => {
+    if (!user) return;
+    const u = user as any;
+    if (u.mbti && u.interests?.length >= 3) {
+      if (!profileSetup) setProfileSetup(true);
+      if (!selectedMbti && u.mbti) setSelectedMbti(u.mbti);
+      if (selectedInterests.length === 0 && u.interests?.length > 0) setSelectedInterests(u.interests);
+      if (u.sexuality && selectedSexuality[0] === "prefer_not_to_say") {
+        const parts = u.sexuality.split(",").filter(Boolean);
+        if (parts.length > 0 && parts[0] !== "prefer_not_to_say") setSelectedSexuality(parts);
+      }
+      // Keep localStorage in sync
+      const local = getDatingLocal();
+      if (!local.mbti) {
+        localStorage.setItem("unigo-dating-profile", JSON.stringify({ mbti: u.mbti, sexuality: u.sexuality ? u.sexuality.split(",") : ["prefer_not_to_say"], interests: u.interests, icebreakers: local.icebreakers || [] }));
+      }
+    }
+  }, [user]);
 
   // Load real discover profiles
   useEffect(() => {
