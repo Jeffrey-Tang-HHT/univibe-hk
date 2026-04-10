@@ -37,13 +37,14 @@ export default async function handler(req, res) {
     await updateLastLogin(user.id).catch(() => {});
     const token = createToken(user.id, user.username);
 
+    // Return all profile fields so localStorage has complete data
+    const { password_hash, ...profile } = user;
+    if (typeof profile.photos === 'string') { try { profile.photos = JSON.parse(profile.photos); } catch { profile.photos = []; } }
+    if (!Array.isArray(profile.photos)) profile.photos = [];
+
     return res.status(200).json({
       success: true, token,
-      user: {
-        id: user.id, email: user.email, username: user.username,
-        displayName: user.display_name, avatar_url: user.avatar_url,
-        gender: user.gender, school: user.school, faculty: user.faculty, mbti: user.mbti,
-      }
+      user: profile
     });
   } catch (err) {
     console.error('Login error:', err);

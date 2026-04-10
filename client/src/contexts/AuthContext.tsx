@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { getToken, getUser, logout as doLogout, updateProfile as doUpdateProfile, type User } from '../lib/auth';
+import { getToken, getUser, logout as doLogout, updateProfile as doUpdateProfile, fetchProfile, type User } from '../lib/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -41,6 +41,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Fetch full profile from server on mount to ensure localStorage has complete data
+  useEffect(() => {
+    if (token) {
+      fetchProfile().then(profile => {
+        if (profile) setUser(profile);
+      });
+    }
   }, []);
 
   const logout = () => {
