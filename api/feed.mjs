@@ -215,6 +215,36 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
+    // ========== DELETE POST ==========
+    if (action === 'delete-post' && req.method === 'DELETE') {
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+      const { post_id } = req.body;
+      if (!post_id || !isValidUUID(post_id)) return res.status(400).json({ error: 'Invalid post_id' });
+
+      const posts = await supabaseQuery('posts', { filters: `id=eq.${post_id}&user_id=eq.${userId}` });
+      if (posts.length === 0) return res.status(403).json({ error: 'Not your post' });
+
+      // Delete comments first, then post
+      await supabaseQuery('comments', { method: 'DELETE', filters: `post_id=eq.${post_id}` });
+      await supabaseQuery('post_likes', { method: 'DELETE', filters: `post_id=eq.${post_id}` });
+      await supabaseQuery('posts', { method: 'DELETE', filters: `id=eq.${post_id}` });
+      return res.status(200).json({ success: true });
+    }
+
+    // ========== REPORT POST ==========
+    if (action === 'report-post' && req.method === 'POST') {
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+      const { post_id, reason } = req.body;
+      if (!post_id || !isValidUUID(post_id)) return res.status(400).json({ error: 'Invalid post_id' });
+
+      if (!rateLimit(`report-post:${userId}`, 10, 60 * 60 * 1000)) {
+        return res.status(429).json({ error: '舉報太頻繁' });
+      }
+
+      await supabaseQuery('reports', { method: 'POST', body: { reporter_id: userId, reported_id: post_id, reason: sanitizeContent(reason || '', 500), type: 'post' } });
+      return res.status(200).json({ success: true });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error('Feed API error:', err);

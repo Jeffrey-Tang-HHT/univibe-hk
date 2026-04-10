@@ -1,6 +1,6 @@
 import { verifyToken } from '../lib/token.mjs';
 import { updateUser, getUserById } from '../lib/supabase.mjs';
-import { setCors, rateLimit, checkBodySize } from '../lib/security.mjs';
+import { setCors, rateLimit, checkBodySize, validateImageBytes } from '../lib/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -73,6 +73,11 @@ export default async function handler(req, res) {
     const buffer = Buffer.from(raw, 'base64');
 
     if (buffer.length > 2 * 1024 * 1024) return res.status(400).json({ error: 'Image too large (max 2MB)' });
+
+    // Verify actual file content matches declared MIME type
+    if (!validateImageBytes(buffer, mimeType)) {
+      return res.status(400).json({ error: 'File content does not match declared image type' });
+    }
 
     const ext = mimeType.split('/')[1] === 'png' ? 'png' : 'jpg';
     const fileName = `${decoded.userId}_${targetIndex}.${ext}`;

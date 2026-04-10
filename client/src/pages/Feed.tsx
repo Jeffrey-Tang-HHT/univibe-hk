@@ -5,14 +5,14 @@ import {
   Shield, MessageCircle, Heart, Share2, TrendingUp, BookOpen, Compass,
   DollarSign, Send, Ghost, School, GraduationCap, Plus, Search,
   LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench, X, Flame,
-  ChevronDown, ChevronUp, BarChart3, Trash2, ImagePlus
+  ChevronDown, ChevronUp, BarChart3, Trash2, ImagePlus, Flag, MoreVertical
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
-import { getPosts, createPost, togglePostLike, votePoll, getComments, addComment, deleteComment } from "@/lib/feed";
+import { getPosts, createPost, togglePostLike, votePoll, getComments, addComment, deleteComment, deletePost, reportPost } from "@/lib/feed";
 
 type Category = "all" | "trending" | "confessions" | "non-jupas" | "mbti" | "missed" | "salary" | "hku" | "cuhk" | "hkust" | "polyu" | "cityu" | "hkbu" | "exam" | "intern" | "relationship" | "housing";
 type PrivacyMode = "ghost" | "campus" | "major";
@@ -338,9 +338,9 @@ export default function Feed() {
               </button>
             </div>
 
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+            <div className="flex gap-3 mb-6 overflow-x-auto pb-2 scrollbar-hide">
               {categories.map((cat) => { const Icon = cat.icon; return (
-                <button key={cat.key} onClick={() => setCategory(cat.key)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${category === cat.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}><Icon className="w-3 h-3" />{cat.label}</button>
+                <button key={cat.key} onClick={() => setCategory(cat.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${category === cat.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}><Icon className="w-3.5 h-3.5" />{cat.label}</button>
               ); })}
             </div>
 
@@ -437,6 +437,16 @@ export default function Feed() {
                         <div>
                           <span className="text-sm font-medium text-foreground">{anon ? anon.name : (lang === "zh" ? post.authorTag : (post.authorTag_en || post.authorTag))}</span>
                           <span className="text-xs text-muted-foreground ml-2">· {formatTimeAgo(post.created_at, lang)}</span>
+                        </div>
+                        <div className="ml-auto flex items-center gap-1">
+                          {post.user_id === user?.id && (
+                            <button onClick={async () => { if (confirm(lang === "zh" ? "確定刪除此帖子？" : "Delete this post?")) { try { await deletePost(post.id); setPosts(prev => prev.filter(p => p.id !== post.id)); toast.success(lang === "zh" ? "已刪除" : "Deleted"); } catch { toast.error(lang === "zh" ? "刪除失敗" : "Failed"); } } }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          )}
+                          {post.user_id !== user?.id && (
+                            <button onClick={async () => { const reason = prompt(lang === "zh" ? "舉報原因（可選）：" : "Reason (optional):"); try { await reportPost(post.id, reason || ""); toast.success(lang === "zh" ? "已舉報" : "Reported"); } catch { toast.error(lang === "zh" ? "舉報失敗" : "Failed"); } }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors"><Flag className="w-3.5 h-3.5" /></button>
+                          )}
                         </div>
                       </div>
                       <p className="text-sm text-foreground leading-relaxed mb-4 whitespace-pre-wrap">{post.content}</p>

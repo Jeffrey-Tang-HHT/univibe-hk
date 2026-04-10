@@ -75,3 +75,19 @@ export async function deleteComment(commentId: string, postId: string) {
   });
   return res.json();
 }
+
+export async function deletePost(postId: string) {
+  const res = await safeFetch(`${API}?action=delete-post`, {
+    method: 'DELETE', headers: authHeaders(),
+    body: JSON.stringify({ post_id: postId }),
+  });
+  return res.json();
+}
+
+export async function reportPost(postId: string, reason: string) {
+  const res = await safeFetch(`${API}?action=report-post`, {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ post_id: postId, reason }),
+  });
+  return res.json();
+}

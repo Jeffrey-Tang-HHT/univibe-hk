@@ -1,5 +1,5 @@
 import { supabaseQuery } from '../lib/supabase.mjs';
-import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent, checkBodySize } from '../lib/security.mjs';
+import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent, checkBodySize, validateImageBytes } from '../lib/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -210,6 +210,11 @@ export default async function handler(req, res) {
 
         if (buffer.length > 5 * 1024 * 1024) {
           return res.status(400).json({ error: 'Image too large (max 5MB)' });
+        }
+
+        // Verify actual file content matches declared MIME type
+        if (!validateImageBytes(buffer, mimeType)) {
+          return res.status(400).json({ error: 'File content does not match declared image type' });
         }
 
         const ext = mimeType.includes('png') ? 'png' : mimeType.includes('gif') ? 'gif' : 'jpg';
