@@ -2,10 +2,6 @@
 
 const API = '/api/chat';
 
-function headers() {
-  return { 'Content-Type': 'application/json' };
-}
-
 function authHeaders() {
   const token = localStorage.getItem('unigo_token');
   return { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
@@ -13,25 +9,25 @@ function authHeaders() {
 
 export async function createMatch(userId: string, targetId: string) {
   const res = await fetch(`${API}?action=create-match`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ user1_id: userId, user2_id: targetId }),
   });
   return res.json();
 }
 
 export async function getMatches(userId: string) {
-  const res = await fetch(`${API}?action=get-matches&user_id=${userId}`);
+  const res = await fetch(`${API}?action=get-matches&user_id=${userId}`, { headers: authHeaders() });
   return res.json();
 }
 
 export async function getMessages(matchId: string, userId: string) {
-  const res = await fetch(`${API}?action=get-messages&match_id=${matchId}&user_id=${userId}`);
+  const res = await fetch(`${API}?action=get-messages&match_id=${matchId}&user_id=${userId}`, { headers: authHeaders() });
   return res.json();
 }
 
 export async function sendMessage(matchId: string, senderId: string, content: string) {
   const res = await fetch(`${API}?action=send-message`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ match_id: matchId, sender_id: senderId, content, type: 'text' }),
   });
   return res.json();
@@ -39,7 +35,7 @@ export async function sendMessage(matchId: string, senderId: string, content: st
 
 export async function sendVoiceMessage(matchId: string, senderId: string, duration: number) {
   const res = await fetch(`${API}?action=send-message`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ match_id: matchId, sender_id: senderId, content: '🎤', type: 'voice', voice_duration: duration }),
   });
   return res.json();
@@ -47,14 +43,14 @@ export async function sendVoiceMessage(matchId: string, senderId: string, durati
 
 export async function sendImageMessage(matchId: string, senderId: string, imageBase64: string) {
   const res = await fetch(`${API}?action=send-message`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ match_id: matchId, sender_id: senderId, content: '📷', type: 'image', image_base64: imageBase64 }),
   });
   return res.json();
 }
 
 export async function discoverProfiles(userId: string) {
-  const res = await fetch(`${API}?action=discover&user_id=${userId}`);
+  const res = await fetch(`${API}?action=discover&user_id=${userId}`, { headers: authHeaders() });
   return res.json();
 }
 
@@ -94,7 +90,7 @@ export async function getUnmatched(userId: string) {
 
 export async function deleteMessage(messageId: string, userId: string, forBoth: boolean) {
   const res = await fetch(`${API}?action=delete-message`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ message_id: messageId, user_id: userId, for_both: forBoth }),
   });
   return res.json();
@@ -102,7 +98,7 @@ export async function deleteMessage(messageId: string, userId: string, forBoth: 
 
 export async function blockUser(blockerId: string, blockedId: string) {
   const res = await fetch(`${API}?action=block`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ blocker_id: blockerId, blocked_id: blockedId }),
   });
   return res.json();
@@ -110,7 +106,7 @@ export async function blockUser(blockerId: string, blockedId: string) {
 
 export async function reportUser(reporterId: string, reportedId: string, reason: string) {
   const res = await fetch(`${API}?action=report`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ reporter_id: reporterId, reported_id: reportedId, reason }),
   });
   return res.json();
@@ -118,7 +114,7 @@ export async function reportUser(reporterId: string, reportedId: string, reason:
 
 export async function heartbeat(userId: string) {
   const res = await fetch(`${API}?action=heartbeat`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ user_id: userId }),
   });
   return res.json();
@@ -155,18 +151,18 @@ export function getOnlineStatus(lastSeen: string | null, lang: string): { online
 
 export async function likeUser(likerId: string, likedId: string, isSuper = false) {
   const res = await fetch(`${API}?action=like-user`, {
-    method: 'POST', headers: headers(),
+    method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ liker_id: likerId, liked_id: likedId, is_super: isSuper }),
   });
   return res.json();
 }
 
 export async function getLikedBy(userId: string) {
-  const res = await fetch(`${API}?action=get-liked-by&user_id=${userId}`);
+  const res = await fetch(`${API}?action=get-liked-by&user_id=${userId}`, { headers: authHeaders() });
   return res.json();
 }
 
 export async function getSuperLikesRemaining(userId: string) {
-  const res = await fetch(`${API}?action=get-super-likes&user_id=${userId}`);
+  const res = await fetch(`${API}?action=get-super-likes&user_id=${userId}`, { headers: authHeaders() });
   return res.json();
 }
