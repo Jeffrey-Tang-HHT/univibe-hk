@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       });
 
       const matches = await supabaseQuery('matches', {
-        filters: `or=(user1_id.eq.${userId},user2_id.eq.${userId})`,
+        filters: `status=eq.active&or=(user1_id.eq.${userId},user2_id.eq.${userId})`,
         select: 'user1_id,user2_id'
       });
 
