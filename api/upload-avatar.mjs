@@ -1,6 +1,6 @@
 import { verifyToken } from '../lib/token.mjs';
 import { updateUser, getUserById } from '../lib/supabase.mjs';
-import { setCors, rateLimit } from '../lib/security.mjs';
+import { setCors, rateLimit, checkBodySize } from '../lib/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -9,6 +9,9 @@ const MAX_PHOTOS = 5;
 export default async function handler(req, res) {
   setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // Max 5MB for avatar uploads
+  if (!checkBodySize(req, res, 5 * 1024 * 1024)) return;
 
   try {
     const auth = req.headers.authorization;

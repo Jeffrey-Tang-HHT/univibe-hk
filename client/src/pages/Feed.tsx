@@ -420,15 +420,15 @@ export default function Feed() {
             ) : filteredPosts.length === 0 ? (
               <div className="text-center py-16 rounded-2xl border border-border bg-card"><MessageCircle className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" /><p className="text-foreground font-medium">{lang === "zh" ? "暫無帖子" : "No posts yet"}</p><p className="text-sm text-muted-foreground mt-1">{lang === "zh" ? "做第一個發帖嘅人！" : "Be the first to post!"}</p></div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {filteredPosts.map((post, i) => {
                   const commentsOpen = expandedComments.has(post.id);
                   const anon = post.privacyMode === "ghost" ? getAnonAvatar(post.id, lang) : null;
                   const Icon = privacyIcons[post.privacyMode];
                   return (
                     <motion.article key={post.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                      className="p-5 rounded-xl border border-border bg-card hover:border-border/80 transition-all">
-                      <div className="flex items-center gap-2.5 mb-3">
+                      className="p-6 rounded-xl border border-border bg-card hover:border-border/80 transition-all">
+                      <div className="flex items-center gap-2.5 mb-4">
                         {anon ? (
                           <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-base">{anon.emoji}</div>
                         ) : (
@@ -439,7 +439,7 @@ export default function Feed() {
                           <span className="text-xs text-muted-foreground ml-2">· {formatTimeAgo(post.created_at, lang)}</span>
                         </div>
                       </div>
-                      <p className="text-sm text-foreground leading-relaxed mb-3">{post.content}</p>
+                      <p className="text-sm text-foreground leading-relaxed mb-4 whitespace-pre-wrap">{post.content}</p>
                       {post.image_url && (
                         <div className="mb-3 rounded-xl overflow-hidden border border-border">
                           <img src={post.image_url} alt="" className="w-full max-h-80 object-cover cursor-pointer hover:opacity-95 transition-opacity" onClick={() => window.open(post.image_url, '_blank')} />

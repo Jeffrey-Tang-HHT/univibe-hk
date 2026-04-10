@@ -7,6 +7,16 @@ function authHeaders() {
   return { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
 }
 
+async function safeFetch(url: string, opts?: RequestInit): Promise<Response> {
+  const res = await fetch(url, opts);
+  if (res.status === 401) {
+    localStorage.removeItem('unigo_token');
+    localStorage.removeItem('unigo_user');
+    window.location.href = '/login';
+  }
+  return res;
+}
+
 export async function getPosts(category = 'all', limit = 30, offset = 0) {
   const params = new URLSearchParams({ action: 'get-posts', limit: String(limit), offset: String(offset) });
   if (category !== 'all') params.set('category', category);
@@ -22,7 +32,7 @@ export async function createPost(data: {
   poll_question?: string;
   poll_options?: string[];
 }) {
-  const res = await fetch(`${API}?action=create-post`, {
+  const res = await safeFetch(`${API}?action=create-post`, {
     method: 'POST', headers: authHeaders(),
     body: JSON.stringify(data),
   });
@@ -30,7 +40,7 @@ export async function createPost(data: {
 }
 
 export async function togglePostLike(postId: string) {
-  const res = await fetch(`${API}?action=toggle-like`, {
+  const res = await safeFetch(`${API}?action=toggle-like`, {
     method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ post_id: postId }),
   });
@@ -38,7 +48,7 @@ export async function togglePostLike(postId: string) {
 }
 
 export async function votePoll(postId: string, optionIndex: number) {
-  const res = await fetch(`${API}?action=vote-poll`, {
+  const res = await safeFetch(`${API}?action=vote-poll`, {
     method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ post_id: postId, option_index: optionIndex }),
   });
@@ -46,12 +56,12 @@ export async function votePoll(postId: string, optionIndex: number) {
 }
 
 export async function getComments(postId: string) {
-  const res = await fetch(`${API}?action=get-comments&post_id=${postId}`, { headers: authHeaders() });
+  const res = await fetch(`${API}?action=get-comments&post_id=${encodeURIComponent(postId)}`, { headers: authHeaders() });
   return res.json();
 }
 
 export async function addComment(postId: string, content: string, privacyMode = 'ghost') {
-  const res = await fetch(`${API}?action=add-comment`, {
+  const res = await safeFetch(`${API}?action=add-comment`, {
     method: 'POST', headers: authHeaders(),
     body: JSON.stringify({ post_id: postId, content, privacy_mode: privacyMode }),
   });
@@ -59,7 +69,7 @@ export async function addComment(postId: string, content: string, privacyMode = 
 }
 
 export async function deleteComment(commentId: string, postId: string) {
-  const res = await fetch(`${API}?action=delete-comment`, {
+  const res = await safeFetch(`${API}?action=delete-comment`, {
     method: 'DELETE', headers: authHeaders(),
     body: JSON.stringify({ comment_id: commentId, post_id: postId }),
   });

@@ -34,6 +34,16 @@ export default async function handler(req, res) {
           if (Array.isArray(updates[key])) {
             sanitized[key] = updates[key].slice(0, 20).map(i => sanitizeText(String(i), 50));
           }
+        } else if (key === 'avatar_url') {
+          // Only allow Supabase storage URLs or null
+          if (updates[key] === null || (typeof updates[key] === 'string' && updates[key].startsWith(process.env.SUPABASE_URL))) {
+            sanitized[key] = updates[key];
+          }
+        } else if (key === 'photos') {
+          // Only allow arrays of Supabase storage URLs
+          if (Array.isArray(updates[key])) {
+            sanitized[key] = updates[key].slice(0, 5).filter(u => typeof u === 'string' && u.startsWith(process.env.SUPABASE_URL));
+          }
         } else {
           sanitized[key] = updates[key];
         }

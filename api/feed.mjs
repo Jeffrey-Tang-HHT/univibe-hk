@@ -1,6 +1,6 @@
 import { supabaseQuery, getUserById } from '../lib/supabase.mjs';
 import { verifyToken } from '../lib/token.mjs';
-import { setCors, rateLimit, getClientIP, sanitizeContent, isValidUUID } from '../lib/security.mjs';
+import { setCors, rateLimit, getClientIP, sanitizeContent, isValidUUID, checkBodySize } from '../lib/security.mjs';
 
 function getAuthorTag(user, privacyMode) {
   if (privacyMode === 'ghost') return { author: '匿名', authorTag: '匿名', authorTag_en: 'Anonymous' };
@@ -11,6 +11,7 @@ function getAuthorTag(user, privacyMode) {
 export default async function handler(req, res) {
   setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'POST' && !checkBodySize(req, res, 1024 * 1024)) return;
 
   const action = req.query.action;
 

@@ -1,5 +1,5 @@
 import { supabaseQuery } from '../lib/supabase.mjs';
-import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent } from '../lib/security.mjs';
+import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent, checkBodySize } from '../lib/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -10,6 +10,12 @@ export default async function handler(req, res) {
 
   const action = req.query.action;
   const ip = getClientIP(req);
+
+  // Reject oversized request bodies (10MB max for image uploads, 1MB otherwise)
+  if (req.method === 'POST') {
+    const maxSize = action === 'send-message' ? 10 * 1024 * 1024 : 1024 * 1024;
+    if (!checkBodySize(req, res, maxSize)) return;
+  }
 
   try {
     // ========== HEARTBEAT ==========
