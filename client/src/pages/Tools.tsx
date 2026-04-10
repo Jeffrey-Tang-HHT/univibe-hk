@@ -6,7 +6,7 @@ import {
   DollarSign, MapPin, GraduationCap, Brain, Notebook, FileText,
   LogOut, User, Globe, Moon, Sun, Home, HeartHandshake, Wrench, X,
   Play, Pause, RotateCcw, Plus, Trash2, Check, ChevronDown, ChevronLeft, ChevronRight,
-  Users, Target, Star, Minus
+  Users, Target, Star, Minus, ExternalLink, Bookmark, AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,7 +14,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 
-type ActiveTool = null | "pomodoro" | "deadline" | "exam" | "expense" | "notes" | "splitbill" | "gpasim" | "coursereview" | "cgpacalc" | "flashcards";
+type ActiveTool = null | "pomodoro" | "deadline" | "exam" | "expense" | "notes" | "splitbill" | "gpasim" | "coursereview" | "cgpacalc" | "flashcards" | "examcountdown" | "quicklinks";
 
 // ==================== POMODORO TIMER ====================
 function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void }) {
@@ -1059,6 +1059,179 @@ function FlashcardsTool({ lang, onClose }: { lang: string; onClose: () => void }
   );
 }
 
+// ==================== EXAM COUNTDOWN ====================
+function ExamCountdown({ lang, onClose }: { lang: string; onClose: () => void }) {
+  const [exams, setExams] = useState<{ id: string; name: string; date: string; time: string; venue: string }[]>(() => {
+    try { return JSON.parse(localStorage.getItem("unigo-exams") || "[]"); } catch { return []; }
+  });
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState(""); const [date, setDate] = useState(""); const [time, setTime] = useState("09:00"); const [venue, setVenue] = useState("");
+  const [now, setNow] = useState(Date.now());
+
+  const save = (e: typeof exams) => { setExams(e); localStorage.setItem("unigo-exams", JSON.stringify(e)); };
+
+  // Tick every minute
+  useState(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); });
+
+  const addExam = () => {
+    if (!name || !date) return;
+    save([...exams, { id: `ex_${Date.now()}`, name, date, time, venue }].sort((a, b) => new Date(a.date + "T" + a.time).getTime() - new Date(b.date + "T" + b.time).getTime()));
+    setName(""); setDate(""); setTime("09:00"); setVenue(""); setShowAdd(false);
+  };
+
+  const getCountdown = (date: string, time: string) => {
+    const ms = new Date(date + "T" + time).getTime() - now;
+    if (ms <= 0) return { days: 0, hours: 0, mins: 0, passed: true };
+    const days = Math.floor(ms / 86400000);
+    const hours = Math.floor((ms % 86400000) / 3600000);
+    const mins = Math.floor((ms % 3600000) / 60000);
+    return { days, hours, mins, passed: false };
+  };
+
+  const getUrgencyColor = (days: number) => days <= 1 ? "text-red-500" : days <= 3 ? "text-orange-500" : days <= 7 ? "text-yellow-500" : "text-neon-emerald";
+  const getUrgencyBg = (days: number) => days <= 1 ? "bg-red-500/10 border-red-500/20" : days <= 3 ? "bg-orange-500/10 border-orange-500/20" : days <= 7 ? "bg-yellow-500/10 border-yellow-500/20" : "bg-card border-border";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-foreground text-lg">{lang === "zh" ? "考試倒數" : "Exam Countdown"}</h3>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setShowAdd(!showAdd)} className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center hover:bg-primary/90"><Plus className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        </div>
+      </div>
+
+      {showAdd && (
+        <div className="mb-4 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-2">
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={lang === "zh" ? "考試名稱 (e.g. COMP3230 Final)" : "Exam name"}
+            className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none" autoFocus />
+          <div className="flex gap-2">
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground outline-none" />
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-28 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground outline-none" />
+          </div>
+          <input type="text" value={venue} onChange={e => setVenue(e.target.value)} placeholder={lang === "zh" ? "地點 (e.g. LG1/F Hall)" : "Venue (optional)"}
+            className="w-full h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none" />
+          <div className="flex gap-2">
+            <button onClick={addExam} disabled={!name || !date} className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-40">{lang === "zh" ? "新增" : "Add"}</button>
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-lg bg-muted text-muted-foreground text-sm">{lang === "zh" ? "取消" : "Cancel"}</button>
+          </div>
+        </div>
+      )}
+
+      {exams.length === 0 ? (
+        <div className="text-center py-12 rounded-2xl border border-border bg-card">
+          <CalendarDays className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-foreground font-medium">{lang === "zh" ? "未有考試" : "No exams added"}</p>
+          <p className="text-xs text-muted-foreground mt-1">{lang === "zh" ? "新增考試開始倒數" : "Add an exam to start counting down"}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {exams.map(exam => {
+            const cd = getCountdown(exam.date, exam.time);
+            return (
+              <div key={exam.id} className={`p-4 rounded-xl border ${cd.passed ? "bg-muted/50 border-border opacity-50" : getUrgencyBg(cd.days)}`}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h4 className="font-semibold text-foreground text-sm">{exam.name}</h4>
+                    <p className="text-xs text-muted-foreground">{exam.date} · {exam.time}{exam.venue ? ` · ${exam.venue}` : ""}</p>
+                  </div>
+                  <button onClick={() => save(exams.filter(e => e.id !== exam.id))} className="text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+                {cd.passed ? (
+                  <p className="text-xs text-muted-foreground">{lang === "zh" ? "已完成 ✓" : "Completed ✓"}</p>
+                ) : (
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-2xl font-bold ${getUrgencyColor(cd.days)}`}>{cd.days}</span>
+                    <span className="text-xs text-muted-foreground mr-2">{lang === "zh" ? "日" : "d"}</span>
+                    <span className={`text-lg font-bold ${getUrgencyColor(cd.days)}`}>{cd.hours}</span>
+                    <span className="text-xs text-muted-foreground mr-2">{lang === "zh" ? "時" : "h"}</span>
+                    <span className={`text-lg font-bold ${getUrgencyColor(cd.days)}`}>{cd.mins}</span>
+                    <span className="text-xs text-muted-foreground">{lang === "zh" ? "分" : "m"}</span>
+                    {cd.days <= 1 && <AlertTriangle className="w-4 h-4 text-red-500 ml-2" />}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== QUICK LINKS ====================
+function QuickLinks({ lang, onClose }: { lang: string; onClose: () => void }) {
+  const linkGroups = [
+    {
+      title: lang === "zh" ? "📚 學校系統" : "📚 University Systems",
+      links: [
+        { name: "HKU Portal", url: "https://hkuportal.hku.hk", desc: lang === "zh" ? "港大入口網站" : "HKU main portal" },
+        { name: "CUHK CUSIS", url: "https://cusis.cuhk.edu.hk", desc: lang === "zh" ? "中大學生資訊系統" : "CUHK student info system" },
+        { name: "HKUST Canvas", url: "https://canvas.ust.hk", desc: lang === "zh" ? "科大學習平台" : "HKUST learning platform" },
+        { name: "PolyU eStudent", url: "https://www38.polyu.edu.hk/eStudent", desc: lang === "zh" ? "理大學生系統" : "PolyU student system" },
+        { name: "CityU AIMS", url: "https://banweb.cityu.edu.hk", desc: lang === "zh" ? "城大學術資訊系統" : "CityU academic info" },
+      ],
+    },
+    {
+      title: lang === "zh" ? "📖 學習資源" : "📖 Study Resources",
+      links: [
+        { name: "Notion", url: "https://notion.so", desc: lang === "zh" ? "筆記 + 整理工具" : "Notes & organization" },
+        { name: "Quizlet", url: "https://quizlet.com", desc: lang === "zh" ? "記憶卡平台" : "Flashcard platform" },
+        { name: "Grammarly", url: "https://grammarly.com", desc: lang === "zh" ? "英文寫作改錯" : "English writing assistant" },
+        { name: "Wolfram Alpha", url: "https://wolframalpha.com", desc: lang === "zh" ? "數學計算引擎" : "Math computation engine" },
+        { name: "Google Scholar", url: "https://scholar.google.com", desc: lang === "zh" ? "學術論文搜尋" : "Academic paper search" },
+      ],
+    },
+    {
+      title: lang === "zh" ? "💼 求職實習" : "💼 Jobs & Internships",
+      links: [
+        { name: "LinkedIn", url: "https://linkedin.com", desc: lang === "zh" ? "職業社交平台" : "Professional network" },
+        { name: "JobsDB", url: "https://hk.jobsdb.com", desc: lang === "zh" ? "香港搵工平台" : "HK job search" },
+        { name: "JIJIS (HKU)", url: "https://jijis.hku.hk", desc: lang === "zh" ? "港大就業資訊" : "HKU career services" },
+        { name: "Glassdoor", url: "https://glassdoor.com", desc: lang === "zh" ? "公司評價 + 薪酬" : "Company reviews & salaries" },
+      ],
+    },
+    {
+      title: lang === "zh" ? "🚌 交通生活" : "🚌 Transport & Life",
+      links: [
+        { name: "MTR", url: "https://mtr.com.hk", desc: lang === "zh" ? "港鐵路線圖 + 車費" : "MTR routes & fares" },
+        { name: "KMB", url: "https://kmb.hk", desc: lang === "zh" ? "九巴路線查詢" : "KMB bus routes" },
+        { name: "CityBus", url: "https://citybus.com.hk", desc: lang === "zh" ? "城巴路線查詢" : "Citybus routes" },
+        { name: "OpenRice", url: "https://openrice.com", desc: lang === "zh" ? "搵食好去處" : "Restaurant reviews" },
+      ],
+    },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-foreground text-lg">{lang === "zh" ? "常用連結" : "Quick Links"}</h3>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+      </div>
+
+      <div className="space-y-5">
+        {linkGroups.map(group => (
+          <div key={group.title}>
+            <h4 className="text-sm font-bold text-foreground mb-2">{group.title}</h4>
+            <div className="space-y-1.5">
+              {group.links.map(link => (
+                <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/20 hover:bg-primary/5 transition-all group">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">{link.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{link.desc}</p>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary flex-shrink-0" />
+                </a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ==================== MAIN TOOLS PAGE ====================
 export default function Tools() {
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
@@ -1081,6 +1254,8 @@ export default function Tools() {
     { key: "expense" as ActiveTool, icon: DollarSign, label: lang === "zh" ? "消費記錄" : "Expense Tracker", desc: lang === "zh" ? "記錄每日支出" : "Track daily expenses", color: "from-emerald-500 to-teal-500" },
     { key: "cgpacalc" as ActiveTool, icon: Calculator, label: lang === "zh" ? "GPA 計算器" : "GPA Calculator", desc: lang === "zh" ? "計算你嘅 CGPA" : "Calculate your cumulative GPA", color: "from-indigo-500 to-blue-500" },
     { key: "flashcards" as ActiveTool, icon: Notebook, label: lang === "zh" ? "記憶卡" : "Flashcards", desc: lang === "zh" ? "自製記憶卡溫書" : "Create flashcards to study", color: "from-cyan-500 to-teal-400" },
+    { key: "examcountdown" as ActiveTool, icon: AlertTriangle, label: lang === "zh" ? "考試倒數" : "Exam Countdown", desc: lang === "zh" ? "倒數你嘅考試日期" : "Countdown to your exams", color: "from-red-500 to-orange-500" },
+    { key: "quicklinks" as ActiveTool, icon: Bookmark, label: lang === "zh" ? "常用連結" : "Quick Links", desc: lang === "zh" ? "學校系統、學習、求職" : "University, study & career links", color: "from-gray-500 to-slate-500" },
   ];
 
   return (
@@ -1174,6 +1349,8 @@ export default function Tools() {
                   {activeTool === "expense" && <ExpenseTracker lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "cgpacalc" && <CGPACalculator lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "flashcards" && <FlashcardsTool lang={lang} onClose={() => setActiveTool(null)} />}
+                  {activeTool === "examcountdown" && <ExamCountdown lang={lang} onClose={() => setActiveTool(null)} />}
+                  {activeTool === "quicklinks" && <QuickLinks lang={lang} onClose={() => setActiveTool(null)} />}
                 </motion.div>
               )}
             </AnimatePresence>
