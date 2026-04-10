@@ -1,5 +1,5 @@
-import { supabaseQuery } from './utils/supabase.mjs';
-import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent } from './utils/security.mjs';
+import { supabaseQuery } from '../lib/supabase.mjs';
+import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent } from '../lib/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;

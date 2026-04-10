@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto';
-import { setCors, rateLimit, getClientIP } from './utils/security.mjs';
+import { setCors, rateLimit, getClientIP } from '../lib/security.mjs';
 
 const VERIFY_SECRET = process.env.VERIFY_SECRET;
 

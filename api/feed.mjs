@@ -1,6 +1,6 @@
-import { supabaseQuery, getUserById } from './utils/supabase.mjs';
-import { verifyToken } from './utils/token.mjs';
-import { setCors, rateLimit, getClientIP, sanitizeContent, isValidUUID } from './utils/security.mjs';
+import { supabaseQuery, getUserById } from '../lib/supabase.mjs';
+import { verifyToken } from '../lib/token.mjs';
+import { setCors, rateLimit, getClientIP, sanitizeContent, isValidUUID } from '../lib/security.mjs';
 
 function getAuthorTag(user, privacyMode) {
   if (privacyMode === 'ghost') return { author: '匿名', authorTag: '匿名', authorTag_en: 'Anonymous' };

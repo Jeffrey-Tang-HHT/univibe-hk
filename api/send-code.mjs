@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
-import { getUserByEmail } from './utils/supabase.mjs';
-import { setCors, rateLimit, getClientIP } from './utils/security.mjs';
+import { getUserByEmail } from '../lib/supabase.mjs';
+import { setCors, rateLimit, getClientIP } from '../lib/security.mjs';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const VERIFY_SECRET = process.env.VERIFY_SECRET;

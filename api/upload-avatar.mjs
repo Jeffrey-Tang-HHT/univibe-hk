@@ -1,6 +1,6 @@
-import { verifyToken } from './utils/token.mjs';
-import { updateUser, getUserById } from './utils/supabase.mjs';
-import { setCors, rateLimit } from './utils/security.mjs';
+import { verifyToken } from '../lib/token.mjs';
+import { updateUser, getUserById } from '../lib/supabase.mjs';
+import { setCors, rateLimit } from '../lib/security.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;

@@ -1,6 +1,6 @@
-import { getUserById } from './utils/supabase.mjs';
-import { verifyToken } from './utils/token.mjs';
-import { setCors } from './utils/security.mjs';
+import { getUserById } from '../lib/supabase.mjs';
+import { verifyToken } from '../lib/token.mjs';
+import { setCors } from '../lib/security.mjs';
 
 export default async function handler(req, res) {
   setCors(req, res);

@@ -1,6 +1,6 @@
-import { updateUser, getUserById } from './utils/supabase.mjs';
-import { verifyToken } from './utils/token.mjs';
-import { setCors, sanitizeText, rateLimit } from './utils/security.mjs';
+import { updateUser, getUserById } from '../lib/supabase.mjs';
+import { verifyToken } from '../lib/token.mjs';
+import { setCors, sanitizeText, rateLimit } from '../lib/security.mjs';
 
 const ALLOWED_FIELDS = ['display_name', 'avatar_url', 'photos', 'gender', 'sexuality', 'school', 'faculty', 'district', 'mbti', 'age', 'bio', 'relationship_type', 'religion', 'interests', 'language'];
 const TEXT_FIELDS = ['display_name', 'gender', 'sexuality', 'school', 'faculty', 'district', 'mbti', 'bio', 'relationship_type', 'religion', 'language'];

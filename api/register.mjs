@@ -1,7 +1,7 @@
-import { insertUser, getUserByUsername, getUserByEmail } from './utils/supabase.mjs';
-import { hashPassword } from './utils/password.mjs';
-import { createToken } from './utils/token.mjs';
-import { setCors, rateLimit, getClientIP, sanitizeText } from './utils/security.mjs';
+import { insertUser, getUserByUsername, getUserByEmail } from '../lib/supabase.mjs';
+import { hashPassword } from '../lib/password.mjs';
+import { createToken } from '../lib/token.mjs';
+import { setCors, rateLimit, getClientIP, sanitizeText } from '../lib/security.mjs';
 
 export default async function handler(req, res) {
   setCors(req, res);
