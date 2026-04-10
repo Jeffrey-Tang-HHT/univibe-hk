@@ -298,3 +298,12 @@ html {
   --chart-1: oklch(0.72 0.15 350); --chart-2: oklch(0.6 0.15 290);
   --sidebar-primary: oklch(0.72 0.15 350); --sidebar-ring: oklch(0.72 0.15 350);
 }
+
+/* Hide scrollbar but keep scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

@@ -14,7 +14,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
 
-type ActiveTool = null | "pomodoro" | "deadline" | "exam" | "expense" | "notes" | "splitbill" | "gpasim" | "coursereview";
+type ActiveTool = null | "pomodoro" | "deadline" | "exam" | "expense" | "notes" | "splitbill" | "gpasim" | "coursereview" | "cgpacalc" | "flashcards";
 
 // ==================== POMODORO TIMER ====================
 function PomodoroTimer({ lang, onClose }: { lang: string; onClose: () => void }) {
@@ -819,6 +819,246 @@ function CourseReview({ lang, onClose }: { lang: string; onClose: () => void }) 
   );
 }
 
+// ==================== CGPA CALCULATOR ====================
+function CGPACalculator({ lang, onClose }: { lang: string; onClose: () => void }) {
+  const [courses, setCourses] = useState([
+    { id: "1", name: "", credits: 3, grade: "A-" },
+    { id: "2", name: "", credits: 3, grade: "B+" },
+    { id: "3", name: "", credits: 3, grade: "A" },
+    { id: "4", name: "", credits: 3, grade: "B" },
+  ]);
+
+  const gradePoints: Record<string, number> = {
+    "A+": 4.3, "A": 4.0, "A-": 3.7, "B+": 3.3, "B": 3.0, "B-": 2.7,
+    "C+": 2.3, "C": 2.0, "C-": 1.7, "D+": 1.3, "D": 1.0, "F": 0,
+  };
+  const grades = Object.keys(gradePoints);
+
+  const totalCredits = courses.reduce((s, c) => s + c.credits, 0);
+  const totalPoints = courses.reduce((s, c) => s + c.credits * (gradePoints[c.grade] ?? 0), 0);
+  const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+
+  const addCourse = () => setCourses([...courses, { id: `c_${Date.now()}`, name: "", credits: 3, grade: "B+" }]);
+  const removeCourse = (id: string) => { if (courses.length > 1) setCourses(courses.filter(c => c.id !== id)); };
+  const updateCourse = (id: string, field: string, value: any) => setCourses(courses.map(c => c.id === id ? { ...c, [field]: value } : c));
+
+  const getGPAColor = (g: number) => g >= 3.7 ? "text-neon-emerald" : g >= 3.0 ? "text-primary" : g >= 2.0 ? "text-orange-400" : "text-red-500";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-foreground text-lg">{lang === "zh" ? "GPA 計算器" : "GPA Calculator"}</h3>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+      </div>
+
+      <div className="text-center mb-5 p-5 rounded-xl bg-primary/10 border border-primary/20">
+        <div className="text-xs text-muted-foreground mb-1">{lang === "zh" ? "你的 GPA" : "Your GPA"}</div>
+        <div className={`text-4xl font-bold ${getGPAColor(gpa)}`}>{gpa.toFixed(2)}</div>
+        <div className="text-xs text-muted-foreground mt-1">{totalCredits} {lang === "zh" ? "學分" : "credits"}</div>
+      </div>
+
+      <div className="space-y-2 mb-4">
+        {courses.map((c, i) => (
+          <div key={c.id} className="flex items-center gap-2 p-3 rounded-xl border border-border bg-card">
+            <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
+            <input type="text" value={c.name} onChange={e => updateCourse(c.id, "name", e.target.value)}
+              placeholder={lang === "zh" ? "科目名" : "Course"} className="flex-1 h-7 px-2 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none min-w-0" />
+            <select value={c.credits} onChange={e => updateCourse(c.id, "credits", Number(e.target.value))}
+              className="w-14 h-7 px-1 rounded-lg bg-background border border-border text-xs text-foreground outline-none">
+              {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}cr</option>)}
+            </select>
+            <select value={c.grade} onChange={e => updateCourse(c.id, "grade", e.target.value)}
+              className="w-14 h-7 px-1 rounded-lg bg-background border border-border text-xs font-bold text-foreground outline-none">
+              {grades.map(g => <option key={g}>{g}</option>)}
+            </select>
+            {courses.length > 1 && <button onClick={() => removeCourse(c.id)} className="text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>}
+          </div>
+        ))}
+      </div>
+
+      <button onClick={addCourse} className="w-full py-2.5 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all flex items-center justify-center gap-2">
+        <Plus className="w-4 h-4" />{lang === "zh" ? "新增科目" : "Add Course"}
+      </button>
+    </div>
+  );
+}
+
+// ==================== FLASHCARDS ====================
+function FlashcardsTool({ lang, onClose }: { lang: string; onClose: () => void }) {
+  const [decks, setDecks] = useState<{ id: string; name: string; cards: { id: string; front: string; back: string; known: boolean }[] }[]>(() => {
+    try { return JSON.parse(localStorage.getItem("unigo-flashcards") || "[]"); } catch { return []; }
+  });
+  const [activeDeck, setActiveDeck] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newDeckName, setNewDeckName] = useState("");
+  const [newFront, setNewFront] = useState("");
+  const [newBack, setNewBack] = useState("");
+  const [flipped, setFlipped] = useState(false);
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [studyMode, setStudyMode] = useState(false);
+
+  const save = (d: typeof decks) => { setDecks(d); localStorage.setItem("unigo-flashcards", JSON.stringify(d)); };
+
+  const addDeck = () => {
+    if (!newDeckName.trim()) return;
+    save([...decks, { id: `dk_${Date.now()}`, name: newDeckName.trim(), cards: [] }]);
+    setNewDeckName(""); setShowAdd(false);
+  };
+
+  const deleteDeck = (id: string) => { save(decks.filter(d => d.id !== id)); if (activeDeck === id) setActiveDeck(null); };
+
+  const deck = decks.find(d => d.id === activeDeck);
+
+  const addCard = () => {
+    if (!newFront.trim() || !newBack.trim() || !deck) return;
+    const updated = decks.map(d => d.id === activeDeck ? { ...d, cards: [...d.cards, { id: `c_${Date.now()}`, front: newFront.trim(), back: newBack.trim(), known: false }] } : d);
+    save(updated);
+    setNewFront(""); setNewBack("");
+  };
+
+  const deleteCard = (cardId: string) => {
+    const updated = decks.map(d => d.id === activeDeck ? { ...d, cards: d.cards.filter(c => c.id !== cardId) } : d);
+    save(updated);
+  };
+
+  const markKnown = (cardId: string, known: boolean) => {
+    const updated = decks.map(d => d.id === activeDeck ? { ...d, cards: d.cards.map(c => c.id === cardId ? { ...c, known } : c) } : d);
+    save(updated);
+  };
+
+  const studyCards = deck?.cards.filter(c => !c.known) || [];
+
+  if (activeDeck && deck) {
+    if (studyMode && studyCards.length > 0) {
+      const card = studyCards[currentIdx % studyCards.length];
+      return (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => { setStudyMode(false); setFlipped(false); setCurrentIdx(0); }} className="text-sm text-primary flex items-center gap-1"><ChevronLeft className="w-4 h-4" />{lang === "zh" ? "返回" : "Back"}</button>
+            <span className="text-xs text-muted-foreground">{(currentIdx % studyCards.length) + 1} / {studyCards.length}</span>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+          </div>
+          <button onClick={() => setFlipped(!flipped)}
+            className="w-full min-h-[200px] p-8 rounded-2xl border-2 border-border bg-card hover:border-primary/30 transition-all flex items-center justify-center text-center mb-4">
+            <p className={`${flipped ? "text-primary" : "text-foreground"} text-lg font-medium`}>{flipped ? card.back : card.front}</p>
+          </button>
+          <p className="text-xs text-muted-foreground text-center mb-4">{lang === "zh" ? "點擊卡片翻轉" : "Tap card to flip"}</p>
+          <div className="flex gap-3">
+            <button onClick={() => { markKnown(card.id, true); setFlipped(false); setCurrentIdx(i => i + 1); }}
+              className="flex-1 py-3 rounded-xl bg-neon-emerald/10 text-neon-emerald font-medium text-sm border border-neon-emerald/20 hover:bg-neon-emerald/20">
+              {lang === "zh" ? "✓ 識咗" : "✓ Got it"}
+            </button>
+            <button onClick={() => { setFlipped(false); setCurrentIdx(i => i + 1); }}
+              className="flex-1 py-3 rounded-xl bg-orange-500/10 text-orange-500 font-medium text-sm border border-orange-500/20 hover:bg-orange-500/20">
+              {lang === "zh" ? "✗ 再嚟" : "✗ Again"}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setActiveDeck(null)} className="text-sm text-primary flex items-center gap-1"><ChevronLeft className="w-4 h-4" />{lang === "zh" ? "返回" : "Back"}</button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        </div>
+        <h3 className="font-bold text-foreground text-lg mb-1">{deck.name}</h3>
+        <p className="text-xs text-muted-foreground mb-4">{deck.cards.length} {lang === "zh" ? "張卡" : "cards"} · {deck.cards.filter(c => c.known).length} {lang === "zh" ? "已掌握" : "known"}</p>
+
+        {deck.cards.length > 0 && (
+          <button onClick={() => { setStudyMode(true); setCurrentIdx(0); setFlipped(false); const updated = decks.map(d => d.id === activeDeck ? { ...d, cards: d.cards.map(c => ({ ...c, known: false })) } : d); save(updated); }}
+            className="w-full py-3 rounded-xl bg-primary text-white font-medium text-sm mb-4 hover:bg-primary/90">
+            {lang === "zh" ? "開始溫習" : "Start Studying"}
+          </button>
+        )}
+
+        {/* Add card */}
+        <div className="p-3 rounded-xl border border-border bg-card mb-4 space-y-2">
+          <input type="text" value={newFront} onChange={e => setNewFront(e.target.value)} placeholder={lang === "zh" ? "正面（問題）" : "Front (question)"}
+            className="w-full h-8 px-2 rounded-lg bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none" />
+          <input type="text" value={newBack} onChange={e => setNewBack(e.target.value)} placeholder={lang === "zh" ? "背面（答案）" : "Back (answer)"}
+            className="w-full h-8 px-2 rounded-lg bg-background border border-border text-xs text-foreground placeholder:text-muted-foreground outline-none"
+            onKeyDown={e => e.key === "Enter" && addCard()} />
+          <button onClick={addCard} disabled={!newFront.trim() || !newBack.trim()}
+            className="w-full py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 disabled:opacity-40">
+            <Plus className="w-3 h-3 inline mr-1" />{lang === "zh" ? "新增卡片" : "Add Card"}
+          </button>
+        </div>
+
+        {/* Card list */}
+        <div className="space-y-2">
+          {deck.cards.map(c => (
+            <div key={c.id} className={`p-3 rounded-xl border bg-card ${c.known ? "border-neon-emerald/20 opacity-60" : "border-border"}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{c.front}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{c.back}</p>
+                </div>
+                <button onClick={() => deleteCard(c.id)} className="text-muted-foreground hover:text-red-400 ml-2"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Deck list view
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-foreground text-lg">{lang === "zh" ? "記憶卡" : "Flashcards"}</h3>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+      </div>
+
+      {/* Add deck */}
+      {showAdd ? (
+        <div className="flex gap-2 mb-4">
+          <input type="text" value={newDeckName} onChange={e => setNewDeckName(e.target.value)} placeholder={lang === "zh" ? "牌組名稱..." : "Deck name..."}
+            className="flex-1 h-9 px-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground outline-none"
+            onKeyDown={e => e.key === "Enter" && addDeck()} autoFocus />
+          <button onClick={addDeck} className="px-4 h-9 rounded-lg bg-primary text-white text-sm font-medium">{lang === "zh" ? "建立" : "Create"}</button>
+          <button onClick={() => setShowAdd(false)} className="px-3 h-9 rounded-lg bg-muted text-muted-foreground text-sm"><X className="w-4 h-4" /></button>
+        </div>
+      ) : (
+        <button onClick={() => setShowAdd(true)} className="w-full py-3 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all flex items-center justify-center gap-2 mb-4">
+          <Plus className="w-4 h-4" />{lang === "zh" ? "新增牌組" : "New Deck"}
+        </button>
+      )}
+
+      {decks.length === 0 ? (
+        <div className="text-center py-12 rounded-2xl border border-border bg-card">
+          <Notebook className="w-12 h-12 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="text-foreground font-medium">{lang === "zh" ? "未有牌組" : "No decks yet"}</p>
+          <p className="text-xs text-muted-foreground mt-1">{lang === "zh" ? "建立你嘅第一個牌組開始溫習" : "Create your first deck to start studying"}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {decks.map(d => {
+            const known = d.cards.filter(c => c.known).length;
+            const pct = d.cards.length > 0 ? Math.round((known / d.cards.length) * 100) : 0;
+            return (
+              <div key={d.id} className="p-4 rounded-xl border border-border bg-card hover:border-primary/20 transition-all cursor-pointer" onClick={() => setActiveDeck(d.id)}>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-foreground text-sm">{d.name}</h4>
+                  <button onClick={e => { e.stopPropagation(); deleteDeck(d.id); }} className="text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-neon-emerald transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{d.cards.length} {lang === "zh" ? "張" : "cards"}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==================== MAIN TOOLS PAGE ====================
 export default function Tools() {
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
@@ -839,6 +1079,8 @@ export default function Tools() {
     { key: "pomodoro" as ActiveTool, icon: Timer, label: lang === "zh" ? "番茄鐘" : "Pomodoro Timer", desc: lang === "zh" ? "25分鐘專注，5分鐘休息" : "25min focus, 5min break", color: "from-orange-500 to-amber-500" },
     { key: "deadline" as ActiveTool, icon: CalendarDays, label: lang === "zh" ? "Deadline 追蹤器" : "Deadline Tracker", desc: lang === "zh" ? "追蹤作業和考試日期" : "Track assignment & exam dates", color: "from-blue-500 to-cyan-500" },
     { key: "expense" as ActiveTool, icon: DollarSign, label: lang === "zh" ? "消費記錄" : "Expense Tracker", desc: lang === "zh" ? "記錄每日支出" : "Track daily expenses", color: "from-emerald-500 to-teal-500" },
+    { key: "cgpacalc" as ActiveTool, icon: Calculator, label: lang === "zh" ? "GPA 計算器" : "GPA Calculator", desc: lang === "zh" ? "計算你嘅 CGPA" : "Calculate your cumulative GPA", color: "from-indigo-500 to-blue-500" },
+    { key: "flashcards" as ActiveTool, icon: Notebook, label: lang === "zh" ? "記憶卡" : "Flashcards", desc: lang === "zh" ? "自製記憶卡溫書" : "Create flashcards to study", color: "from-cyan-500 to-teal-400" },
   ];
 
   return (
@@ -930,6 +1172,8 @@ export default function Tools() {
                   {activeTool === "pomodoro" && <PomodoroTimer lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "deadline" && <DeadlineTracker lang={lang} onClose={() => setActiveTool(null)} />}
                   {activeTool === "expense" && <ExpenseTracker lang={lang} onClose={() => setActiveTool(null)} />}
+                  {activeTool === "cgpacalc" && <CGPACalculator lang={lang} onClose={() => setActiveTool(null)} />}
+                  {activeTool === "flashcards" && <FlashcardsTool lang={lang} onClose={() => setActiveTool(null)} />}
                 </motion.div>
               )}
             </AnimatePresence>

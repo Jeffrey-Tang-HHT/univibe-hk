@@ -340,7 +340,7 @@ export default function Feed() {
 
             <div className="flex gap-3 mb-6 overflow-x-auto pb-2 scrollbar-hide">
               {categories.map((cat) => { const Icon = cat.icon; return (
-                <button key={cat.key} onClick={() => setCategory(cat.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${category === cat.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}><Icon className="w-3.5 h-3.5" />{cat.label}</button>
+                <button key={cat.key} onClick={() => setCategory(cat.key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-all ${category === cat.key ? "bg-neon-coral text-white" : "bg-muted text-muted-foreground hover:text-foreground"}`}><Icon className="w-3.5 h-3.5" />{cat.label}</button>
               ); })}
             </div>
 
