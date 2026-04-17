@@ -114,3 +114,5 @@ client/public/__manus__/version.json
 # Local Netlify folder
 .netlify
 .vercel
+
+.env*.local

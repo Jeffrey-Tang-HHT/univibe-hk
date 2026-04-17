@@ -187,6 +187,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Feed page
     "feed.nav.feed": "動態",
     "feed.nav.dating": "交友",
+    "feed.nav.plaza": "3D 廣場",
     "feed.nav.tools": "工具",
     "feed.nav.profile": "個人",
     "feed.nav.logout": "登出",
@@ -446,6 +447,7 @@ const translations: Record<Language, Record<string, string>> = {
     // Feed page
     "feed.nav.feed": "Feed",
     "feed.nav.dating": "Dating",
+    "feed.nav.plaza": "3D Plaza",
     "feed.nav.tools": "Tools",
     "feed.nav.profile": "Profile",
     "feed.nav.logout": "Log Out",

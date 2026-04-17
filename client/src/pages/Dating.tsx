@@ -8,7 +8,7 @@ import {
   Lock, Unlock, Coffee, Music, Camera, Palette, Dumbbell, Gamepad2,
   BookOpen, Plane, ChefHat, Film, Mic2, PenTool, Code, Mountain,
   Mic, CheckCheck, Smile, Square, Play, UserX, MoreVertical,
-  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus, Star, Crown, CalendarDays
+  Reply, Copy, CornerUpLeft, ShieldAlert, Flag, Bell, Upload, ImagePlus, Star, Crown, CalendarDays, Box
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1119,6 +1119,7 @@ export default function Dating() {
           <nav className="flex-1 space-y-1">
             <a href="/feed" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Home className="w-4 h-4" /> {t("feed.nav.feed")}</a>
             <a href="/dating" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-neon-coral/10 text-neon-coral font-medium text-sm"><HeartHandshake className="w-4 h-4" /> {t("feed.nav.dating")}</a>
+            <a href="/plaza" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Box className="w-4 h-4" /> {lang === "zh" ? "3D 廣場" : "3D Plaza"}</a>
             <a href="/tools" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><Wrench className="w-4 h-4" /> {t("feed.nav.tools")}</a>
             <a href="/profile" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-sm"><User className="w-4 h-4" /> {t("feed.nav.profile")}</a>
           </nav>
@@ -2016,6 +2017,7 @@ export default function Dating() {
         <div className="flex items-center justify-around py-2">
           <a href="/feed" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Home className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.feed")}</span></a>
           <a href="/dating" className="flex flex-col items-center gap-0.5 px-3 py-1 text-neon-coral"><HeartHandshake className="w-5 h-5" /><span className="text-[10px] font-medium">{t("feed.nav.dating")}</span></a>
+          <a href="/plaza" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Box className="w-5 h-5" /><span className="text-[10px]">{lang === "zh" ? "廣場" : "Plaza"}</span></a>
           <a href="/tools" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><Wrench className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.tools")}</span></a>
           <a href="/profile" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground"><User className="w-5 h-5" /><span className="text-[10px]">{t("feed.nav.profile")}</span></a>
         </div>
