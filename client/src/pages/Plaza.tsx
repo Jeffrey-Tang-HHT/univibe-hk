@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
+import { ACESFilmicToneMapping as THREE_TONE_MAPPING } from 'three';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -247,14 +248,21 @@ export default function Plaza() {
         className="absolute inset-0"
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
-          gl.setClearColor('#87CEEB');
+          // Golden-hour sky clear colour (warm peachy blue)
+          gl.setClearColor('#E8C9A0');
+          // Enable tone mapping for cinematic look
+          gl.toneMapping = THREE_TONE_MAPPING;
+          gl.toneMappingExposure = 1.05;
         }}
       >
-        <ambientLight intensity={0.45} />
+        {/* Golden-hour ambient — warm peachy fill */}
+        <ambientLight intensity={0.55} color="#FFE4C4" />
+
+        {/* Low-angle warm sun — casts long shadows */}
         <directionalLight
-          position={[15, 25, 10]}
-          intensity={1.15}
-          color="#FFF4E0"
+          position={[22, 14, 8]}
+          intensity={1.45}
+          color="#FFB27A"
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -263,8 +271,21 @@ export default function Plaza() {
           shadow-camera-right={50}
           shadow-camera-top={50}
           shadow-camera-bottom={-50}
+          shadow-bias={-0.0005}
         />
-        <hemisphereLight args={['#B5D9EC', '#7CB342', 0.5]} />
+
+        {/* Cool sky fill from opposite side (rim light) */}
+        <directionalLight
+          position={[-18, 10, -6]}
+          intensity={0.35}
+          color="#B8D4E8"
+        />
+
+        {/* Hemisphere — pink/lavender sky top, warm earth bottom */}
+        <hemisphereLight args={['#F4C4A8', '#8B7355', 0.65]} />
+
+        {/* Rim fog — warm haze blends horizon */}
+        <fog attach="fog" args={['#F2D0B0', 40, 110]} />
 
         <Suspense fallback={null}>
           <Environment3D lang={lang} currentZone={currentZone} />

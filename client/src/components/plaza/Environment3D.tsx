@@ -31,8 +31,7 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
 
   return (
     <group>
-      {/* Atmospheric fog — distant objects fade into sky color */}
-      <fog attach="fog" args={['#C8E0F0', 35, 95]} />
+      {/* Golden-hour fog is set on the Canvas (Plaza.tsx) */}
 
       {/* Ground plane */}
       <Ground />
@@ -100,10 +99,46 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
         <GrassTuft key={`grass-${i}`} position={pos} />
       ))}
 
-      {/* Sky dome */}
+      {/* Sky dome — golden-hour gradient (peach horizon → soft lavender-blue zenith) */}
       <mesh>
         <sphereGeometry args={[80, 32, 32]} />
-        <meshBasicMaterial color="#87CEEB" side={THREE.BackSide} fog={false} />
+        <shaderMaterial
+          side={THREE.BackSide}
+          fog={false}
+          uniforms={{
+            topColor: { value: new THREE.Color('#A8B8D8') },
+            midColor: { value: new THREE.Color('#E8B894') },
+            bottomColor: { value: new THREE.Color('#F4D4A8') },
+            offset: { value: 0 },
+            exponent: { value: 0.7 },
+          }}
+          vertexShader={`
+            varying vec3 vWorldPosition;
+            void main() {
+              vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+              vWorldPosition = worldPosition.xyz;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            uniform vec3 topColor;
+            uniform vec3 midColor;
+            uniform vec3 bottomColor;
+            uniform float offset;
+            uniform float exponent;
+            varying vec3 vWorldPosition;
+            void main() {
+              float h = normalize(vWorldPosition + offset).y;
+              vec3 col;
+              if (h < 0.15) {
+                col = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
+              } else {
+                col = mix(midColor, topColor, pow(smoothstep(0.15, 1.0, h), exponent));
+              }
+              gl_FragColor = vec4(col, 1.0);
+            }
+          `}
+        />
       </mesh>
 
       {/* Clouds */}
@@ -121,8 +156,8 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
 function Ground() {
   const groundMat = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({
-      color: '#7CB342',
-      roughness: 0.9,
+      color: '#8FBC5C', // Warmer, more saturated grass
+      roughness: 0.95,
       metalness: 0,
     });
     return mat;
@@ -213,73 +248,186 @@ function Bench({ position, rotation = 0 }: { position: [number, number, number];
   );
 }
 
-// ─── Fountain ───
+// ─── Fountain — multi-tier with prominent water jets (golden-hour cinematic) ───
 function Fountain({ position }: { position: [number, number, number] }) {
   const waterRef = useRef<THREE.Mesh>(null);
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     if (waterRef.current) {
-      waterRef.current.rotation.y += 0.005;
+      waterRef.current.rotation.y = clock.getElapsedTime() * 0.15;
     }
   });
 
+  const stoneColor = '#D4C7B0'; // Warm limestone
+  const darkStoneColor = '#A89780';
+
   return (
     <group position={position}>
-      {/* Base */}
-      <mesh position={[0, 0.3, 0]} castShadow>
-        <cylinderGeometry args={[2.5, 3, 0.6, 24]} />
-        <meshToonMaterial color="#B0BEC5" />
+      {/* Outer basin — wide stone rim */}
+      <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[3.2, 3.4, 0.5, 32]} />
+        <meshStandardMaterial color={stoneColor} roughness={0.85} />
       </mesh>
-      {/* Inner wall */}
-      <mesh position={[0, 0.5, 0]}>
-        <cylinderGeometry args={[2.2, 2.2, 0.3, 24]} />
-        <meshToonMaterial color="#90A4AE" />
+      {/* Outer basin inner wall — slightly darker */}
+      <mesh position={[0, 0.45, 0]} receiveShadow>
+        <cylinderGeometry args={[3.0, 3.0, 0.25, 32]} />
+        <meshStandardMaterial color={darkStoneColor} roughness={0.9} />
       </mesh>
-      {/* Water */}
-      <mesh ref={waterRef} position={[0, 0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[2.1, 24]} />
-        <meshBasicMaterial color="#4FC3F7" transparent opacity={0.7} />
+      {/* Water in outer basin */}
+      <mesh ref={waterRef} position={[0, 0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[2.95, 32]} />
+        <meshStandardMaterial
+          color="#5FBCD9"
+          transparent
+          opacity={0.78}
+          roughness={0.2}
+          metalness={0.15}
+          emissive="#88D4E8"
+          emissiveIntensity={0.12}
+        />
       </mesh>
-      {/* Center pillar */}
-      <mesh position={[0, 1.2, 0]} castShadow>
-        <cylinderGeometry args={[0.25, 0.35, 1.8, 12]} />
-        <meshToonMaterial color="#CFD8DC" />
+
+      {/* Middle tier pedestal */}
+      <mesh position={[0, 0.85, 0]} castShadow>
+        <cylinderGeometry args={[0.45, 0.65, 0.5, 16]} />
+        <meshStandardMaterial color={stoneColor} roughness={0.85} />
       </mesh>
-      {/* Top basin */}
-      <mesh position={[0, 1.8, 0]}>
-        <cylinderGeometry args={[0.8, 0.6, 0.3, 12]} />
-        <meshToonMaterial color="#B0BEC5" />
+
+      {/* Middle bowl */}
+      <mesh position={[0, 1.25, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[1.4, 1.1, 0.35, 24]} />
+        <meshStandardMaterial color={stoneColor} roughness={0.85} />
       </mesh>
-      {/* Water spout */}
-      <WaterSpout />
+      {/* Middle bowl water */}
+      <mesh position={[0, 1.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1.3, 24]} />
+        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.8} roughness={0.2} emissive="#88D4E8" emissiveIntensity={0.15} />
+      </mesh>
+
+      {/* Top pedestal */}
+      <mesh position={[0, 1.75, 0]} castShadow>
+        <cylinderGeometry args={[0.22, 0.32, 0.5, 12]} />
+        <meshStandardMaterial color={stoneColor} roughness={0.85} />
+      </mesh>
+
+      {/* Top bowl */}
+      <mesh position={[0, 2.1, 0]} castShadow>
+        <cylinderGeometry args={[0.7, 0.5, 0.25, 16]} />
+        <meshStandardMaterial color={stoneColor} roughness={0.85} />
+      </mesh>
+      {/* Top bowl water */}
+      <mesh position={[0, 2.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.6, 16]} />
+        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.8} emissive="#88D4E8" emissiveIntensity={0.2} />
+      </mesh>
+
+      {/* Central water jets — multi-stream spout */}
+      <WaterJets />
+
+      {/* Cascade spillover from middle → outer */}
+      <WaterCascade />
     </group>
   );
 }
 
-function WaterSpout() {
+// Multi-directional water jets from the top
+function WaterJets() {
   const ref = useRef<THREE.Points>(null);
-  const count = 40;
+  const count = 120;
 
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2;
-      const radius = 0.3 + Math.random() * 0.3;
-      arr[i * 3] = Math.cos(angle) * radius;
-      arr[i * 3 + 1] = 2.0 + Math.random() * 0.5;
-      arr[i * 3 + 2] = Math.sin(angle) * radius;
+      // Randomly assigned to one of 5 jets (center + 4 angled outward)
+      const jet = Math.floor(Math.random() * 5);
+      const angle = jet === 0 ? 0 : ((jet - 1) / 4) * Math.PI * 2;
+      const spread = jet === 0 ? 0.05 : 0.12;
+      const outward = jet === 0 ? 0 : 0.06;
+
+      arr[i * 3] = Math.cos(angle) * outward + (Math.random() - 0.5) * spread;
+      arr[i * 3 + 1] = 2.3 + Math.random() * 0.1;
+      arr[i * 3 + 2] = Math.sin(angle) * outward + (Math.random() - 0.5) * spread;
+
+      // Upward + outward velocity
+      velocities[i * 3] = jet === 0 ? 0 : Math.cos(angle) * 0.015;
+      velocities[i * 3 + 1] = 0.06 + Math.random() * 0.04;
+      velocities[i * 3 + 2] = jet === 0 ? 0 : Math.sin(angle) * 0.015;
     }
-    return arr;
+    return { arr, velocities };
   }, []);
 
   useFrame(() => {
     if (!ref.current) return;
     const pos = ref.current.geometry.attributes.position.array as Float32Array;
+    const vel = positions.velocities;
     for (let i = 0; i < count; i++) {
-      pos[i * 3 + 1] -= 0.02;
-      if (pos[i * 3 + 1] < 1.0) {
-        pos[i * 3 + 1] = 2.0 + Math.random() * 0.5;
+      pos[i * 3] += vel[i * 3];
+      pos[i * 3 + 1] += vel[i * 3 + 1];
+      pos[i * 3 + 2] += vel[i * 3 + 2];
+      // Gravity
+      vel[i * 3 + 1] -= 0.003;
+      // Reset when below basin
+      if (pos[i * 3 + 1] < 1.5) {
+        const jet = Math.floor(Math.random() * 5);
+        const angle = jet === 0 ? 0 : ((jet - 1) / 4) * Math.PI * 2;
+        const spread = jet === 0 ? 0.05 : 0.12;
+        const outward = jet === 0 ? 0 : 0.06;
+        pos[i * 3] = Math.cos(angle) * outward + (Math.random() - 0.5) * spread;
+        pos[i * 3 + 1] = 2.3 + Math.random() * 0.1;
+        pos[i * 3 + 2] = Math.sin(angle) * outward + (Math.random() - 0.5) * spread;
+        vel[i * 3] = jet === 0 ? 0 : Math.cos(angle) * 0.015;
+        vel[i * 3 + 1] = 0.06 + Math.random() * 0.04;
+        vel[i * 3 + 2] = jet === 0 ? 0 : Math.sin(angle) * 0.015;
       }
+    }
+    ref.current.geometry.attributes.position.needsUpdate = true;
+  });
+
+  return (
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={count}
+          array={positions.arr}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial color="#B8E6F5" size={0.11} transparent opacity={0.85} sizeAttenuation />
+    </points>
+  );
+}
+
+// Water droplets cascading from middle bowl edge
+function WaterCascade() {
+  const ref = useRef<THREE.Points>(null);
+  const count = 60;
+
+  const { positions, phases } = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    const ph = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      arr[i * 3] = Math.cos(angle) * 1.3;
+      arr[i * 3 + 1] = 1.4 - Math.random() * 0.2;
+      arr[i * 3 + 2] = Math.sin(angle) * 1.3;
+      ph[i] = Math.random() * Math.PI * 2;
+    }
+    return { positions: arr, phases: ph };
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const pos = ref.current.geometry.attributes.position.array as Float32Array;
+    const t = clock.getElapsedTime();
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      // Fall loop
+      const fallY = ((t * 1.2 + phases[i]) % 1) * 0.85;
+      pos[i * 3] = Math.cos(angle) * 1.3;
+      pos[i * 3 + 1] = 1.4 - fallY;
+      pos[i * 3 + 2] = Math.sin(angle) * 1.3;
     }
     ref.current.geometry.attributes.position.needsUpdate = true;
   });
@@ -294,14 +442,14 @@ function WaterSpout() {
           itemSize={3}
         />
       </bufferGeometry>
-      <pointsMaterial color="#4FC3F7" size={0.08} transparent opacity={0.6} />
+      <pointsMaterial color="#A8DCEA" size={0.06} transparent opacity={0.6} sizeAttenuation />
     </points>
   );
 }
 
-// ─── Building ───
+// ─── Building — brick facade with window rows (golden-hour lit) ───
 function Building({
-  position, scale, color, label, labelEn, lang
+  position, scale, color: _color, label, labelEn, lang
 }: {
   position: [number, number, number];
   scale: [number, number, number];
@@ -310,31 +458,96 @@ function Building({
   labelEn: string;
   lang: string;
 }) {
+  // Derive a "brick" color from the passed cool-gray default — warm it up
+  const brickColor = '#B55D3E'; // Warm red-brown brick
+  const brickDark = '#8B4332';
+  const trimColor = '#F5E6D3'; // Cream limestone trim
+
+  const rows = Math.max(2, Math.floor(scale[1] / 1.4));
+  const cols = Math.max(2, Math.floor(scale[0] / 1.8));
+
   return (
     <group position={position}>
-      <mesh position={[0, scale[1] / 2, 0]} castShadow>
+      {/* Main building body — brick */}
+      <mesh position={[0, scale[1] / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={scale} />
-        <meshToonMaterial color={color} />
+        <meshStandardMaterial color={brickColor} roughness={0.92} />
       </mesh>
-      {/* Windows */}
-      {Array.from({ length: Math.floor(scale[0] / 2) }).map((_, i) => (
-        Array.from({ length: Math.floor(scale[1] / 1.5) }).map((_, j) => (
-          <mesh
-            key={`${i}-${j}`}
-            position={[
-              -scale[0] / 2 + 1 + i * 2,
-              1 + j * 1.5,
-              scale[2] / 2 + 0.01
-            ]}
-          >
-            <planeGeometry args={[0.8, 1]} />
-            <meshBasicMaterial color="#E3F2FD" transparent opacity={0.8} />
-          </mesh>
-        ))
-      ))}
+
+      {/* Base plinth — darker stone */}
+      <mesh position={[0, 0.4, 0]} castShadow>
+        <boxGeometry args={[scale[0] + 0.3, 0.8, scale[2] + 0.3]} />
+        <meshStandardMaterial color={brickDark} roughness={0.95} />
+      </mesh>
+
+      {/* Cornice / top trim — cream limestone */}
+      <mesh position={[0, scale[1] - 0.25, 0]}>
+        <boxGeometry args={[scale[0] + 0.25, 0.5, scale[2] + 0.25]} />
+        <meshStandardMaterial color={trimColor} roughness={0.8} />
+      </mesh>
+
+      {/* Roof cap — slight peaked box */}
+      <mesh position={[0, scale[1] + 0.2, 0]}>
+        <boxGeometry args={[scale[0] + 0.1, 0.3, scale[2] + 0.1]} />
+        <meshStandardMaterial color="#6B4E2A" roughness={0.85} />
+      </mesh>
+
+      {/* Window rows — front face */}
+      {Array.from({ length: cols }).map((_, i) =>
+        Array.from({ length: rows }).map((_, j) => {
+          const x = -scale[0] / 2 + (scale[0] / cols) * (i + 0.5);
+          const y = 1.2 + j * (scale[1] - 2) / Math.max(1, rows - 1);
+          // Randomly make some windows lit (warm)
+          const isLit = (i * 3 + j * 7) % 5 < 2;
+          return (
+            <group key={`fw-${i}-${j}`}>
+              {/* Window frame (lighter stone) */}
+              <mesh position={[x, y, scale[2] / 2 + 0.02]}>
+                <planeGeometry args={[0.95, 1.15]} />
+                <meshStandardMaterial color={trimColor} roughness={0.7} />
+              </mesh>
+              {/* Window pane — lit or reflective */}
+              <mesh position={[x, y, scale[2] / 2 + 0.03]}>
+                <planeGeometry args={[0.8, 1]} />
+                <meshStandardMaterial
+                  color={isLit ? '#FFD88F' : '#6A8CAE'}
+                  emissive={isLit ? '#FFB347' : '#2C4762'}
+                  emissiveIntensity={isLit ? 0.4 : 0.1}
+                  roughness={0.3}
+                  metalness={0.2}
+                />
+              </mesh>
+              {/* Window cross (mullions) */}
+              <mesh position={[x, y, scale[2] / 2 + 0.04]}>
+                <planeGeometry args={[0.8, 0.04]} />
+                <meshBasicMaterial color={trimColor} />
+              </mesh>
+              <mesh position={[x, y, scale[2] / 2 + 0.04]}>
+                <planeGeometry args={[0.04, 1]} />
+                <meshBasicMaterial color={trimColor} />
+              </mesh>
+            </group>
+          );
+        }),
+      )}
+
+      {/* Side windows (smaller, less detailed) — left face */}
+      {scale[2] > 6 && Array.from({ length: Math.floor(scale[2] / 2) }).map((_, i) =>
+        Array.from({ length: rows }).map((_, j) => {
+          const z = -scale[2] / 2 + (scale[2] / Math.floor(scale[2] / 2)) * (i + 0.5);
+          const y = 1.2 + j * (scale[1] - 2) / Math.max(1, rows - 1);
+          return (
+            <mesh key={`sw-${i}-${j}`} position={[-scale[0] / 2 - 0.02, y, z]} rotation={[0, -Math.PI / 2, 0]}>
+              <planeGeometry args={[0.7, 1]} />
+              <meshStandardMaterial color="#6A8CAE" emissive="#2C4762" emissiveIntensity={0.1} roughness={0.3} metalness={0.2} />
+            </mesh>
+          );
+        }),
+      )}
+
       {/* Label */}
       <Text
-        position={[0, scale[1] + 0.5, scale[2] / 2 + 0.1]}
+        position={[0, scale[1] + 0.7, scale[2] / 2 + 0.1]}
         fontSize={0.8}
         color="#FFFFFF"
         anchorX="center"
@@ -474,69 +687,183 @@ function CobbledPlaza() {
   );
 }
 
-// ─── Pond — animated water with stones around ───
+// ─── Pond — stone-rimmed with lily pads, water flowers, gentle ripples ───
 function Pond({ position, radius = 2.5 }: { position: [number, number, number]; radius?: number }) {
   const waterRef = useRef<THREE.Mesh>(null);
 
   useFrame(({ clock }) => {
     if (waterRef.current) {
       const t = clock.getElapsedTime();
-      waterRef.current.scale.x = 1 + Math.sin(t * 1.5) * 0.01;
-      waterRef.current.scale.z = 1 + Math.cos(t * 1.3) * 0.01;
+      waterRef.current.scale.x = 1 + Math.sin(t * 1.5) * 0.008;
+      waterRef.current.scale.z = 1 + Math.cos(t * 1.3) * 0.008;
     }
   });
 
+  // Lily-pad positions (pseudo-random but stable)
+  const lilyPads = useMemo(() => {
+    const pads: Array<{ angle: number; dist: number; rot: number; size: number; hasFlower: boolean; flowerColor: string }> = [];
+    const colors = ['#F8BBD0', '#FFF8E1', '#FFCDD2'];
+    for (let i = 0; i < 6; i++) {
+      pads.push({
+        angle: (i / 6) * Math.PI * 2 + (i % 2) * 0.3,
+        dist: radius * (0.35 + (i % 3) * 0.2),
+        rot: Math.random() * Math.PI,
+        size: 0.28 + Math.random() * 0.18,
+        hasFlower: i % 2 === 0,
+        flowerColor: colors[i % colors.length],
+      });
+    }
+    return pads;
+  }, [radius]);
+
+  // Edge stones — irregular sizes and rotations
+  const edgeStones = useMemo(() => {
+    const stones: Array<{ angle: number; size: number; yRot: number; variant: number }> = [];
+    for (let i = 0; i < 14; i++) {
+      stones.push({
+        angle: (i / 14) * Math.PI * 2 + (Math.random() - 0.5) * 0.2,
+        size: 0.28 + Math.random() * 0.22,
+        yRot: Math.random() * Math.PI * 2,
+        variant: Math.floor(Math.random() * 3),
+      });
+    }
+    return stones;
+  }, []);
+
+  // Cattails / water grass
+  const cattails = useMemo(() => {
+    const tails: Array<{ angle: number; dist: number; height: number }> = [];
+    for (let i = 0; i < 5; i++) {
+      tails.push({
+        angle: (i / 5) * Math.PI * 2 + 0.4,
+        dist: radius * (0.95 + Math.random() * 0.15),
+        height: 0.7 + Math.random() * 0.4,
+      });
+    }
+    return tails;
+  }, [radius]);
+
+  const stoneColors = ['#9AA5AC', '#B4A595', '#8B9499'];
+
   return (
     <group position={position}>
-      {/* Pond basin — dark ring */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <ringGeometry args={[radius * 0.95, radius * 1.15, 24]} />
-        <meshStandardMaterial color="#6D4C41" roughness={1} />
+      {/* Muddy pond floor (under water) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+        <circleGeometry args={[radius * 1.02, 32]} />
+        <meshStandardMaterial color="#4A5947" roughness={1} />
       </mesh>
-      {/* Water surface */}
-      <mesh ref={waterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[radius, 32]} />
+
+      {/* Water surface — golden-hour reflective */}
+      <mesh ref={waterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+        <circleGeometry args={[radius * 0.95, 32]} />
         <meshStandardMaterial
-          color="#4FC3F7"
-          roughness={0.3}
-          metalness={0.2}
+          color="#5AA8C4"
+          roughness={0.15}
+          metalness={0.3}
           transparent
-          opacity={0.85}
+          opacity={0.88}
+          emissive="#F4D4A8"
+          emissiveIntensity={0.08}
         />
       </mesh>
-      {/* Highlight ring for water sheen */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.055, 0]}>
-        <ringGeometry args={[radius * 0.5, radius * 0.7, 32]} />
-        <meshBasicMaterial color="#81D4FA" transparent opacity={0.25} />
+
+      {/* Inner highlight (sheen reflection) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.085, 0]}>
+        <ringGeometry args={[radius * 0.3, radius * 0.55, 32]} />
+        <meshBasicMaterial color="#FFE0B2" transparent opacity={0.15} />
       </mesh>
-      {/* Lily pads */}
-      {[0, 2.1, 4.3].map((angle, i) => (
-        <group key={i} position={[Math.cos(angle) * radius * 0.55, 0.08, Math.sin(angle) * radius * 0.55]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.35, 10]} />
-            <meshToonMaterial color="#388E3C" />
-          </mesh>
-          {i === 0 && (
-            <mesh position={[0, 0.05, 0]}>
-              <sphereGeometry args={[0.1, 8, 8]} />
-              <meshToonMaterial color="#F8BBD0" />
+
+      {/* Edge mud ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} receiveShadow>
+        <ringGeometry args={[radius * 0.95, radius * 1.1, 32]} />
+        <meshStandardMaterial color="#6B5842" roughness={1} />
+      </mesh>
+
+      {/* Lily pads with optional flowers */}
+      {lilyPads.map((pad, i) => {
+        const x = Math.cos(pad.angle) * pad.dist;
+        const z = Math.sin(pad.angle) * pad.dist;
+        return (
+          <group key={`lily-${i}`} position={[x, 0.11, z]} rotation={[0, pad.rot, 0]}>
+            {/* Pad shape — slightly notched circle */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
+              <circleGeometry args={[pad.size, 8]} />
+              <meshStandardMaterial color="#3E8E41" roughness={0.8} side={THREE.DoubleSide} />
             </mesh>
-          )}
-        </group>
-      ))}
-      {/* Edge stones */}
-      {Array.from({ length: 8 }).map((_, i) => {
-        const a = (i / 8) * Math.PI * 2;
+            {/* Lighter highlight */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+              <circleGeometry args={[pad.size * 0.7, 8]} />
+              <meshStandardMaterial color="#66BB6A" roughness={0.8} />
+            </mesh>
+            {/* Flower */}
+            {pad.hasFlower && (
+              <group position={[0, 0.08, 0]}>
+                <mesh>
+                  <sphereGeometry args={[0.13, 10, 8]} />
+                  <meshStandardMaterial color={pad.flowerColor} roughness={0.7} emissive={pad.flowerColor} emissiveIntensity={0.1} />
+                </mesh>
+                {/* Petals — 5 small flattened spheres */}
+                {Array.from({ length: 5 }).map((_, j) => {
+                  const a = (j / 5) * Math.PI * 2;
+                  return (
+                    <mesh key={j} position={[Math.cos(a) * 0.11, 0, Math.sin(a) * 0.11]} scale={[1, 0.4, 1]}>
+                      <sphereGeometry args={[0.08, 8, 6]} />
+                      <meshStandardMaterial color={pad.flowerColor} roughness={0.7} />
+                    </mesh>
+                  );
+                })}
+                {/* Yellow center */}
+                <mesh position={[0, 0.02, 0]}>
+                  <sphereGeometry args={[0.05, 8, 6]} />
+                  <meshStandardMaterial color="#FBC02D" roughness={0.5} emissive="#FBC02D" emissiveIntensity={0.2} />
+                </mesh>
+              </group>
+            )}
+          </group>
+        );
+      })}
+
+      {/* Edge stones — rim the pond */}
+      {edgeStones.map((stone, i) => {
+        const x = Math.cos(stone.angle) * radius * 1.1;
+        const z = Math.sin(stone.angle) * radius * 1.1;
+        const col = stoneColors[stone.variant];
         return (
           <mesh
             key={`stone-${i}`}
-            position={[Math.cos(a) * radius * 1.1, 0.1, Math.sin(a) * radius * 1.1]}
-            rotation={[0, a, 0]}
+            position={[x, stone.size * 0.5, z]}
+            rotation={[0, stone.yRot, 0]}
             castShadow
+            receiveShadow
           >
-            <dodecahedronGeometry args={[0.25, 0]} />
-            <meshToonMaterial color="#78909C" />
+            <dodecahedronGeometry args={[stone.size, 0]} />
+            <meshStandardMaterial color={col} roughness={0.95} flatShading />
           </mesh>
+        );
+      })}
+
+      {/* Cattails / water grass — tall thin green spikes at pond edge */}
+      {cattails.map((ct, i) => {
+        const x = Math.cos(ct.angle) * ct.dist;
+        const z = Math.sin(ct.angle) * ct.dist;
+        return (
+          <group key={`cattail-${i}`} position={[x, 0.1, z]}>
+            {/* Stem */}
+            <mesh position={[0, ct.height / 2, 0]}>
+              <cylinderGeometry args={[0.015, 0.02, ct.height, 6]} />
+              <meshStandardMaterial color="#558B2F" roughness={0.9} />
+            </mesh>
+            {/* Brown cattail head */}
+            <mesh position={[0, ct.height * 0.85, 0]}>
+              <cylinderGeometry args={[0.05, 0.05, 0.18, 8]} />
+              <meshStandardMaterial color="#5D4037" roughness={0.9} />
+            </mesh>
+            {/* Leaf */}
+            <mesh position={[0.04, ct.height * 0.5, 0]} rotation={[0, 0, 0.3]} scale={[0.8, 1, 1]}>
+              <coneGeometry args={[0.02, ct.height * 0.7, 4]} />
+              <meshStandardMaterial color="#689F38" roughness={0.9} />
+            </mesh>
+          </group>
         );
       })}
     </group>
