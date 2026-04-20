@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import ZoneLandmarks from './ZoneLandmarks';
+import ZoneLabels from './ZoneLabels';
 
 interface ZoneConfig {
   position: [number, number, number];
@@ -20,7 +21,7 @@ const ZONES: ZoneConfig[] = [
   { position: [18, 0.01, 18], size: [14, 14], color: '#FFA07A', label: '咖啡廳', labelEn: 'Café' },
 ];
 
-export default function Environment({ lang = 'zh' }: { lang?: string }) {
+export default function Environment({ lang = 'zh', currentZone = 'center' }: { lang?: string; currentZone?: string }) {
   // Stable randomized values — computed once per mount, not per render
   const treeScales = useMemo(
     () => TREE_POSITIONS.map(() => 0.8 + Math.random() * 0.4),
@@ -35,13 +36,16 @@ export default function Environment({ lang = 'zh' }: { lang?: string }) {
       {/* Ground plane */}
       <Ground />
 
-      {/* Zone markers */}
+      {/* Zone markers (ground circles only — labels are now HTML overlays via ZoneLabels) */}
       {ZONES.map((zone, i) => (
-        <ZoneMarker key={i} zone={zone} lang={lang} />
+        <ZoneMarker key={i} zone={zone} />
       ))}
 
       {/* Zone landmarks — distinctive structures for each zone */}
       <ZoneLandmarks />
+
+      {/* Leader-line zone labels (HTML overlays projected from 3D positions) */}
+      <ZoneLabels lang={lang} currentZone={currentZone} />
 
       {/* Trees */}
       {TREE_POSITIONS.map((pos, i) => (
@@ -128,7 +132,7 @@ function Ground() {
 }
 
 // ─── Zone Markers ───
-function ZoneMarker({ zone, lang }: { zone: ZoneConfig; lang: string }) {
+function ZoneMarker({ zone }: { zone: ZoneConfig }) {
   const ref = useRef<THREE.Mesh>(null);
 
   useFrame((_, delta) => {
@@ -149,18 +153,7 @@ function ZoneMarker({ zone, lang }: { zone: ZoneConfig; lang: string }) {
         <ringGeometry args={[zone.size[0] / 2 - 0.3, zone.size[0] / 2, 32]} />
         <meshBasicMaterial color={zone.color} transparent opacity={0.5} />
       </mesh>
-      {/* Zone label */}
-      <Text
-        position={[0, 3, 0]}
-        fontSize={1.2}
-        color={zone.color}
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.05}
-        outlineColor="#000000"
-      >
-        {lang === 'zh' ? zone.label : zone.labelEn}
-      </Text>
+      {/* Note: old 3D text label removed — now rendered as HTML overlay via ZoneLabels */}
     </group>
   );
 }

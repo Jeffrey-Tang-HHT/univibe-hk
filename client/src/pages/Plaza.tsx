@@ -4,8 +4,9 @@ import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield, Home, HeartHandshake, Wrench, User, Globe, Moon, Sun,
-  LogOut, Send, Paintbrush, MapPin, Users, MessageCircle, X, Box,
+  Send, Paintbrush, Users, MessageCircle, X, Box,
   BookOpen, TrendingUp, Sparkles, Calculator, Plus, Zap, Clock, Star, ChevronRight,
+  Compass,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +26,7 @@ import {
 } from '@/lib/plaza';
 
 export default function Plaza() {
-  const { user, isLoggedIn, logout } = useAuth();
+  const { user, isLoggedIn } = useAuth();
   const { lang, setLang, t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const [, setLocation] = useLocation();
@@ -48,7 +49,6 @@ export default function Plaza() {
   const pollRef = useRef<ReturnType<typeof setInterval>>();
   const posRef = useRef({ x: 0, y: 0, z: 5, rotation: 0, zone: 'center', isMoving: false });
   const prevZoneRef = useRef('center');
-  // Touch-joystick direction shared with PlayerController (analog, -1…1 on each axis)
   const touchDirRef = useRef({ x: 0, z: 0 });
 
   // Hide welcome overlay after 3.5s
@@ -57,7 +57,7 @@ export default function Plaza() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Hide WASD instruction after 6s
+  // Hide controls hint after 6s
   const [showControlsHint, setShowControlsHint] = useState(true);
   useEffect(() => {
     const timer = setTimeout(() => setShowControlsHint(false), 6000);
@@ -68,7 +68,6 @@ export default function Plaza() {
   useEffect(() => {
     if (prevZoneRef.current && prevZoneRef.current !== currentZone) {
       setZoneChangeFlash(true);
-      // Auto-open action panel on zone entry (close on returning to center)
       setShowZonePanel(currentZone !== 'center');
       const t = setTimeout(() => setZoneChangeFlash(false), 1200);
       prevZoneRef.current = currentZone;
@@ -108,17 +107,13 @@ export default function Plaza() {
     };
   }, [isLoggedIn]);
 
-  // Position update handler
   const handlePositionUpdate = useCallback((x: number, y: number, z: number, rotation: number, zone: string, isMoving: boolean) => {
     posRef.current = { x, y, z, rotation, zone, isMoving };
     setMyPosition({ x, z });
     setCurrentZone(zone);
-
-    // Throttled API update
     updatePosition({ x, y, z, rotation, zone, is_moving: isMoving }).catch(() => {});
   }, []);
 
-  // Send chat bubble
   const handleSendBubble = async () => {
     if (!chatInput.trim()) return;
     try {
@@ -130,7 +125,6 @@ export default function Plaza() {
     }
   };
 
-  // Save avatar
   const handleSaveAvatar = async () => {
     try {
       await saveAvatar(avatarConfig);
@@ -167,7 +161,6 @@ export default function Plaza() {
 
   const activeZoneColor = ZONE_COLORS[currentZone] || '#4ECDC4';
 
-  // Zone-specific actions: navigate to existing app pages or toast placeholders
   const ZONE_ACTIONS: Record<
     string,
     Array<{
@@ -209,6 +202,10 @@ export default function Plaza() {
 
   if (!isLoggedIn) return null;
 
+  const userInitial = ((user as any)?.display_name || (user as any)?.handle || 'U')
+    .charAt(0)
+    .toUpperCase();
+
   return (
     <div className="h-screen w-screen bg-background overflow-hidden relative">
       {/* ─── 3D Canvas ─── */}
@@ -239,7 +236,7 @@ export default function Plaza() {
         <hemisphereLight args={['#B5D9EC', '#7CB342', 0.5]} />
 
         <Suspense fallback={null}>
-          <Environment3D lang={lang} />
+          <Environment3D lang={lang} currentZone={currentZone} />
           <PlayerController
             config={avatarConfig}
             onPositionUpdate={handlePositionUpdate}
@@ -252,6 +249,9 @@ export default function Plaza() {
           />
         </Suspense>
       </Canvas>
+
+      {/* ─── Top cinematic gradient banner (concept-art style) ─── */}
+      <div className="pointer-events-none absolute top-0 left-0 right-0 h-24 z-20 bg-gradient-to-b from-black/50 via-black/20 to-transparent" />
 
       {/* ─── Welcome overlay (fades after 3.5s) ─── */}
       <AnimatePresence>
@@ -293,38 +293,41 @@ export default function Plaza() {
         )}
       </AnimatePresence>
 
-      {/* ─── Top-Left: Title Card ─── */}
+      {/* ─── Top-Left: Title Banner (cinematic, concept-art inspired) ─── */}
       <div className="absolute top-4 left-4 z-40">
         <a
           href="/feed"
-          className="flex items-center gap-3 bg-card/90 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-border/50 shadow-xl hover:bg-card transition-colors"
+          className="group flex items-center gap-3 bg-black/40 backdrop-blur-xl rounded-2xl px-4 py-2.5 border border-white/15 shadow-2xl hover:bg-black/50 transition-all"
         >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-coral to-pink-500 flex items-center justify-center shadow-md shrink-0">
-            <Shield className="w-4 h-4 text-white" />
+          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-neon-coral to-pink-500 flex items-center justify-center shadow-lg shrink-0">
+            <Shield className="w-4.5 h-4.5 text-white" />
+            <div className="absolute inset-0 rounded-xl ring-1 ring-white/30" />
           </div>
           <div className="min-w-0">
-            <h1 className="font-display text-sm font-bold text-foreground leading-tight tracking-tight">
+            <h1 className="font-display text-base font-bold text-white leading-tight tracking-tight">
               UniGo <span className="text-neon-coral">Plaza</span>
             </h1>
-            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-              {lang === 'zh' ? '你的校園宇宙' : 'Your campus universe'}
+            <p className="text-[10px] text-white/75 leading-tight mt-0.5 font-medium">
+              {lang === 'zh'
+                ? '結合數位元宇宙與校園自然環境'
+                : 'Combining digital metaverse and natural campus'}
             </p>
           </div>
         </a>
       </div>
 
-      {/* ─── Top-Right: MiniMap + controls cluster ─── */}
+      {/* ─── Top-Right: MiniMap + controls ─── */}
       <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-2">
         <MiniMap players={players} myPosition={myPosition} />
         <div className="flex items-center gap-1.5">
-          <div className="bg-card/90 backdrop-blur-xl rounded-xl px-2 py-1.5 border border-border/50 shadow-lg flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs text-foreground font-medium">{players.length}</span>
+          <div className="bg-black/40 backdrop-blur-xl rounded-xl px-2.5 py-1.5 border border-white/15 shadow-lg flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-white/80" />
+            <span className="text-xs text-white font-semibold">{players.length}</span>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="w-8 h-8 bg-card/90 backdrop-blur-xl border border-border/50 shadow-lg text-muted-foreground"
+            className="w-8 h-8 bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60"
             onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
           >
             <Globe className="w-3.5 h-3.5" />
@@ -332,7 +335,7 @@ export default function Plaza() {
           <Button
             variant="ghost"
             size="icon"
-            className="w-8 h-8 bg-card/90 backdrop-blur-xl border border-border/50 shadow-lg text-muted-foreground"
+            className="w-8 h-8 bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60"
             onClick={toggleTheme}
           >
             {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
@@ -340,48 +343,72 @@ export default function Plaza() {
         </div>
       </div>
 
-      {/* ─── Zone HUD Pill with avatar (bottom-left on desktop, top-left on mobile) ─── */}
+      {/* ─── HUD Pill with gradient border + glossy surface (concept-art style) ─── */}
       <div
-        className={`absolute left-4 z-40 top-[5.25rem] md:top-auto md:bottom-20 ${
+        className={`absolute left-4 z-40 top-[5.75rem] md:top-auto md:bottom-20 ${
           showZonePanel ? 'hidden md:block' : 'block'
         }`}
       >
         <motion.button
           onClick={() => currentZone !== 'center' && setShowZonePanel((p) => !p)}
           disabled={currentZone === 'center'}
-          animate={zoneChangeFlash ? { scale: [1, 1.04, 1] } : { scale: 1 }}
+          animate={zoneChangeFlash ? { scale: [1, 1.06, 1] } : { scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative rounded-2xl p-[1.5px] shadow-2xl disabled:cursor-default"
+          className="relative rounded-[22px] p-[2px] shadow-2xl disabled:cursor-default group"
           style={{
-            background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899, #A78BFA)`,
+            background: `linear-gradient(135deg, ${activeZoneColor} 0%, #A78BFA 50%, #EC4899 100%)`,
+            boxShadow: `0 10px 30px -8px ${activeZoneColor}66, 0 4px 12px rgba(0,0,0,0.25)`,
           }}
           aria-label={currentZone !== 'center' ? 'Toggle zone actions' : undefined}
         >
-          <div className="bg-card/95 backdrop-blur-xl rounded-[14px] px-3.5 py-2 flex items-center gap-3">
-            {/* Avatar circle */}
+          <div
+            className="relative rounded-[20px] px-4 py-2.5 flex items-center gap-3 overflow-hidden"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(30,30,40,0.92) 0%, rgba(20,20,30,0.95) 100%)',
+            }}
+          >
+            {/* Glossy highlight */}
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-inner"
+              className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-[20px] opacity-60"
               style={{
-                background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899)`,
+                background:
+                  'linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%)',
               }}
-            >
-              {((user as any)?.display_name || (user as any)?.handle || 'U')
-                .charAt(0)
-                .toUpperCase()}
+            />
+
+            {/* Avatar circle with ring */}
+            <div className="relative shrink-0">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-base font-bold shadow-inner ring-2 ring-white/10"
+                style={{
+                  background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899)`,
+                }}
+              >
+                {userInitial}
+              </div>
+              {/* Online indicator */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 ring-2 ring-slate-900 shadow-[0_0_6px_rgba(74,222,128,0.7)]" />
             </div>
+
             {/* Zone info */}
-            <div className="flex flex-col items-start min-w-0">
-              <span className="text-[9px] text-muted-foreground uppercase tracking-[0.12em] font-semibold leading-none">
-                {lang === 'zh' ? '區域' : 'Zone'}
+            <div className="flex flex-col items-start min-w-0 relative">
+              <span
+                className="text-[9px] uppercase tracking-[0.15em] font-bold leading-none"
+                style={{ color: activeZoneColor }}
+              >
+                {lang === 'zh' ? '區域' : 'Zone'}:{' '}
+                {(ZONE_LABELS[currentZone]?.en || currentZone).toUpperCase()}
               </span>
-              <span className="text-sm font-bold text-foreground leading-tight truncate max-w-[140px]">
+              <span className="text-sm font-bold text-white leading-tight truncate max-w-[140px] mt-0.5">
                 {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
               </span>
             </div>
+
             {currentZone !== 'center' && (
               <ChevronRight
-                className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${
-                  showZonePanel ? 'rotate-90' : ''
+                className={`w-4 h-4 text-white/70 transition-transform shrink-0 relative ${
+                  showZonePanel ? 'rotate-90' : 'group-hover:translate-x-0.5'
                 }`}
               />
             )}
@@ -389,12 +416,12 @@ export default function Plaza() {
         </motion.button>
       </div>
 
-      {/* ─── Virtual Joystick (bottom-right, works on touch + mouse + stylus) ─── */}
+      {/* ─── Virtual Joystick ─── */}
       <div className="absolute bottom-24 right-4 z-50">
         <VirtualJoystick dirRef={touchDirRef} />
       </div>
 
-      {/* ─── Movement instructions (desktop only, auto-hides after 6s) ─── */}
+      {/* ─── Movement instructions (desktop, auto-hides) ─── */}
       <AnimatePresence>
         {showControlsHint && !showWelcome && (
           <motion.div
@@ -404,8 +431,9 @@ export default function Plaza() {
             transition={{ duration: 0.4 }}
             className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none hidden md:block"
           >
-            <div className="bg-card/70 backdrop-blur-sm rounded-full px-3 py-1.5 border border-border/30 shadow-sm">
-              <p className="text-[10px] text-muted-foreground text-center whitespace-nowrap">
+            <div className="bg-black/50 backdrop-blur-md rounded-full px-3.5 py-1.5 border border-white/15 shadow-lg flex items-center gap-2">
+              <Compass className="w-3 h-3 text-white/80" />
+              <p className="text-[11px] text-white/90 font-medium whitespace-nowrap">
                 {lang === 'zh' ? '使用 WASD 或方向鍵移動' : 'Use WASD or Arrow Keys to move'}
               </p>
             </div>
@@ -413,7 +441,7 @@ export default function Plaza() {
         )}
       </AnimatePresence>
 
-      {/* ─── Zone Action Panel (slides in from left, under title card) ─── */}
+      {/* ─── Zone Action Panel ─── */}
       <AnimatePresence>
         {showZonePanel && currentZone !== 'center' && ZONE_ACTIONS[currentZone] && (
           <motion.div
@@ -421,102 +449,114 @@ export default function Plaza() {
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: -80, scale: 0.96 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute left-4 top-[5.5rem] z-40 w-64 max-w-[calc(100vw-2rem)]"
+            className="absolute left-4 top-[5.75rem] z-40 w-64 max-w-[calc(100vw-2rem)]"
           >
             <div
-              className="bg-card/95 backdrop-blur-xl rounded-2xl border shadow-2xl overflow-hidden"
-              style={{ borderColor: `${activeZoneColor}55` }}
+              className="rounded-2xl overflow-hidden shadow-2xl p-[1.5px]"
+              style={{
+                background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899)`,
+              }}
             >
-              {/* Header */}
-              <div
-                className="px-4 py-3 border-b flex items-start justify-between gap-2"
-                style={{
-                  borderColor: `${activeZoneColor}22`,
-                  background: `linear-gradient(135deg, ${activeZoneColor}1f, ${activeZoneColor}08)`,
-                }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: activeZoneColor }}
-                    />
-                    <h3 className="text-sm font-bold text-foreground leading-tight truncate">
-                      {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
-                    </h3>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                    {ZONE_TAGLINES[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowZonePanel(false)}
-                  className="text-muted-foreground hover:text-foreground transition-colors -mt-0.5 p-1 rounded-lg hover:bg-muted/50 shrink-0"
-                  aria-label="Close panel"
+              <div className="bg-card/95 backdrop-blur-xl rounded-[14px] overflow-hidden">
+                {/* Header */}
+                <div
+                  className="px-4 py-3 border-b flex items-start justify-between gap-2"
+                  style={{
+                    borderColor: `${activeZoneColor}22`,
+                    background: `linear-gradient(135deg, ${activeZoneColor}1f, ${activeZoneColor}08)`,
+                  }}
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              {/* Actions */}
-              <div className="p-1.5 space-y-0.5">
-                {ZONE_ACTIONS[currentZone].map((action, i) => {
-                  const Icon = action.icon;
-                  return (
-                    <motion.button
-                      key={i}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: 0.1 + i * 0.06 }}
-                      onClick={() => handleZoneAction(action)}
-                      className="group w-full flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
-                    >
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${activeZoneColor}1f` }}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0 animate-pulse"
+                        style={{ backgroundColor: activeZoneColor }}
+                      />
+                      <h3 className="text-sm font-bold text-foreground leading-tight truncate">
+                        {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                      {ZONE_TAGLINES[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowZonePanel(false)}
+                    className="text-muted-foreground hover:text-foreground transition-colors -mt-0.5 p-1 rounded-lg hover:bg-muted/50 shrink-0"
+                    aria-label="Close panel"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {/* Actions */}
+                <div className="p-1.5 space-y-0.5">
+                  {ZONE_ACTIONS[currentZone].map((action, i) => {
+                    const Icon = action.icon;
+                    return (
+                      <motion.button
+                        key={i}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: 0.1 + i * 0.06 }}
+                        onClick={() => handleZoneAction(action)}
+                        className="group w-full flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
                       >
-                        <Icon className="w-4 h-4" style={{ color: activeZoneColor }} />
-                      </div>
-                      <span className="text-sm text-foreground font-medium flex-1 leading-tight">
-                        {action.label[lang === 'zh' ? 'zh' : 'en']}
-                      </span>
-                      {action.comingSoon && (
-                        <span className="text-[9px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider">
-                          {lang === 'zh' ? '即將' : 'Soon'}
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: `${activeZoneColor}1f` }}
+                        >
+                          <Icon className="w-4 h-4" style={{ color: activeZoneColor }} />
+                        </div>
+                        <span className="text-sm text-foreground font-medium flex-1 leading-tight">
+                          {action.label[lang === 'zh' ? 'zh' : 'en']}
                         </span>
-                      )}
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
-                    </motion.button>
-                  );
-                })}
+                        {action.comingSoon && (
+                          <span className="text-[9px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider">
+                            {lang === 'zh' ? '即將' : 'Soon'}
+                          </span>
+                        )}
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
+                      </motion.button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ─── Action buttons (right side) ─── */}
+      {/* ─── Right-side Action Buttons (vertical cluster) ─── */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
         <button
           onClick={() => setShowCustomizer(!showCustomizer)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border transition-all ${
+          className={`relative w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg border transition-all group ${
             showCustomizer
-              ? 'bg-neon-coral text-white border-neon-coral'
-              : 'bg-card/80 backdrop-blur-sm text-muted-foreground border-border/50 hover:text-foreground'
+              ? 'bg-neon-coral text-white border-neon-coral scale-105'
+              : 'bg-black/40 backdrop-blur-xl text-white/80 border-white/15 hover:text-white hover:bg-black/60'
           }`}
           title={lang === 'zh' ? '自訂角色' : 'Customize Avatar'}
         >
           <Paintbrush className="w-4 h-4" />
+          {showCustomizer && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white shadow-sm" />
+          )}
         </button>
         <button
           onClick={() => setShowChat(!showChat)}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border transition-all ${
+          className={`relative w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg border transition-all ${
             showChat
-              ? 'bg-neon-coral text-white border-neon-coral'
-              : 'bg-card/80 backdrop-blur-sm text-muted-foreground border-border/50 hover:text-foreground'
+              ? 'bg-neon-coral text-white border-neon-coral scale-105'
+              : 'bg-black/40 backdrop-blur-xl text-white/80 border-white/15 hover:text-white hover:bg-black/60'
           }`}
           title={lang === 'zh' ? '聊天' : 'Chat'}
         >
           <MessageCircle className="w-4 h-4" />
+          {bubbles.length > 0 && !showChat && (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-neon-coral text-white text-[9px] font-bold flex items-center justify-center px-1 ring-2 ring-background">
+              {bubbles.length > 9 ? '9+' : bubbles.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -532,9 +572,14 @@ export default function Plaza() {
 
       {/* ─── Chat Input ─── */}
       {showChat && (
-        <div className="absolute bottom-24 lg:bottom-20 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-md">
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.96 }}
+          transition={{ duration: 0.25 }}
+          className="absolute bottom-24 lg:bottom-20 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-md"
+        >
           <div className="bg-card/95 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl p-3">
-            {/* Recent bubbles */}
             <div className="max-h-48 overflow-y-auto mb-3 space-y-2">
               {bubbles.slice(0, 10).map(b => (
                 <div key={b.id} className="flex items-start gap-2">
@@ -549,7 +594,6 @@ export default function Plaza() {
               )}
             </div>
 
-            {/* Input */}
             <div className="flex gap-2">
               <input
                 type="text"
@@ -570,12 +614,16 @@ export default function Plaza() {
               </Button>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ─── Selected Player Info ─── */}
       {selectedPlayer && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-card/95 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl p-4 w-64">
+        <motion.div
+          initial={{ opacity: 0, y: -10, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-card/95 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl p-4 w-64"
+        >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-foreground">{selectedPlayer.display_name}</h3>
             <button onClick={() => setSelectedPlayer(null)} className="text-muted-foreground hover:text-foreground">
@@ -593,25 +641,30 @@ export default function Plaza() {
           <p className="text-[10px] text-muted-foreground mt-2">
             {lang === 'zh' ? '位置' : 'Zone'}: {ZONE_LABELS[selectedPlayer.zone]?.[lang === 'zh' ? 'zh' : 'en'] || selectedPlayer.zone}
           </p>
-        </div>
+        </motion.div>
       )}
 
-      {/* ─── Bottom Navigation ─── */}
+      {/* ─── Bottom Navigation (glass + active-glow) ─── */}
       <div className="absolute bottom-0 left-0 right-0 z-40 bg-card/90 backdrop-blur-xl border-t border-border">
         <div className="flex items-center justify-around py-2">
-          <a href="/feed" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
+          <a href="/feed" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground hover:text-foreground transition-colors">
             <Home className="w-5 h-5" /><span className="text-[10px]">{t('feed.nav.feed')}</span>
           </a>
-          <a href="/dating" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
+          <a href="/dating" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground hover:text-foreground transition-colors">
             <HeartHandshake className="w-5 h-5" /><span className="text-[10px]">{t('feed.nav.dating')}</span>
           </a>
-          <a href="/plaza" className="flex flex-col items-center gap-0.5 px-3 py-1 text-neon-coral">
-            <Box className="w-5 h-5" /><span className="text-[10px] font-medium">{lang === 'zh' ? '廣場' : 'Plaza'}</span>
+          <a href="/plaza" className="relative flex flex-col items-center gap-0.5 px-3 py-1 text-neon-coral">
+            <div className="relative">
+              <Box className="w-5 h-5" />
+              <span className="absolute inset-0 rounded-full bg-neon-coral/20 blur-md -z-10" />
+            </div>
+            <span className="text-[10px] font-semibold">{lang === 'zh' ? '廣場' : 'Plaza'}</span>
+            <span className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-6 h-[2px] rounded-full bg-neon-coral" />
           </a>
-          <a href="/tools" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
+          <a href="/tools" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground hover:text-foreground transition-colors">
             <Wrench className="w-5 h-5" /><span className="text-[10px]">{t('feed.nav.tools')}</span>
           </a>
-          <a href="/profile" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground">
+          <a href="/profile" className="flex flex-col items-center gap-0.5 px-3 py-1 text-muted-foreground hover:text-foreground transition-colors">
             <User className="w-5 h-5" /><span className="text-[10px]">{t('feed.nav.profile')}</span>
           </a>
         </div>
