@@ -5,6 +5,7 @@ import { Text } from '@react-three/drei';
 import ZoneLandmarks from './ZoneLandmarks';
 import ZoneLabels from './ZoneLabels';
 import FountainCallout from './FountainCallout';
+import NPCs from './NPCs';
 
 interface ZoneConfig {
   position: [number, number, number];
@@ -49,6 +50,9 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
 
       {/* "Particle spout" callout on the fountain — hidden when player is at center */}
       <FountainCallout lang={lang} hidden={currentZone === 'center'} />
+
+      {/* NPCs — bring the plaza to life with 8 ambient characters */}
+      <NPCs lang={lang} />
 
       {/* Trees */}
       {TREE_POSITIONS.map((pos, i) => (
