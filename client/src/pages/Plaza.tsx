@@ -54,6 +54,13 @@ export default function Plaza() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Hide WASD instruction after 6s
+  const [showControlsHint, setShowControlsHint] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setShowControlsHint(false), 6000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Flash the zone pill + auto-open the action panel when entering a new zone
   useEffect(() => {
     if (prevZoneRef.current && prevZoneRef.current !== currentZone) {
@@ -204,7 +211,7 @@ export default function Plaza() {
       {/* ─── 3D Canvas ─── */}
       <Canvas
         shadows
-        camera={{ position: [0, 8, 17], fov: 55 }}
+        camera={{ position: [0, 14, 19], fov: 55 }}
         className="absolute inset-0"
         gl={{ antialias: true, alpha: false }}
         onCreated={({ gl }) => {
@@ -281,120 +288,126 @@ export default function Plaza() {
         )}
       </AnimatePresence>
 
-      {/* ─── Zone entry banner (shows briefly when entering new zone) ─── */}
+      {/* ─── Top-Left: Title Card ─── */}
+      <div className="absolute top-4 left-4 z-40">
+        <a
+          href="/feed"
+          className="flex items-center gap-3 bg-card/90 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 border border-border/50 shadow-xl hover:bg-card transition-colors"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-neon-coral to-pink-500 flex items-center justify-center shadow-md shrink-0">
+            <Shield className="w-4 h-4 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="font-display text-sm font-bold text-foreground leading-tight tracking-tight">
+              UniGo <span className="text-neon-coral">Plaza</span>
+            </h1>
+            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+              {lang === 'zh' ? '你的校園宇宙' : 'Your campus universe'}
+            </p>
+          </div>
+        </a>
+      </div>
+
+      {/* ─── Top-Right: MiniMap + controls cluster ─── */}
+      <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-2">
+        <MiniMap players={players} myPosition={myPosition} />
+        <div className="flex items-center gap-1.5">
+          <div className="bg-card/90 backdrop-blur-xl rounded-xl px-2 py-1.5 border border-border/50 shadow-lg flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs text-foreground font-medium">{players.length}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 bg-card/90 backdrop-blur-xl border border-border/50 shadow-lg text-muted-foreground"
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+          >
+            <Globe className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 bg-card/90 backdrop-blur-xl border border-border/50 shadow-lg text-muted-foreground"
+            onClick={toggleTheme}
+          >
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </Button>
+        </div>
+      </div>
+
+      {/* ─── Bottom-Left: Zone HUD Pill with avatar (prominent) ─── */}
+      <div className="absolute bottom-20 lg:bottom-20 left-4 z-40">
+        <motion.button
+          onClick={() => currentZone !== 'center' && setShowZonePanel((p) => !p)}
+          disabled={currentZone === 'center'}
+          animate={zoneChangeFlash ? { scale: [1, 1.04, 1] } : { scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="relative rounded-2xl p-[1.5px] shadow-2xl disabled:cursor-default"
+          style={{
+            background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899, #A78BFA)`,
+          }}
+          aria-label={currentZone !== 'center' ? 'Toggle zone actions' : undefined}
+        >
+          <div className="bg-card/95 backdrop-blur-xl rounded-[14px] px-3.5 py-2 flex items-center gap-3">
+            {/* Avatar circle */}
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-inner"
+              style={{
+                background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899)`,
+              }}
+            >
+              {((user as any)?.display_name || (user as any)?.handle || 'U')
+                .charAt(0)
+                .toUpperCase()}
+            </div>
+            {/* Zone info */}
+            <div className="flex flex-col items-start min-w-0">
+              <span className="text-[9px] text-muted-foreground uppercase tracking-[0.12em] font-semibold leading-none">
+                {lang === 'zh' ? '區域' : 'Zone'}
+              </span>
+              <span className="text-sm font-bold text-foreground leading-tight truncate max-w-[140px]">
+                {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
+              </span>
+            </div>
+            {currentZone !== 'center' && (
+              <ChevronRight
+                className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${
+                  showZonePanel ? 'rotate-90' : ''
+                }`}
+              />
+            )}
+          </div>
+        </motion.button>
+      </div>
+
+      {/* ─── Movement instructions (auto-hides after 6s) ─── */}
       <AnimatePresence>
-        {zoneChangeFlash && !showWelcome && (
+        {showControlsHint && !showWelcome && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.4 }}
-            className="absolute top-28 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
           >
-            <div
-              className="bg-card/90 backdrop-blur-xl rounded-2xl px-5 py-2.5 border shadow-xl flex items-center gap-2.5"
-              style={{ borderColor: `${activeZoneColor}99` }}
-            >
-              <div
-                className="w-2 h-2 rounded-full animate-pulse"
-                style={{ backgroundColor: activeZoneColor }}
-              />
-              <div className="flex flex-col">
-                <span className="text-sm font-bold text-foreground leading-tight">
-                  {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
-                </span>
-                <span className="text-[10px] text-muted-foreground leading-tight">
-                  {ZONE_TAGLINES[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
-                </span>
-              </div>
+            <div className="bg-card/70 backdrop-blur-sm rounded-full px-3 py-1.5 border border-border/30 shadow-sm">
+              <p className="text-[10px] text-muted-foreground text-center whitespace-nowrap">
+                {lang === 'zh' ? '使用 WASD 或方向鍵移動' : 'Use WASD or Arrow Keys to move'}
+              </p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ─── Top HUD ─── */}
-      <div className="absolute top-0 left-0 right-0 z-40">
-        <div className="flex items-center justify-between px-4 py-3">
-          {/* Left: logo + zone */}
-          <div className="flex items-center gap-3">
-            <a href="/feed" className="flex items-center gap-2 bg-card/80 backdrop-blur-sm rounded-xl px-3 py-2 border border-border/50 shadow-sm">
-              <div className="w-6 h-6 rounded-md bg-neon-coral flex items-center justify-center">
-                <Shield className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="font-display text-sm font-bold text-foreground hidden sm:inline">
-                UniGo<span className="text-neon-coral"> HK</span>
-              </span>
-            </a>
-            <motion.button
-              onClick={() => currentZone !== 'center' && setShowZonePanel((p) => !p)}
-              disabled={currentZone === 'center'}
-              animate={zoneChangeFlash ? { scale: [1, 1.08, 1] } : { scale: 1 }}
-              transition={{ duration: 0.5 }}
-              className="bg-card/85 backdrop-blur-sm rounded-xl px-3 py-2 border shadow-sm flex items-center gap-2 disabled:cursor-default enabled:hover:bg-card transition-colors"
-              style={{ borderColor: `${activeZoneColor}66` }}
-              aria-label={currentZone !== 'center' ? 'Toggle zone actions' : undefined}
-            >
-              <MapPin className="w-3.5 h-3.5" style={{ color: activeZoneColor }} />
-              <span className="text-xs text-foreground font-medium">
-                {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
-              </span>
-              {currentZone !== 'center' && (
-                <ChevronRight
-                  className={`w-3 h-3 text-muted-foreground transition-transform ${
-                    showZonePanel ? 'rotate-90' : ''
-                  }`}
-                />
-              )}
-            </motion.button>
-          </div>
-
-          {/* Right: controls */}
-          <div className="flex items-center gap-1.5">
-            <div className="bg-card/80 backdrop-blur-sm rounded-xl px-2 py-1.5 border border-border/50 shadow-sm flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-foreground font-medium">{players.length}</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-8 h-8 bg-card/80 backdrop-blur-sm border border-border/50 shadow-sm text-muted-foreground"
-              onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-            >
-              <Globe className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-8 h-8 bg-card/80 backdrop-blur-sm border border-border/50 shadow-sm text-muted-foreground"
-              onClick={toggleTheme}
-            >
-              {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Movement instructions ─── */}
-      <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-        <div className="bg-card/60 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-border/30 shadow-sm">
-          <p className="text-[10px] text-muted-foreground text-center">
-            {lang === 'zh' ? '使用 WASD 或方向鍵移動' : 'Use WASD or Arrow Keys to move'}
-          </p>
-        </div>
-      </div>
-
-      {/* ─── Mini Map ─── */}
-      <MiniMap players={players} myPosition={myPosition} />
-
-      {/* ─── Zone Action Panel (slides in from right when in a zone) ─── */}
+      {/* ─── Zone Action Panel (slides in from left, under title card) ─── */}
       <AnimatePresence>
         {showZonePanel && currentZone !== 'center' && ZONE_ACTIONS[currentZone] && (
           <motion.div
-            initial={{ opacity: 0, x: 80, scale: 0.96 }}
+            initial={{ opacity: 0, x: -80, scale: 0.96 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 80, scale: 0.96 }}
+            exit={{ opacity: 0, x: -80, scale: 0.96 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute right-4 top-20 z-40 w-64 max-w-[calc(100vw-2rem)]"
+            className="absolute left-4 top-[5.5rem] z-40 w-64 max-w-[calc(100vw-2rem)]"
           >
             <div
               className="bg-card/95 backdrop-blur-xl rounded-2xl border shadow-2xl overflow-hidden"

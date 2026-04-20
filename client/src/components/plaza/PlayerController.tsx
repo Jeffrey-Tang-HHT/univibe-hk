@@ -102,16 +102,16 @@ export default function PlayerController({ config, onPositionUpdate, speed = 8 }
     );
     groupRef.current.rotation.y = currentRotRef.current;
 
-    // Camera follow (third-person)
+    // Camera follow (third-person, slightly isometric)
     const playerPos = groupRef.current.position;
-    const cameraOffset = new THREE.Vector3(0, 8, 12);
+    const cameraOffset = new THREE.Vector3(0, 14, 14);
     const targetCameraPos = new THREE.Vector3(
       playerPos.x + cameraOffset.x,
       playerPos.y + cameraOffset.y,
       playerPos.z + cameraOffset.z
     );
     camera.position.lerp(targetCameraPos, 0.05);
-    camera.lookAt(playerPos.x, playerPos.y + 1, playerPos.z);
+    camera.lookAt(playerPos.x, playerPos.y + 1.2, playerPos.z);
 
     // Send position updates every 200ms
     const now = Date.now();
