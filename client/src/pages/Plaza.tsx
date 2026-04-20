@@ -6,7 +6,7 @@ import {
   Shield, Home, HeartHandshake, Wrench, User, Globe, Moon, Sun,
   Send, Paintbrush, Users, MessageCircle, X, Box,
   BookOpen, TrendingUp, Sparkles, Calculator, Plus, Zap, Clock, Star, ChevronRight,
-  Compass,
+  Compass, Route,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,8 @@ import OtherPlayers from '@/components/plaza/OtherPlayers';
 import MiniMap from '@/components/plaza/MiniMap';
 import AvatarCustomizer from '@/components/plaza/AvatarCustomizer';
 import VirtualJoystick from '@/components/plaza/VirtualJoystick';
+import JourneyLog, { type JourneyEntry } from '@/components/plaza/JourneyLog';
+import ZoneEntryToast from '@/components/plaza/ZoneEntryToast';
 import {
   updatePosition, getPlayers, sendBubble, getBubbles, saveAvatar, leavePlaza,
   DEFAULT_AVATAR,
@@ -46,9 +48,15 @@ export default function Plaza() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [zoneChangeFlash, setZoneChangeFlash] = useState(false);
   const [showZonePanel, setShowZonePanel] = useState(false);
+  // Journey log — session-only (clears on refresh)
+  const [journey, setJourney] = useState<JourneyEntry[]>([]);
+  const [showJourneyLog, setShowJourneyLog] = useState(false);
+  const [toastZone, setToastZone] = useState<string | null>(null);
+  const [toastSeq, setToastSeq] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
   const posRef = useRef({ x: 0, y: 0, z: 5, rotation: 0, zone: 'center', isMoving: false });
   const prevZoneRef = useRef('center');
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const touchDirRef = useRef({ x: 0, z: 0 });
 
   // Hide welcome overlay after 3.5s
@@ -64,17 +72,44 @@ export default function Plaza() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Flash the zone pill + auto-open the action panel when entering a new zone
+  // Flash the zone pill + auto-open the action panel + log journey entry when entering a new zone
   useEffect(() => {
     if (prevZoneRef.current && prevZoneRef.current !== currentZone) {
       setZoneChangeFlash(true);
       setShowZonePanel(currentZone !== 'center');
+
+      // Log journey entry (session-only) and show toast
+      setJourney((prev) => {
+        const sequenceNumber = prev.length + 1;
+        const newEntry: JourneyEntry = {
+          id: `${Date.now()}-${currentZone}`,
+          zone: currentZone,
+          timestamp: Date.now(),
+          sequenceNumber,
+        };
+        // Trigger toast (deferred so state-in-effect chain is clean)
+        setTimeout(() => {
+          setToastSeq(sequenceNumber);
+          setToastZone(currentZone);
+          if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+          toastTimerRef.current = setTimeout(() => setToastZone(null), 3500);
+        }, 0);
+        return [...prev, newEntry];
+      });
+
       const t = setTimeout(() => setZoneChangeFlash(false), 1200);
       prevZoneRef.current = currentZone;
       return () => clearTimeout(t);
     }
     prevZoneRef.current = currentZone;
   }, [currentZone]);
+
+  // Clean up toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -202,10 +237,6 @@ export default function Plaza() {
 
   if (!isLoggedIn) return null;
 
-  const userInitial = ((user as any)?.display_name || (user as any)?.handle || 'U')
-    .charAt(0)
-    .toUpperCase();
-
   return (
     <div className="h-screen w-screen bg-background overflow-hidden relative">
       {/* ─── 3D Canvas ─── */}
@@ -318,7 +349,11 @@ export default function Plaza() {
 
       {/* ─── Top-Right: MiniMap + controls ─── */}
       <div className="absolute top-4 right-4 z-40 flex flex-col items-end gap-2">
-        <MiniMap players={players} myPosition={myPosition} />
+        <MiniMap
+          players={players}
+          myPosition={myPosition}
+          waypoints={journey.map(e => ({ zone: e.zone, sequenceNumber: e.sequenceNumber }))}
+        />
         <div className="flex items-center gap-1.5">
           <div className="bg-black/40 backdrop-blur-xl rounded-xl px-2.5 py-1.5 border border-white/15 shadow-lg flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-white/80" />
@@ -343,23 +378,22 @@ export default function Plaza() {
         </div>
       </div>
 
-      {/* ─── HUD Pill with gradient border + glossy surface (concept-art style) ─── */}
+      {/* ─── HUD Pill: Character Movement Log (concept-art style) ─── */}
       <div
         className={`absolute left-4 z-40 top-[5.75rem] md:top-auto md:bottom-20 ${
-          showZonePanel ? 'hidden md:block' : 'block'
+          showZonePanel || showJourneyLog ? 'hidden md:block' : 'block'
         }`}
       >
         <motion.button
-          onClick={() => currentZone !== 'center' && setShowZonePanel((p) => !p)}
-          disabled={currentZone === 'center'}
+          onClick={() => setShowJourneyLog(true)}
           animate={zoneChangeFlash ? { scale: [1, 1.06, 1] } : { scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative rounded-[22px] p-[2px] shadow-2xl disabled:cursor-default group"
+          className="relative rounded-[22px] p-[2px] shadow-2xl group"
           style={{
             background: `linear-gradient(135deg, ${activeZoneColor} 0%, #A78BFA 50%, #EC4899 100%)`,
             boxShadow: `0 10px 30px -8px ${activeZoneColor}66, 0 4px 12px rgba(0,0,0,0.25)`,
           }}
-          aria-label={currentZone !== 'center' ? 'Toggle zone actions' : undefined}
+          aria-label={lang === 'zh' ? '開啟角色移動日誌' : 'Open character movement log'}
         >
           <div
             className="relative rounded-[20px] px-4 py-2.5 flex items-center gap-3 overflow-hidden"
@@ -377,41 +411,46 @@ export default function Plaza() {
               }}
             />
 
-            {/* Avatar circle with ring */}
+            {/* Person silhouette icon (concept-art style) */}
             <div className="relative shrink-0">
               <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white text-base font-bold shadow-inner ring-2 ring-white/10"
+                className="w-10 h-10 rounded-full flex items-center justify-center shadow-inner ring-2 ring-white/10"
                 style={{
                   background: `linear-gradient(135deg, ${activeZoneColor}, #EC4899)`,
                 }}
               >
-                {userInitial}
+                <User className="w-5 h-5 text-white" strokeWidth={2.2} />
               </div>
-              {/* Online indicator */}
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-400 ring-2 ring-slate-900 shadow-[0_0_6px_rgba(74,222,128,0.7)]" />
+              {/* Sequence count badge */}
+              {journey.length > 0 && (
+                <div
+                  className="absolute -bottom-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-neon-coral text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-slate-900"
+                >
+                  {journey.length > 99 ? '99+' : journey.length}
+                </div>
+              )}
             </div>
 
-            {/* Zone info */}
+            {/* Label */}
             <div className="flex flex-col items-start min-w-0 relative">
               <span
                 className="text-[9px] uppercase tracking-[0.15em] font-bold leading-none"
                 style={{ color: activeZoneColor }}
               >
-                {lang === 'zh' ? '區域' : 'Zone'}:{' '}
-                {(ZONE_LABELS[currentZone]?.en || currentZone).toUpperCase()}
+                {lang === 'zh' ? 'HUD 詳細視角' : 'HUD Detailed Perspectives'}
               </span>
-              <span className="text-sm font-bold text-white leading-tight truncate max-w-[140px] mt-0.5">
-                {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
+              <span className="text-sm font-bold text-white leading-tight truncate max-w-[160px] mt-1">
+                {lang === 'zh' ? '角色移動日誌' : 'Character Movement Log'}
+              </span>
+              <span className="text-[10px] text-white/60 leading-tight truncate max-w-[160px] mt-0.5">
+                {lang === 'zh' ? '目前:' : 'Now:'}{' '}
+                <span style={{ color: activeZoneColor }} className="font-semibold">
+                  {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
+                </span>
               </span>
             </div>
 
-            {currentZone !== 'center' && (
-              <ChevronRight
-                className={`w-4 h-4 text-white/70 transition-transform shrink-0 relative ${
-                  showZonePanel ? 'rotate-90' : 'group-hover:translate-x-0.5'
-                }`}
-              />
-            )}
+            <ChevronRight className="w-4 h-4 text-white/70 transition-transform shrink-0 relative group-hover:translate-x-0.5" />
           </div>
         </motion.button>
       </div>
@@ -643,6 +682,84 @@ export default function Plaza() {
           </p>
         </motion.div>
       )}
+
+      {/* ─── Zone Entry Toast (auto-popup on zone change) ─── */}
+      <ZoneEntryToast zone={toastZone} sequenceNumber={toastSeq} lang={lang} />
+
+      {/* ─── Journey Log Modal Panel ─── */}
+      <JourneyLog
+        entries={journey}
+        lang={lang}
+        isOpen={showJourneyLog}
+        onClose={() => setShowJourneyLog(false)}
+        onClear={() => {
+          setJourney([]);
+          setShowJourneyLog(false);
+          toast(lang === 'zh' ? '日誌已清除' : 'Log cleared');
+        }}
+      />
+
+      {/* ─── Path chip — concept-art "Path: Start → Destination (status)" ─── */}
+      <AnimatePresence>
+        {journey.length > 0 && !showWelcome && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.4 }}
+            className="absolute bottom-20 lg:bottom-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none hidden sm:block"
+          >
+            <div
+              className="rounded-full p-[1.5px] shadow-2xl"
+              style={{
+                background: `linear-gradient(135deg, ${activeZoneColor}, #A78BFA, #EC4899)`,
+              }}
+            >
+              <div
+                className="rounded-full px-4 py-1.5 flex items-center gap-2"
+                style={{
+                  background:
+                    'linear-gradient(180deg, rgba(20,22,30,0.92) 0%, rgba(15,17,25,0.96) 100%)',
+                }}
+              >
+                <Route className="w-3 h-3 text-white/70 shrink-0" />
+                <div className="flex items-center gap-1 text-[11px] whitespace-nowrap">
+                  <span className="text-white/60 font-semibold uppercase tracking-wider text-[9px]">
+                    {lang === 'zh' ? '路徑' : 'Path'}:
+                  </span>
+                  <span className="text-white font-medium">
+                    {(() => {
+                      const first = journey[0];
+                      const last = journey[journey.length - 1];
+                      const firstLabel =
+                        ZONE_LABELS[first.zone]?.[lang === 'zh' ? 'zh' : 'en'] || first.zone;
+                      const lastLabel =
+                        ZONE_LABELS[last.zone]?.[lang === 'zh' ? 'zh' : 'en'] || last.zone;
+                      if (journey.length === 1) return firstLabel;
+                      return `${firstLabel} → ${lastLabel}`;
+                    })()}
+                  </span>
+                  <span
+                    className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide"
+                    style={{
+                      backgroundColor: `${activeZoneColor}25`,
+                      color: activeZoneColor,
+                    }}
+                  >
+                    {currentZone === 'center' && journey.length > 1
+                      ? lang === 'zh'
+                        ? '進行中'
+                        : 'Active'
+                      : lang === 'zh'
+                      ? '已完成'
+                      : 'Complete'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Bottom Navigation (glass + active-glow) ─── */}
       <div className="absolute bottom-0 left-0 right-0 z-40 bg-card/90 backdrop-blur-xl border-t border-border">

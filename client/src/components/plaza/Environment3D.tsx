@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import ZoneLandmarks from './ZoneLandmarks';
 import ZoneLabels from './ZoneLabels';
+import FountainCallout from './FountainCallout';
 
 interface ZoneConfig {
   position: [number, number, number];
@@ -46,6 +47,9 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
 
       {/* Leader-line zone labels (HTML overlays projected from 3D positions) */}
       <ZoneLabels lang={lang} currentZone={currentZone} />
+
+      {/* "Particle spout" callout on the fountain — hidden when player is at center */}
+      <FountainCallout lang={lang} hidden={currentZone === 'center'} />
 
       {/* Trees */}
       {TREE_POSITIONS.map((pos, i) => (

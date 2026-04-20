@@ -3,6 +3,8 @@ import type { PlazaPlayer } from '@/lib/plaza';
 interface MiniMapProps {
   players: PlazaPlayer[];
   myPosition: { x: number; z: number };
+  /** Journey entries — shows numbered waypoints (most recent 4 by default). */
+  waypoints?: Array<{ zone: string; sequenceNumber: number }>;
 }
 
 const MAP_SIZE = 140;
@@ -16,7 +18,15 @@ const ZONES = [
   { name: 'cafe', cx: 18, cz: 18, r: 7, color: '#FFA07A' },
 ];
 
-export default function MiniMap({ players, myPosition }: MiniMapProps) {
+const ZONE_POSITIONS: Record<string, { x: number; z: number; color: string }> = {
+  center: { x: 0, z: 0, color: '#4ECDC4' },
+  study: { x: -18, z: -15, color: '#45B7D1' },
+  social: { x: 18, z: -15, color: '#FF6B6B' },
+  dating: { x: -18, z: 18, color: '#C4B5FD' },
+  cafe: { x: 18, z: 18, color: '#FFA07A' },
+};
+
+export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMapProps) {
   const toMap = (worldX: number, worldZ: number) => ({
     x: (worldX + MAP_SIZE / 2) * SCALE,
     y: (worldZ + MAP_SIZE / 2) * SCALE,
@@ -24,6 +34,27 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
 
   const myMapPos = toMap(myPosition.x, myPosition.z);
   const centerPos = toMap(0, 0);
+
+  // Last 4 waypoints, deduplicated by zone (keep newest for repeated visits)
+  const recentWaypoints = (() => {
+    const seen = new Map<string, { zone: string; sequenceNumber: number }>();
+    for (const wp of waypoints) {
+      seen.set(wp.zone, wp); // Newer entries override older
+    }
+    // Take last 4 entries in insertion order, then sort by sequenceNumber asc
+    return Array.from(seen.values())
+      .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+      .slice(-4);
+  })();
+
+  // Compute path between waypoints (for the journey trail)
+  const pathSegments: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = [];
+  for (let i = 0; i < recentWaypoints.length - 1; i++) {
+    const a = ZONE_POSITIONS[recentWaypoints[i].zone];
+    const b = ZONE_POSITIONS[recentWaypoints[i + 1].zone];
+    if (!a || !b) continue;
+    pathSegments.push({ from: toMap(a.x, a.z), to: toMap(b.x, b.z) });
+  }
 
   return (
     <div
@@ -35,13 +66,11 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
     >
       <svg viewBox="0 0 100 100" className="w-full h-full block">
         <defs>
-          {/* Grass — top-down park vibe */}
           <radialGradient id="mapBg" cx="50%" cy="50%" r="75%">
             <stop offset="0%" stopColor="#DCEDC8" />
             <stop offset="60%" stopColor="#AED581" />
             <stop offset="100%" stopColor="#8BC34A" />
           </radialGradient>
-          {/* Soft center glow */}
           <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#4ECDC4" stopOpacity="0.35" />
             <stop offset="100%" stopColor="#4ECDC4" stopOpacity="0" />
@@ -49,14 +78,12 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
           <filter id="blur1"><feGaussianBlur stdDeviation="0.4" /></filter>
         </defs>
 
-        {/* Grass ground */}
         <rect width="100" height="100" fill="url(#mapBg)" />
 
         {/* Pathways — curved spokes radiating from centre */}
         <g stroke="#D7BF95" strokeWidth="3" strokeLinecap="round" opacity="0.85" fill="none">
           {ZONES.filter(z => z.name !== 'center').map(zone => {
             const p = toMap(zone.cx, zone.cz);
-            // Quadratic curve — slight bend for organic feel
             const midX = (centerPos.x + p.x) / 2 + (p.x > centerPos.x ? 3 : -3);
             const midY = (centerPos.y + p.y) / 2 + (p.y > centerPos.y ? 3 : -3);
             return (
@@ -66,7 +93,6 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
               />
             );
           })}
-          {/* Straight axis paths to edges */}
           <line x1={centerPos.x} y1={centerPos.y} x2={centerPos.x} y2="6" />
           <line x1={centerPos.x} y1={centerPos.y} x2={centerPos.x} y2="94" />
           <line x1={centerPos.x} y1={centerPos.y} x2="6" y2={centerPos.y} />
@@ -96,24 +122,8 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
           const pos = toMap(zone.cx, zone.cz);
           return (
             <g key={zone.name}>
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={zone.r * SCALE + 1.5}
-                fill={zone.color}
-                opacity="0.25"
-                filter="url(#blur1)"
-              />
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={zone.r * SCALE}
-                fill={zone.color}
-                opacity="0.45"
-                stroke={zone.color}
-                strokeWidth="0.7"
-                strokeOpacity="0.95"
-              />
+              <circle cx={pos.x} cy={pos.y} r={zone.r * SCALE + 1.5} fill={zone.color} opacity="0.25" filter="url(#blur1)" />
+              <circle cx={pos.x} cy={pos.y} r={zone.r * SCALE} fill={zone.color} opacity="0.45" stroke={zone.color} strokeWidth="0.7" strokeOpacity="0.95" />
             </g>
           );
         })}
@@ -126,7 +136,6 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
         </g>
 
         {/* Landmark mini-icons */}
-        {/* Study Zone — wooden pergola (top-down) */}
         {(() => {
           const p = toMap(-18, -15);
           return (
@@ -138,8 +147,6 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
             </g>
           );
         })()}
-
-        {/* Social Zone — pink stage */}
         {(() => {
           const p = toMap(18, -15);
           return (
@@ -149,23 +156,14 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
             </g>
           );
         })()}
-
-        {/* Dating Corner — heart arch */}
         {(() => {
           const p = toMap(-18, 18);
           return (
             <g transform={`translate(${p.x} ${p.y})`}>
-              <path
-                d="M 0,-2 C -1.2,-3.2 -3,-2.5 -3,-1 C -3,0.5 -1.5,1.5 0,2.5 C 1.5,1.5 3,0.5 3,-1 C 3,-2.5 1.2,-3.2 0,-2 Z"
-                fill="#F06292"
-                stroke="#C2185B"
-                strokeWidth="0.3"
-              />
+              <path d="M 0,-2 C -1.2,-3.2 -3,-2.5 -3,-1 C -3,0.5 -1.5,1.5 0,2.5 C 1.5,1.5 3,0.5 3,-1 C 3,-2.5 1.2,-3.2 0,-2 Z" fill="#F06292" stroke="#C2185B" strokeWidth="0.3" />
             </g>
           );
         })()}
-
-        {/* Café — umbrella */}
         {(() => {
           const p = toMap(18, 18);
           return (
@@ -191,6 +189,21 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
           ))}
         </g>
 
+        {/* Journey path — dashed line connecting waypoints */}
+        {pathSegments.length > 0 && (
+          <g stroke="#1E293B" strokeWidth="0.7" strokeDasharray="1.8 1.2" fill="none" opacity="0.55">
+            {pathSegments.map((seg, i) => (
+              <line
+                key={`seg-${i}`}
+                x1={seg.from.x}
+                y1={seg.from.y}
+                x2={seg.to.x}
+                y2={seg.to.y}
+              />
+            ))}
+          </g>
+        )}
+
         {/* Other players */}
         {players.filter(p => !p.is_me).map(player => {
           const pos = toMap(player.x, player.z);
@@ -198,6 +211,55 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
             <g key={player.id}>
               <circle cx={pos.x} cy={pos.y} r={2.2} fill="#6C63FF" opacity="0.4" />
               <circle cx={pos.x} cy={pos.y} r={1.4} fill="#6C63FF" stroke="white" strokeWidth="0.3" />
+            </g>
+          );
+        })}
+
+        {/* Numbered waypoints — concept-art 1/2/3/4 markers */}
+        {recentWaypoints.map((wp, i) => {
+          const zpos = ZONE_POSITIONS[wp.zone];
+          if (!zpos) return null;
+          const p = toMap(zpos.x, zpos.z);
+          const isLatest = i === recentWaypoints.length - 1;
+          // Display label 1-based index within the recent set
+          const displayNum = i + 1;
+          return (
+            <g key={`wp-${wp.sequenceNumber}`}>
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="3.8"
+                fill="white"
+                stroke={zpos.color}
+                strokeWidth="1"
+                opacity={isLatest ? 1 : 0.9}
+              />
+              {isLatest && (
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r="5.5"
+                  fill="none"
+                  stroke={zpos.color}
+                  strokeWidth="0.6"
+                  opacity="0.6"
+                >
+                  <animate attributeName="r" values="4;7;4" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.6;0;0.6" dur="1.8s" repeatCount="indefinite" />
+                </circle>
+              )}
+              <text
+                x={p.x}
+                y={p.y}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize="4.5"
+                fontWeight="700"
+                fill={zpos.color}
+                fontFamily="system-ui, sans-serif"
+              >
+                {displayNum}
+              </text>
             </g>
           );
         })}
@@ -213,7 +275,6 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
         </g>
       </svg>
 
-      {/* Online count — bottom-right pill */}
       <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded-full">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_4px_rgba(74,222,128,0.8)]" />
         <span className="text-[9px] text-white font-semibold tracking-wide">
@@ -221,12 +282,10 @@ export default function MiniMap({ players, myPosition }: MiniMapProps) {
         </span>
       </div>
 
-      {/* Compass — top-left */}
       <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
         <span className="text-[8px] font-bold text-white leading-none">N</span>
       </div>
 
-      {/* Top-right label */}
       <div className="absolute top-1.5 right-1.5 bg-white/60 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
         <span className="text-[8px] font-bold text-slate-700 tracking-wider uppercase">Map</span>
       </div>
