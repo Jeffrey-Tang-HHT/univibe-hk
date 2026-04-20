@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
+import ZoneLandmarks from './ZoneLandmarks';
 
 interface ZoneConfig {
   position: [number, number, number];
@@ -29,6 +30,9 @@ export default function Environment({ lang = 'zh' }: { lang?: string }) {
       {ZONES.map((zone, i) => (
         <ZoneMarker key={i} zone={zone} lang={lang} />
       ))}
+
+      {/* Zone landmarks — distinctive structures for each zone */}
+      <ZoneLandmarks />
 
       {/* Trees */}
       {TREE_POSITIONS.map((pos, i) => (
@@ -118,7 +122,6 @@ function ZoneMarker({ zone, lang }: { zone: ZoneConfig; lang: string }) {
         color={zone.color}
         anchorX="center"
         anchorY="middle"
-        font="/fonts/Inter-Bold.woff"
         outlineWidth={0.05}
         outlineColor="#000000"
       >
