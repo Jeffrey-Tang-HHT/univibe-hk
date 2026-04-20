@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useLocation } from 'wouter';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield, Home, HeartHandshake, Wrench, User, Globe, Moon, Sun,
-  LogOut, Send, Paintbrush, MapPin, Users, MessageCircle, X, Box
+  LogOut, Send, Paintbrush, MapPin, Users, MessageCircle, X, Box,
+  BookOpen, TrendingUp, Sparkles, Calculator, Plus, Zap, Clock, Star, ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,8 +41,31 @@ export default function Plaza() {
   });
   const [currentZone, setCurrentZone] = useState('center');
   const [selectedPlayer, setSelectedPlayer] = useState<PlazaPlayer | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [zoneChangeFlash, setZoneChangeFlash] = useState(false);
+  const [showZonePanel, setShowZonePanel] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
   const posRef = useRef({ x: 0, y: 0, z: 5, rotation: 0, zone: 'center', isMoving: false });
+  const prevZoneRef = useRef('center');
+
+  // Hide welcome overlay after 3.5s
+  useEffect(() => {
+    const timer = setTimeout(() => setShowWelcome(false), 3500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Flash the zone pill + auto-open the action panel when entering a new zone
+  useEffect(() => {
+    if (prevZoneRef.current && prevZoneRef.current !== currentZone) {
+      setZoneChangeFlash(true);
+      // Auto-open action panel on zone entry (close on returning to center)
+      setShowZonePanel(currentZone !== 'center');
+      const t = setTimeout(() => setZoneChangeFlash(false), 1200);
+      prevZoneRef.current = currentZone;
+      return () => clearTimeout(t);
+    }
+    prevZoneRef.current = currentZone;
+  }, [currentZone]);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -114,6 +139,64 @@ export default function Plaza() {
     cafe: { zh: '咖啡廳', en: 'Café' },
   };
 
+  const ZONE_COLORS: Record<string, string> = {
+    center: '#4ECDC4',
+    study: '#45B7D1',
+    social: '#FF6B6B',
+    dating: '#C4B5FD',
+    cafe: '#FFA07A',
+  };
+
+  const ZONE_TAGLINES: Record<string, { zh: string; en: string }> = {
+    center: { zh: '校園的心臟', en: 'The heart of campus' },
+    study: { zh: '專注學習之處', en: 'A place to focus' },
+    social: { zh: '認識新朋友', en: 'Meet new people' },
+    dating: { zh: '浪漫的角落', en: 'A romantic corner' },
+    cafe: { zh: '喝杯咖啡歇息', en: 'Grab a coffee' },
+  };
+
+  const activeZoneColor = ZONE_COLORS[currentZone] || '#4ECDC4';
+
+  // Zone-specific actions: navigate to existing app pages or toast placeholders
+  const ZONE_ACTIONS: Record<
+    string,
+    Array<{
+      icon: typeof Clock;
+      label: { zh: string; en: string };
+      href?: string;
+      comingSoon?: boolean;
+    }>
+  > = {
+    study: [
+      { icon: Clock, label: { zh: '專注計時器', en: 'Focus Timer' }, comingSoon: true },
+      { icon: Users, label: { zh: '尋找學習夥伴', en: 'Find Study Buddy' }, href: '/feed' },
+      { icon: BookOpen, label: { zh: '筆記交流', en: 'Notes Exchange' }, href: '/feed' },
+    ],
+    social: [
+      { icon: Home, label: { zh: '動態消息', en: 'Feed' }, href: '/feed' },
+      { icon: Plus, label: { zh: '發佈新貼', en: 'New Post' }, href: '/feed' },
+      { icon: TrendingUp, label: { zh: '熱門話題', en: 'Trending' }, href: '/feed' },
+    ],
+    dating: [
+      { icon: HeartHandshake, label: { zh: '進入交友', en: 'Enter Dating' }, href: '/dating' },
+      { icon: Sparkles, label: { zh: '我的匹配', en: 'My Matches' }, href: '/dating' },
+      { icon: Zap, label: { zh: 'Vibe 檢查', en: 'Vibe Check' }, href: '/dating' },
+    ],
+    cafe: [
+      { icon: Wrench, label: { zh: '校園工具', en: 'Campus Tools' }, href: '/tools' },
+      { icon: Calculator, label: { zh: 'GPA 計算', en: 'GPA Calculator' }, href: '/tools' },
+      { icon: Star, label: { zh: '課程評價', en: 'Course Reviews' }, href: '/tools' },
+    ],
+  };
+
+  const handleZoneAction = (action: { href?: string; comingSoon?: boolean }) => {
+    if (action.href) {
+      setLocation(action.href);
+    } else if (action.comingSoon) {
+      toast(lang === 'zh' ? '即將推出 ✨' : 'Coming soon ✨');
+    }
+  };
+
   if (!isLoggedIn) return null;
 
   return (
@@ -128,10 +211,11 @@ export default function Plaza() {
           gl.setClearColor('#87CEEB');
         }}
       >
-        <ambientLight intensity={0.6} />
+        <ambientLight intensity={0.45} />
         <directionalLight
-          position={[20, 30, 10]}
-          intensity={1}
+          position={[15, 25, 10]}
+          intensity={1.15}
+          color="#FFF4E0"
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -141,7 +225,7 @@ export default function Plaza() {
           shadow-camera-top={50}
           shadow-camera-bottom={-50}
         />
-        <hemisphereLight args={['#87CEEB', '#7CB342', 0.3]} />
+        <hemisphereLight args={['#B5D9EC', '#7CB342', 0.5]} />
 
         <Suspense fallback={null}>
           <Environment3D lang={lang} />
@@ -157,6 +241,77 @@ export default function Plaza() {
         </Suspense>
       </Canvas>
 
+      {/* ─── Welcome overlay (fades after 3.5s) ─── */}
+      <AnimatePresence>
+        {showWelcome && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.98 }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute top-[28%] left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+          >
+            <div className="text-center">
+              <motion.h1
+                initial={{ letterSpacing: '-0.02em' }}
+                animate={{ letterSpacing: '0em' }}
+                transition={{ duration: 0.9, delay: 0.1 }}
+                className="font-display text-5xl sm:text-6xl font-bold text-white tracking-tight"
+                style={{ textShadow: '0 4px 20px rgba(0,0,0,0.35)' }}
+              >
+                UniGo <span className="text-neon-coral">Plaza</span>
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="text-base sm:text-lg text-white/90 mt-3 font-medium"
+                style={{ textShadow: '0 2px 12px rgba(0,0,0,0.4)' }}
+              >
+                {lang === 'zh' ? '探索你的校園宇宙' : 'Explore your campus universe'}
+              </motion.p>
+              <motion.div
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.7, delay: 0.5 }}
+                className="mt-5 h-[2px] bg-gradient-to-r from-transparent via-neon-coral to-transparent w-48 mx-auto origin-left"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Zone entry banner (shows briefly when entering new zone) ─── */}
+      <AnimatePresence>
+        {zoneChangeFlash && !showWelcome && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.4 }}
+            className="absolute top-28 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+          >
+            <div
+              className="bg-card/90 backdrop-blur-xl rounded-2xl px-5 py-2.5 border shadow-xl flex items-center gap-2.5"
+              style={{ borderColor: `${activeZoneColor}99` }}
+            >
+              <div
+                className="w-2 h-2 rounded-full animate-pulse"
+                style={{ backgroundColor: activeZoneColor }}
+              />
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-foreground leading-tight">
+                  {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
+                </span>
+                <span className="text-[10px] text-muted-foreground leading-tight">
+                  {ZONE_TAGLINES[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ─── Top HUD ─── */}
       <div className="absolute top-0 left-0 right-0 z-40">
         <div className="flex items-center justify-between px-4 py-3">
@@ -170,12 +325,27 @@ export default function Plaza() {
                 UniGo<span className="text-neon-coral"> HK</span>
               </span>
             </a>
-            <div className="bg-card/80 backdrop-blur-sm rounded-xl px-3 py-2 border border-border/50 shadow-sm flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5 text-neon-coral" />
+            <motion.button
+              onClick={() => currentZone !== 'center' && setShowZonePanel((p) => !p)}
+              disabled={currentZone === 'center'}
+              animate={zoneChangeFlash ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="bg-card/85 backdrop-blur-sm rounded-xl px-3 py-2 border shadow-sm flex items-center gap-2 disabled:cursor-default enabled:hover:bg-card transition-colors"
+              style={{ borderColor: `${activeZoneColor}66` }}
+              aria-label={currentZone !== 'center' ? 'Toggle zone actions' : undefined}
+            >
+              <MapPin className="w-3.5 h-3.5" style={{ color: activeZoneColor }} />
               <span className="text-xs text-foreground font-medium">
                 {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
               </span>
-            </div>
+              {currentZone !== 'center' && (
+                <ChevronRight
+                  className={`w-3 h-3 text-muted-foreground transition-transform ${
+                    showZonePanel ? 'rotate-90' : ''
+                  }`}
+                />
+              )}
+            </motion.button>
           </div>
 
           {/* Right: controls */}
@@ -215,6 +385,87 @@ export default function Plaza() {
 
       {/* ─── Mini Map ─── */}
       <MiniMap players={players} myPosition={myPosition} />
+
+      {/* ─── Zone Action Panel (slides in from right when in a zone) ─── */}
+      <AnimatePresence>
+        {showZonePanel && currentZone !== 'center' && ZONE_ACTIONS[currentZone] && (
+          <motion.div
+            initial={{ opacity: 0, x: 80, scale: 0.96 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 80, scale: 0.96 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute right-4 top-20 z-40 w-64 max-w-[calc(100vw-2rem)]"
+          >
+            <div
+              className="bg-card/95 backdrop-blur-xl rounded-2xl border shadow-2xl overflow-hidden"
+              style={{ borderColor: `${activeZoneColor}55` }}
+            >
+              {/* Header */}
+              <div
+                className="px-4 py-3 border-b flex items-start justify-between gap-2"
+                style={{
+                  borderColor: `${activeZoneColor}22`,
+                  background: `linear-gradient(135deg, ${activeZoneColor}1f, ${activeZoneColor}08)`,
+                }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: activeZoneColor }}
+                    />
+                    <h3 className="text-sm font-bold text-foreground leading-tight truncate">
+                      {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                    {ZONE_TAGLINES[currentZone]?.[lang === 'zh' ? 'zh' : 'en']}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowZonePanel(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors -mt-0.5 p-1 rounded-lg hover:bg-muted/50 shrink-0"
+                  aria-label="Close panel"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {/* Actions */}
+              <div className="p-1.5 space-y-0.5">
+                {ZONE_ACTIONS[currentZone].map((action, i) => {
+                  const Icon = action.icon;
+                  return (
+                    <motion.button
+                      key={i}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.1 + i * 0.06 }}
+                      onClick={() => handleZoneAction(action)}
+                      className="group w-full flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: `${activeZoneColor}1f` }}
+                      >
+                        <Icon className="w-4 h-4" style={{ color: activeZoneColor }} />
+                      </div>
+                      <span className="text-sm text-foreground font-medium flex-1 leading-tight">
+                        {action.label[lang === 'zh' ? 'zh' : 'en']}
+                      </span>
+                      {action.comingSoon && (
+                        <span className="text-[9px] text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wider">
+                          {lang === 'zh' ? '即將' : 'Soon'}
+                        </span>
+                      )}
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-foreground group-hover:translate-x-0.5 transition-all" />
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Action buttons (right side) ─── */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
