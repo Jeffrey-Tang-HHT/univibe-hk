@@ -8,6 +8,7 @@ interface PlayerControllerProps {
   config: AvatarConfig;
   onPositionUpdate: (x: number, y: number, z: number, rotation: number, zone: string, isMoving: boolean) => void;
   speed?: number;
+  touchDirRef?: React.MutableRefObject<{ x: number; z: number }>;
 }
 
 const ZONE_MAP = [
@@ -27,7 +28,7 @@ function getZone(x: number, z: number): string {
   return 'center';
 }
 
-export default function PlayerController({ config, onPositionUpdate, speed = 8 }: PlayerControllerProps) {
+export default function PlayerController({ config, onPositionUpdate, speed = 8, touchDirRef }: PlayerControllerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const velocityRef = useRef(new THREE.Vector3());
@@ -63,23 +64,31 @@ export default function PlayerController({ config, onPositionUpdate, speed = 8 }
     const keys = keysRef.current;
     const moveDir = new THREE.Vector3();
 
-    // Movement direction
+    // Keyboard direction (each unit vector)
     if (keys.has('w') || keys.has('arrowup')) moveDir.z -= 1;
     if (keys.has('s') || keys.has('arrowdown')) moveDir.z += 1;
     if (keys.has('a') || keys.has('arrowleft')) moveDir.x -= 1;
     if (keys.has('d') || keys.has('arrowright')) moveDir.x += 1;
 
-    const isMoving = moveDir.length() > 0;
+    // Touch direction (analog, magnitude ≤ 1 from joystick)
+    if (touchDirRef) {
+      moveDir.x += touchDirRef.current.x;
+      moveDir.z += touchDirRef.current.z;
+    }
+
+    const len = moveDir.length();
+    const isMoving = len > 0.02;
 
     if (isMoving) {
-      moveDir.normalize();
+      // Clamp magnitude to 1 (preserves analog joystick speed when len < 1)
+      if (len > 1) moveDir.divideScalar(len);
 
       // Calculate target rotation based on movement direction
       targetRotRef.current = Math.atan2(moveDir.x, moveDir.z);
 
       // Apply movement
       const vel = velocityRef.current;
-      vel.lerp(moveDir.multiplyScalar(speed), 0.15);
+      vel.lerp(moveDir.clone().multiplyScalar(speed), 0.15);
       groupRef.current.position.x += vel.x * delta;
       groupRef.current.position.z += vel.z * delta;
 

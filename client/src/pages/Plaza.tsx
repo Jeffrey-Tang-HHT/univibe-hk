@@ -17,6 +17,7 @@ import PlayerController from '@/components/plaza/PlayerController';
 import OtherPlayers from '@/components/plaza/OtherPlayers';
 import MiniMap from '@/components/plaza/MiniMap';
 import AvatarCustomizer from '@/components/plaza/AvatarCustomizer';
+import VirtualJoystick from '@/components/plaza/VirtualJoystick';
 import {
   updatePosition, getPlayers, sendBubble, getBubbles, saveAvatar, leavePlaza,
   DEFAULT_AVATAR,
@@ -47,6 +48,8 @@ export default function Plaza() {
   const pollRef = useRef<ReturnType<typeof setInterval>>();
   const posRef = useRef({ x: 0, y: 0, z: 5, rotation: 0, zone: 'center', isMoving: false });
   const prevZoneRef = useRef('center');
+  // Touch-joystick direction shared with PlayerController (analog, -1…1 on each axis)
+  const touchDirRef = useRef({ x: 0, z: 0 });
 
   // Hide welcome overlay after 3.5s
   useEffect(() => {
@@ -210,10 +213,11 @@ export default function Plaza() {
     <div className="h-screen w-screen bg-background overflow-hidden relative">
       {/* ─── 3D Canvas ─── */}
       <Canvas
-        shadows
+        shadows="soft"
+        dpr={[1, 2]}
         camera={{ position: [0, 14, 19], fov: 55 }}
         className="absolute inset-0"
-        gl={{ antialias: true, alpha: false }}
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
           gl.setClearColor('#87CEEB');
         }}
@@ -239,6 +243,7 @@ export default function Plaza() {
           <PlayerController
             config={avatarConfig}
             onPositionUpdate={handlePositionUpdate}
+            touchDirRef={touchDirRef}
           />
           <OtherPlayers
             players={players}
@@ -335,8 +340,12 @@ export default function Plaza() {
         </div>
       </div>
 
-      {/* ─── Bottom-Left: Zone HUD Pill with avatar (prominent) ─── */}
-      <div className="absolute bottom-20 lg:bottom-20 left-4 z-40">
+      {/* ─── Zone HUD Pill with avatar (bottom-left on desktop, top-left on mobile) ─── */}
+      <div
+        className={`absolute left-4 z-40 top-[5.25rem] md:top-auto md:bottom-20 ${
+          showZonePanel ? 'hidden md:block' : 'block'
+        }`}
+      >
         <motion.button
           onClick={() => currentZone !== 'center' && setShowZonePanel((p) => !p)}
           disabled={currentZone === 'center'}
@@ -380,7 +389,12 @@ export default function Plaza() {
         </motion.button>
       </div>
 
-      {/* ─── Movement instructions (auto-hides after 6s) ─── */}
+      {/* ─── Virtual Joystick (bottom-right, works on touch + mouse + stylus) ─── */}
+      <div className="absolute bottom-24 right-4 z-50">
+        <VirtualJoystick dirRef={touchDirRef} />
+      </div>
+
+      {/* ─── Movement instructions (desktop only, auto-hides after 6s) ─── */}
       <AnimatePresence>
         {showControlsHint && !showWelcome && (
           <motion.div
@@ -388,7 +402,7 @@ export default function Plaza() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.4 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none hidden md:block"
           >
             <div className="bg-card/70 backdrop-blur-sm rounded-full px-3 py-1.5 border border-border/30 shadow-sm">
               <p className="text-[10px] text-muted-foreground text-center whitespace-nowrap">
