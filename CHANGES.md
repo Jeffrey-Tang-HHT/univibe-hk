@@ -1,71 +1,153 @@
-# UniGo HK — Plaza (3D) upgrade
+# Plaza upgrade v2 — walk animation + collision
 
-Two files changed, both in `client/src/`:
+This drop adds two things that were missing from the plaza:
 
-- `components/plaza/Environment3D.tsx`
-- `pages/Plaza.tsx`
+1. **Character walk cycle** — arms and legs now swing in proper contralateral
+   gait while the player is moving. They ease back to neutral when you stop.
+2. **Collision detection** — the player can no longer walk through buildings,
+   the fountain, ponds, trees, lamp posts, benches, bushes, rocks, or zone
+   landmarks. Obstacles bump the player out along the collision normal so
+   you can slide along walls instead of sticking.
 
-Drop-in replacements. No new dependencies (`@react-three/drei` at ^10.7.7 already exports `Instances` / `Instance`).
+## Files in this zip
 
----
-
-## Priority 1 — Fountain polish
-
-The "teal cone" in your screenshot came from three things stacking up: tone-mapped emissive on the stacked water surfaces, a too-wide jet outward velocity, and opaque additive-less particles.
-
-- Dropped `emissiveIntensity` on all three water-surface meshes: outer 0.12 → 0.04, middle 0.15 → 0.05, top 0.2 → 0.06. ACES tone mapping was blooming these into a single bright disc from overhead.
-- Lowered their `opacity` slightly (0.78 → 0.7, 0.8 → 0.75, 0.8 → 0.75) so the water reads as translucent.
-- Narrowed water-jet `outward` radius from 0.06 → 0.025 and initial spread 0.12 → 0.08 so the plume is a column, not a fan.
-- Widened upward velocity variance (0.04 range → 0.07 range) so particles reach staggered heights instead of rising in a layered disc.
-- Switched both `WaterJets` and `WaterCascade` `pointsMaterial` to `THREE.AdditiveBlending` with `depthWrite: false`. This is the change that makes spray actually look like spray — overlapping particles add brightness instead of stacking opaquely.
-- Colors lightened to `#CFEEF9` (jets) and `#C8E8F4` (cascade) for the additive path.
-
-## Priority 2 — Instancing
-
-20 trees × 4 meshes + 12 bushes × 3 + 12 rocks × 2 + 28 grass tufts × 3 + 8 lamps × 2 was roughly 200 draw calls on static props alone. Now it's **~15** (one `Instances` group per distinct sub-mesh shape).
-
-Five new components added next to their single-instance originals:
-
-- `InstancedTrees` — trunks + 3 foliage layers → 4 draw calls for all 20 trees.
-- `InstancedBushes` — 3 sphere lobes per bush → 3 draw calls for all 12.
-- `InstancedRocks` — main boulder + offset pebble. The pebble offsets are pre-rotated per rock on the CPU so the scene looks identical to before.
-- `InstancedGrassTufts` — 3 cone variants → 3 draw calls for all 28 tufts.
-- `InstancedLamps` — pole + bulb instanced. `pointLight`s can't be instanced (each is a real scene light), so they're emitted per-lamp from the parent `Environment` component instead.
-
-The original `Tree`, `Bush`, `Rock`, `GrassTuft`, `LampPost` functions are kept in the file as reference implementations — they're never called but they're useful for understanding what each instanced version is replicating. If you want, delete them; there's no harm either way.
-
-## Priority 6 — Free polish bundled in
-
-- **Per-instance hue variation** on trees and bushes. Each tree gets a stable `±8%` hue rotation + `±8%` lightness shift baked once per mount via `THREE.Color.offsetHSL`. Kills the "cloned trees" look at zero runtime cost — drei's `<Instance color={...}>` uses per-instance attribute data.
-- **Adaptive shadow map** in `Plaza.tsx`. `shadow-mapSize` drops from 2048² to 1024² on mobile (via `IS_MOBILE` user-agent check at module load). Typical win is ~10 FPS on mid-range Android with no visible difference at phone pixel densities.
-- `depthWrite: false` on the jet + cascade particle materials so they never mask themselves.
-
----
-
-## What I did NOT do (leaving for separate commits)
-
-These are the remaining items from my recommendation list that warrant their own commits rather than piling into this one:
-
-- **Priority 3 — day/night cycle tied to HK time.** This needs animated `directionalLight` color/intensity, sky-shader uniform drives, fog tint, and ambient color — touches the `onCreated` hook and the sky mesh uniforms. The building windows and lamps are already emissive, so the night state is already halfway built; it just needs the ambient/sun to drop.
-- **Priority 4 — clickable benches / NPCs / noticeboard.** Adds interaction pipeline to `Bench` and `NPCs.tsx`, and a new `Noticeboard` component reading from the feed store.
-- **Priority 5 — ambient audio.** New `useZoneAudio` hook crossfading three WebAudio loops based on `currentZone`.
-
-Happy to take any of these as the next commit — say which and I'll produce the patch.
-
----
-
-## How to apply
-
-```bash
-cp Environment3D.tsx path/to/unigo-hk/client/src/components/plaza/Environment3D.tsx
-cp Plaza.tsx        path/to/unigo-hk/client/src/pages/Plaza.tsx
+```
+client/src/components/plaza/Avatar3D.tsx          (modified)
+client/src/components/plaza/PlayerController.tsx  (modified)
+client/src/components/plaza/colliders.ts          (new)
+Avatar3D.diff                                     (unified diff)
+PlayerController.diff                             (unified diff)
+CHANGES.md                                        (this file)
 ```
 
-Or review the diffs first:
+To apply, unzip at your repo root (same folder that contains `client/`):
 
 ```bash
-cat Environment3D.diff   # 524 lines
-cat Plaza.diff           # 35 lines
+unzip -o ~/Downloads/unigo-plaza-upgrade-v2.zip
 ```
 
-No package.json changes needed.
+No new dependencies. No changes to `package.json`.
+
+## 1. Walk cycle (Avatar3D.tsx)
+
+### What changed
+
+Before: arms, hands, legs, and shoes were individual meshes at fixed
+positions. The only animation was a full-body vertical bounce + subtle
+Z-roll when `isMoving` was true — so the character looked like it was
+gliding.
+
+After: each arm and each leg lives inside its own `<group>` pivoted at the
+shoulder (y=1.2) / hip (y=0.7). Hands are parented *into* the arm group so
+they swing with the forearm. Shoes are parented into the leg group. A
+`useFrame` callback drives `rotation.x` on each group with a sine wave:
+
+- Arms: ±0.55 rad, opposite L/R phase
+- Legs: ±0.75 rad, opposite L/R phase
+- Arms counter-phased vs. legs (standard contralateral gait: left arm
+  forward pairs with right leg forward)
+- Step frequency: 2.2 Hz, matching a natural walking cadence
+
+### Tuning knobs
+
+Top of the file, three constants:
+
+```ts
+const STEP_HZ = 2.2;      // steps/sec
+const ARM_SWING = 0.55;   // ± radians at peak
+const LEG_SWING = 0.75;   // ± radians at peak
+const IDLE_DAMP = 6;      // how fast limbs return to neutral
+```
+
+If you later add a run state, multiply both swing amps by ~1.4 and bump
+STEP_HZ to ~3.2 for a run cycle — no geometry changes needed.
+
+### Behavior details
+
+- The walk phase accumulator only advances while `isMoving` is true. When
+  you stop, limbs ease back to rotation=0 over ~150ms via the `IDLE_DAMP`
+  lerp. This is why stopping feels natural instead of freeze-framed.
+- The original full-body bounce and Z-sway are preserved, so the torso
+  still rocks subtly while walking.
+
+## 2. Collision detection (colliders.ts + PlayerController.tsx)
+
+### The new module
+
+`colliders.ts` is a single source of truth for everything the player
+shouldn't walk through. Two primitive types:
+
+- **CircleCollider**: cheap radial test. Used for fountain, ponds, trees,
+  bushes, rocks, lamp posts, benches, and the four zone landmarks.
+- **BoxCollider**: AABB (axis-aligned bounding box). Used for the four
+  edge buildings (Library, Student Union, Main Building, Canteen), because
+  they're long and thin and a single circle would either let you clip the
+  corners or block half the sidewalk.
+
+Positions are lifted directly from `Environment3D.tsx`'s `TREE_POSITIONS`,
+`BENCH_POSITIONS`, etc. — if you move a prop in the environment, update
+the matching entry in `colliders.ts` and it'll just work.
+
+Total collider count: 4 buildings + 4 landmarks + 1 fountain + 2 ponds +
+20 trees + 8 lamps + 8 benches + 12 rocks + 12 bushes = **71 colliders**.
+That's well under the cost of a single draw call per frame.
+
+### The resolution algorithm
+
+`resolveCollision(nx, nz)` takes the *intended* next position and returns
+a corrected position. For each collider:
+
+- **Circle vs. circle**: if `dist < radius + PLAYER_RADIUS`, push along
+  the centre-to-centre normal.
+- **AABB vs. circle**: find the closest point on the box to the player,
+  then do a circle-vs-point test. If the player is somehow inside the box
+  (shouldn't happen, but belt-and-braces), push along the shallowest axis.
+
+Two iterations, because corners can produce a push that clips into a
+neighbour. Two is enough for this scene; I verified by hand that no
+colliders overlap pathologically.
+
+The player's own collision radius is `PLAYER_RADIUS = 0.35` — small enough
+to fit between trees, big enough that corner-clipping looks natural.
+
+### PlayerController changes
+
+Three things changed in the controller:
+
+1. **Collision pass** — after computing `desiredX`/`desiredZ` from
+   velocity, call `resolveCollision()` before writing to
+   `groupRef.current.position`. Applied to both the active-input and
+   coasting branches, so friction can't slide you into a wall.
+
+2. **Real `isMoving` for Avatar3D** — the old code passed
+   `isMoving={keysRef.current.size > 0}`, which meant (a) joystick-only
+   input never triggered animation, and (b) coast-to-stop looked like
+   instant freeze. Now `isMoving` is React state driven by
+   `inputActive || velocityRef.current.length() > 0.1`, set only on
+   threshold crossings to avoid per-frame React re-renders.
+
+3. **Position-update callback** now receives the same `effectivelyMoving`
+   signal as the avatar, so the journey log and other-player broadcasts
+   stay consistent with what the character is actually doing.
+
+### What's NOT collided
+
+Grass tufts, flower patches, and clouds are intentionally walkable —
+they're decoration, not obstacles. NPCs and other players are also not
+colliders (they move), but if you want bump-collision with them later,
+build a second collider list per frame from `NPCs.tsx` / `OtherPlayers.tsx`
+positions and call `resolveCollision` against both lists.
+
+## Known limitations / possible follow-ups
+
+- Collider radii are hand-tuned. If the fountain footprint changes or you
+  move the zone landmarks, `colliders.ts` needs to be updated by hand.
+  A future pass could have `Environment3D` itself export colliders.
+- The landmark radii (3.2–4.2m) block the *whole* footprint. If you later
+  want interactive seating at the pergola or the café counter, carve out
+  a narrower collider and have the landmark export its own collider list.
+- No vertical collision — the plaza is flat, so 2D is enough.
+- I couldn't run `tsc` or a dev-server build (no `node_modules`, network
+  disabled), so this is hand-verified. Braces/parens balance; imports
+  resolve to real paths; no remaining references to removed symbols.
+  If the build surfaces anything, paste the error and I'll fix it.

@@ -20,25 +20,80 @@ interface AvatarProps {
   onClick?: () => void;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Walk-cycle tuning.
+//
+// A natural human gait is ~2 steps/second; each step alternates L/R so the
+// sine wave frequency we want is STEP_HZ = ~2.2. We multiply by 2π to
+// convert to rad/s for the sin() argument.
+//
+// swingAmp is how far each limb rotates (radians) at peak swing. Legs swing
+// more than arms — looks more like walking than like miming.
+// ─────────────────────────────────────────────────────────────
+const STEP_HZ = 2.2;                       // ~2.2 full strides/sec
+const ARM_SWING = 0.55;                    // ± radians
+const LEG_SWING = 0.75;                    // ± radians
+const IDLE_DAMP = 6;                       // how fast limbs return to neutral when stopping
+
 export default function Avatar({ config = DEFAULT_CONFIG, isMoving = false, onClick }: AvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const leftArmRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
+
+  // Phase accumulator drives the walk cycle. We only advance it when moving
+  // so the pose freezes on the last frame when stopping, then eases back
+  // toward neutral via the lerp below.
+  const phaseRef = useRef(0);
   const bounceRef = useRef(0);
 
   const c = { ...DEFAULT_CONFIG, ...config };
 
-  // Idle bounce animation
   useFrame((_, delta) => {
     if (!groupRef.current) return;
+
+    // ── Overall body bounce (vertical) ──
     bounceRef.current += delta * (isMoving ? 8 : 2);
     const bounce = Math.sin(bounceRef.current) * (isMoving ? 0.08 : 0.03);
     groupRef.current.position.y = bounce;
 
-    // Slight sway when moving
+    // ── Body sway when moving (subtle roll) ──
     if (isMoving) {
       groupRef.current.rotation.z = Math.sin(bounceRef.current * 0.5) * 0.05;
     } else {
       groupRef.current.rotation.z *= 0.95;
     }
+
+    // ── Limb walk cycle ──
+    // Advance phase only while walking so the pose is deterministic from the
+    // *distance* walked rather than wall-clock time (feels more anchored).
+    if (isMoving) {
+      phaseRef.current += delta * STEP_HZ * Math.PI * 2;
+    }
+
+    // Target rotations. Arms and legs on the same side swing OPPOSITE to
+    // each other (standard contralateral gait): left arm forward pairs with
+    // right leg forward.
+    const walkPhase = phaseRef.current;
+    const armAmp = isMoving ? ARM_SWING : 0;
+    const legAmp = isMoving ? LEG_SWING : 0;
+
+    const targetLArm = Math.sin(walkPhase) * armAmp;
+    const targetRArm = -Math.sin(walkPhase) * armAmp;
+    const targetLLeg = -Math.sin(walkPhase) * legAmp;
+    const targetRLeg = Math.sin(walkPhase) * legAmp;
+
+    // Ease toward target. When stopping (amp=0), limbs settle to neutral.
+    const ease = Math.min(1, delta * IDLE_DAMP);
+    if (leftArmRef.current)
+      leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, targetLArm, ease);
+    if (rightArmRef.current)
+      rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, targetRArm, ease);
+    if (leftLegRef.current)
+      leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, targetLLeg, ease);
+    if (rightLegRef.current)
+      rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, targetRLeg, ease);
   });
 
   const skinMat = useMemo(() => new THREE.MeshToonMaterial({ color: c.skinColor }), [c.skinColor]);
@@ -75,21 +130,18 @@ export default function Avatar({ config = DEFAULT_CONFIG, isMoving = false, onCl
 
       {/* Mouth expressions */}
       {c.expression === 0 && (
-        // Smile
         <mesh position={[0, 1.5, 0.32]} rotation={[0.3, 0, 0]}>
           <torusGeometry args={[0.06, 0.015, 8, 12, Math.PI]} />
           <meshBasicMaterial color="#E8857A" />
         </mesh>
       )}
       {c.expression === 1 && (
-        // Open smile
         <mesh position={[0, 1.49, 0.3]}>
           <sphereGeometry args={[0.06, 8, 8]} />
           <meshBasicMaterial color="#E8857A" />
         </mesh>
       )}
       {c.expression === 2 && (
-        // Neutral
         <mesh position={[0, 1.5, 0.33]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.04, 0.04, 0.01, 8]} />
           <meshBasicMaterial color="#D4736A" />
@@ -114,39 +166,50 @@ export default function Avatar({ config = DEFAULT_CONFIG, isMoving = false, onCl
         <cylinderGeometry args={[0.22, 0.25, 0.6, 12]} />
       </mesh>
 
-      {/* Arms */}
-      <mesh position={[-0.32, 1.0, 0]} material={shirtMat} castShadow>
-        <capsuleGeometry args={[0.07, 0.35, 4, 8]} />
-      </mesh>
-      <mesh position={[0.32, 1.0, 0]} material={shirtMat} castShadow>
-        <capsuleGeometry args={[0.07, 0.35, 4, 8]} />
-      </mesh>
+      {/* ─── Arms (rotate about the shoulder) ───
+          Each arm is a group positioned at the shoulder joint (y=1.2, top
+          of torso). The capsule and hand inside the group are offset
+          downward so they swing around the shoulder rather than the elbow. */}
+      <group ref={leftArmRef} position={[-0.32, 1.2, 0]}>
+        <mesh position={[0, -0.2, 0]} material={shirtMat} castShadow>
+          <capsuleGeometry args={[0.07, 0.35, 4, 8]} />
+        </mesh>
+        <mesh position={[0, -0.48, 0]} material={skinMat}>
+          <sphereGeometry args={[0.06, 8, 8]} />
+        </mesh>
+      </group>
 
-      {/* Hands */}
-      <mesh position={[-0.32, 0.72, 0]} material={skinMat}>
-        <sphereGeometry args={[0.06, 8, 8]} />
-      </mesh>
-      <mesh position={[0.32, 0.72, 0]} material={skinMat}>
-        <sphereGeometry args={[0.06, 8, 8]} />
-      </mesh>
+      <group ref={rightArmRef} position={[0.32, 1.2, 0]}>
+        <mesh position={[0, -0.2, 0]} material={shirtMat} castShadow>
+          <capsuleGeometry args={[0.07, 0.35, 4, 8]} />
+        </mesh>
+        <mesh position={[0, -0.48, 0]} material={skinMat}>
+          <sphereGeometry args={[0.06, 8, 8]} />
+        </mesh>
+      </group>
 
-      {/* Pants / Legs */}
-      <mesh position={[-0.1, 0.45, 0]} material={pantsMat} castShadow>
-        <capsuleGeometry args={[0.09, 0.3, 4, 8]} />
-      </mesh>
-      <mesh position={[0.1, 0.45, 0]} material={pantsMat} castShadow>
-        <capsuleGeometry args={[0.09, 0.3, 4, 8]} />
-      </mesh>
+      {/* ─── Legs (rotate about the hip) ───
+          Hip pivot at y=0.7 (where pants meet the torso). Leg capsule and
+          shoe are offset downward from the pivot. */}
+      <group ref={leftLegRef} position={[-0.1, 0.7, 0]}>
+        <mesh position={[0, -0.25, 0]} material={pantsMat} castShadow>
+          <capsuleGeometry args={[0.09, 0.3, 4, 8]} />
+        </mesh>
+        <mesh position={[0, -0.48, 0.04]}>
+          <boxGeometry args={[0.12, 0.06, 0.18]} />
+          <meshToonMaterial color="#1a1a1a" />
+        </mesh>
+      </group>
 
-      {/* Shoes */}
-      <mesh position={[-0.1, 0.22, 0.04]}>
-        <boxGeometry args={[0.12, 0.06, 0.18]} />
-        <meshToonMaterial color="#1a1a1a" />
-      </mesh>
-      <mesh position={[0.1, 0.22, 0.04]}>
-        <boxGeometry args={[0.12, 0.06, 0.18]} />
-        <meshToonMaterial color="#1a1a1a" />
-      </mesh>
+      <group ref={rightLegRef} position={[0.1, 0.7, 0]}>
+        <mesh position={[0, -0.25, 0]} material={pantsMat} castShadow>
+          <capsuleGeometry args={[0.09, 0.3, 4, 8]} />
+        </mesh>
+        <mesh position={[0, -0.48, 0.04]}>
+          <boxGeometry args={[0.12, 0.06, 0.18]} />
+          <meshToonMaterial color="#1a1a1a" />
+        </mesh>
+      </group>
 
       {/* Accessory */}
       <Accessory type={c.accessory} />
