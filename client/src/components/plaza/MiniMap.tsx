@@ -1,14 +1,25 @@
+import { useRef } from 'react';
 import type { PlazaPlayer } from '@/lib/plaza';
 
 interface MiniMapProps {
   players: PlazaPlayer[];
   myPosition: { x: number; z: number };
+  /** Rotation of the player's avatar in world space (radians) — drives the facing arrow. */
+  myRotation?: number;
   /** Journey entries — shows numbered waypoints (most recent 4 by default). */
   waypoints?: Array<{ zone: string; sequenceNumber: number }>;
+  /** Active travel destination set by clicking the map. Drawn as a pulsing pin. */
+  waypointTarget?: { x: number; z: number } | null;
+  /** Called when the user clicks/taps a navigable point on the map. */
+  onSetWaypoint?: (worldX: number, worldZ: number) => void;
+  /** Optional: clear the active waypoint (e.g. arrival). */
+  onClearWaypoint?: () => void;
 }
 
+// Map size represents the WORLD region rendered by the minimap.
+// (Plaza bounds are ~±45 along X/Z, so 140 covers everything with margin.)
 const MAP_SIZE = 140;
-const SCALE = 100 / MAP_SIZE;
+const SCALE = 100 / MAP_SIZE; // converts world units → 0-100 SVG space
 
 const ZONES = [
   { name: 'center', cx: 0, cz: 0, r: 6, color: '#4ECDC4' },
@@ -26,22 +37,38 @@ const ZONE_POSITIONS: Record<string, { x: number; z: number; color: string }> = 
   cafe: { x: 18, z: 18, color: '#FFA07A' },
 };
 
-export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMapProps) {
+export default function MiniMap({
+  players,
+  myPosition,
+  myRotation = 0,
+  waypoints = [],
+  waypointTarget = null,
+  onSetWaypoint,
+  onClearWaypoint,
+}: MiniMapProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+
   const toMap = (worldX: number, worldZ: number) => ({
     x: (worldX + MAP_SIZE / 2) * SCALE,
     y: (worldZ + MAP_SIZE / 2) * SCALE,
   });
 
+  // Inverse: map SVG 0-100 coords back to world space. Used by the click handler.
+  const fromMap = (mx: number, my: number) => ({
+    x: mx / SCALE - MAP_SIZE / 2,
+    z: my / SCALE - MAP_SIZE / 2,
+  });
+
   const myMapPos = toMap(myPosition.x, myPosition.z);
   const centerPos = toMap(0, 0);
+  const targetMapPos = waypointTarget ? toMap(waypointTarget.x, waypointTarget.z) : null;
 
   // Last 4 waypoints, deduplicated by zone (keep newest for repeated visits)
   const recentWaypoints = (() => {
     const seen = new Map<string, { zone: string; sequenceNumber: number }>();
     for (const wp of waypoints) {
-      seen.set(wp.zone, wp); // Newer entries override older
+      seen.set(wp.zone, wp);
     }
-    // Take last 4 entries in insertion order, then sort by sequenceNumber asc
     return Array.from(seen.values())
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
       .slice(-4);
@@ -56,15 +83,52 @@ export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMap
     pathSegments.push({ from: toMap(a.x, a.z), to: toMap(b.x, b.z) });
   }
 
+  // Click handler — converts SVG viewbox coords back to world. We measure
+  // the raw SVG element (viewBox is 0-100) by reading event.currentTarget
+  // bounding rect and scaling from there.
+  const handleMapClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!onSetWaypoint) return;
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const sx = ((e.clientX - rect.left) / rect.width) * 100;
+    const sy = ((e.clientY - rect.top) / rect.height) * 100;
+    const world = fromMap(sx, sy);
+    // Clamp to the playable region (player is bounded to ±45 in the controller)
+    const clampedX = Math.max(-44, Math.min(44, world.x));
+    const clampedZ = Math.max(-44, Math.min(44, world.z));
+    onSetWaypoint(clampedX, clampedZ);
+  };
+
+  // Right-click (or long-press via the "clear" button) cancels the waypoint.
+  const handleContextMenu = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!onClearWaypoint) return;
+    e.preventDefault();
+    onClearWaypoint();
+  };
+
+  // Player facing arrow — rotated around the player dot. Drawn as an SVG path
+  // pointing "north" then rotated by -myRotation so right-handed world Y
+  // maps correctly onto top-down SVG (Z axis flips sign visually).
+  // Rotation in radians → degrees for SVG.
+  const facingDeg = (myRotation * 180) / Math.PI;
+
   return (
     <div
-      className="relative w-40 h-40 rounded-2xl overflow-hidden shadow-2xl border border-white/30"
+      className="relative w-48 h-48 rounded-2xl overflow-hidden shadow-2xl border border-white/30"
       style={{
         boxShadow:
           '0 10px 30px -10px rgba(0,0,0,0.3), 0 4px 12px -4px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.4)',
       }}
     >
-      <svg viewBox="0 0 100 100" className="w-full h-full block">
+      <svg
+        ref={svgRef}
+        viewBox="0 0 100 100"
+        className="w-full h-full block cursor-crosshair"
+        onClick={handleMapClick}
+        onContextMenu={handleContextMenu}
+        role="img"
+        aria-label="Plaza mini-map — click to set a waypoint"
+      >
         <defs>
           <radialGradient id="mapBg" cx="50%" cy="50%" r="75%">
             <stop offset="0%" stopColor="#DCEDC8" />
@@ -135,7 +199,7 @@ export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMap
           <circle cx={centerPos.x} cy={centerPos.y} r="0.7" fill="#FFFFFF" opacity="0.7" />
         </g>
 
-        {/* Landmark mini-icons */}
+        {/* Landmark mini-icons — distinct per zone type */}
         {(() => {
           const p = toMap(-18, -15);
           return (
@@ -204,6 +268,20 @@ export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMap
           </g>
         )}
 
+        {/* Route line from player to active waypoint */}
+        {targetMapPos && (
+          <line
+            x1={myMapPos.x}
+            y1={myMapPos.y}
+            x2={targetMapPos.x}
+            y2={targetMapPos.y}
+            stroke="#FFD54F"
+            strokeWidth="0.9"
+            strokeDasharray="1.5 1"
+            opacity="0.85"
+          />
+        )}
+
         {/* Other players */}
         {players.filter(p => !p.is_me).map(player => {
           const pos = toMap(player.x, player.z);
@@ -215,13 +293,12 @@ export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMap
           );
         })}
 
-        {/* Numbered waypoints — concept-art 1/2/3/4 markers */}
+        {/* Numbered journey waypoints */}
         {recentWaypoints.map((wp, i) => {
           const zpos = ZONE_POSITIONS[wp.zone];
           if (!zpos) return null;
           const p = toMap(zpos.x, zpos.z);
           const isLatest = i === recentWaypoints.length - 1;
-          // Display label 1-based index within the recent set
           const displayNum = i + 1;
           return (
             <g key={`wp-${wp.sequenceNumber}`}>
@@ -264,7 +341,34 @@ export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMap
           );
         })}
 
-        {/* Me — pulsing accent */}
+        {/* Active travel waypoint pin — gold marker with pulsing halo */}
+        {targetMapPos && (
+          <g>
+            <circle
+              cx={targetMapPos.x}
+              cy={targetMapPos.y}
+              r="4"
+              fill="none"
+              stroke="#FFD54F"
+              strokeWidth="0.7"
+              opacity="0.8"
+            >
+              <animate attributeName="r" values="2.5;6;2.5" dur="1.4s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.9;0.1;0.9" dur="1.4s" repeatCount="indefinite" />
+            </circle>
+            <circle
+              cx={targetMapPos.x}
+              cy={targetMapPos.y}
+              r="1.6"
+              fill="#FFD54F"
+              stroke="white"
+              strokeWidth="0.4"
+            />
+            <circle cx={targetMapPos.x} cy={targetMapPos.y} r="0.6" fill="#F9A825" />
+          </g>
+        )}
+
+        {/* Me — pulsing accent + facing arrow (rotates with myRotation) */}
         <g>
           <circle cx={myMapPos.x} cy={myMapPos.y} r="4" fill="#FF6B6B" opacity="0.3">
             <animate attributeName="r" values="3.5;6.5;3.5" dur="2s" repeatCount="indefinite" />
@@ -272,23 +376,60 @@ export default function MiniMap({ players, myPosition, waypoints = [] }: MiniMap
           </circle>
           <circle cx={myMapPos.x} cy={myMapPos.y} r="2.3" fill="#FF6B6B" stroke="white" strokeWidth="0.7" />
           <circle cx={myMapPos.x} cy={myMapPos.y} r="0.9" fill="white" />
+          {/*
+            Facing arrow. The PlayerController computes rotation with
+            `Math.atan2(moveDir.x, moveDir.z)` where z- is "forward" in world,
+            which on the minimap corresponds to screen-up (negative Y in SVG).
+            That means the world "forward" arrow points up when rotation=0,
+            and we rotate clockwise by rotation degrees. SVG rotate is already
+            clockwise, so sign matches — but since our y-axis visually inverts
+            Z, we rotate by rotation (not -rotation).
+          */}
+          <g transform={`rotate(${facingDeg} ${myMapPos.x} ${myMapPos.y})`}>
+            <path
+              d={`M ${myMapPos.x} ${myMapPos.y - 5.2} L ${myMapPos.x - 1.4} ${myMapPos.y - 3.2} L ${myMapPos.x + 1.4} ${myMapPos.y - 3.2} Z`}
+              fill="#FF6B6B"
+              stroke="white"
+              strokeWidth="0.35"
+              opacity="0.95"
+            />
+          </g>
         </g>
       </svg>
 
-      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded-full">
+      <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded-full pointer-events-none">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_4px_rgba(74,222,128,0.8)]" />
         <span className="text-[9px] text-white font-semibold tracking-wide">
           {players.length} online
         </span>
       </div>
 
-      <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center">
+      <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center pointer-events-none">
         <span className="text-[8px] font-bold text-white leading-none">N</span>
       </div>
 
-      <div className="absolute top-1.5 right-1.5 bg-white/60 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
+      <div className="absolute top-1.5 right-1.5 bg-white/60 backdrop-blur-sm px-1.5 py-0.5 rounded-md pointer-events-none">
         <span className="text-[8px] font-bold text-slate-700 tracking-wider uppercase">Map</span>
       </div>
+
+      {/* Hint bar — only shown when waypoint handler is wired up.
+          Drops the hint once a waypoint is active (saves space). */}
+      {onSetWaypoint && !waypointTarget && (
+        <div className="pointer-events-none absolute bottom-1.5 left-1.5 bg-black/50 backdrop-blur-md px-1.5 py-0.5 rounded-full">
+          <span className="text-[8px] text-white/80 font-semibold tracking-wide">
+            Tap to travel
+          </span>
+        </div>
+      )}
+      {waypointTarget && onClearWaypoint && (
+        <button
+          onClick={onClearWaypoint}
+          className="absolute bottom-1.5 left-1.5 bg-amber-500/90 backdrop-blur-md px-2 py-0.5 rounded-full hover:bg-amber-400 transition-colors"
+          aria-label="Cancel travel"
+        >
+          <span className="text-[9px] text-slate-900 font-bold tracking-wide">Cancel ✕</span>
+        </button>
+      )}
     </div>
   );
 }

@@ -10,6 +10,14 @@ interface PlayerControllerProps {
   onPositionUpdate: (x: number, y: number, z: number, rotation: number, zone: string, isMoving: boolean) => void;
   speed?: number;
   touchDirRef?: React.MutableRefObject<{ x: number; z: number }>;
+  /** When set, the player auto-walks toward (x, z). Cleared on arrival via onWaypointReached. */
+  waypointRef?: React.MutableRefObject<{ x: number; z: number } | null>;
+  /** Called when the player reaches (or gives up on) the current waypoint. */
+  onWaypointReached?: () => void;
+  /** Ref updated every frame with the player's live world position. Consumed by
+   *  ZoneMarker (and potentially others) to react to proximity without prop
+   *  drilling state changes through React. */
+  playerPosRef?: React.MutableRefObject<{ x: number; z: number }>;
 }
 
 const ZONE_MAP = [
@@ -29,7 +37,15 @@ function getZone(x: number, z: number): string {
   return 'center';
 }
 
-export default function PlayerController({ config, onPositionUpdate, speed = 8, touchDirRef }: PlayerControllerProps) {
+export default function PlayerController({
+  config,
+  onPositionUpdate,
+  speed = 8,
+  touchDirRef,
+  waypointRef,
+  onWaypointReached,
+  playerPosRef,
+}: PlayerControllerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const velocityRef = useRef(new THREE.Vector3());
@@ -83,6 +99,37 @@ export default function PlayerController({ config, onPositionUpdate, speed = 8, 
       moveDir.z += touchDirRef.current.z;
     }
 
+    // ── Waypoint auto-walk ──
+    // If a destination is set and the player isn't actively steering, head
+    // toward the waypoint. Any manual input (keyboard OR joystick) cancels
+    // auto-walk — the user always wins.
+    let autoWalking = false;
+    const manualInputLen = moveDir.length();
+    if (waypointRef && waypointRef.current && manualInputLen < 0.02) {
+      const target = waypointRef.current;
+      const toTargetX = target.x - groupRef.current.position.x;
+      const toTargetZ = target.z - groupRef.current.position.z;
+      const distToTarget = Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ);
+      const ARRIVE_DIST = 0.6; // how close counts as "arrived"
+
+      if (distToTarget < ARRIVE_DIST) {
+        // Arrived — clear and notify.
+        waypointRef.current = null;
+        onWaypointReached?.();
+      } else {
+        // Normalise direction to the target. Apply a gentle slow-down when
+        // close so the player doesn't overshoot into a wall.
+        const slow = Math.min(1, distToTarget / 2.5);
+        moveDir.x = (toTargetX / distToTarget) * slow;
+        moveDir.z = (toTargetZ / distToTarget) * slow;
+        autoWalking = true;
+      }
+    } else if (waypointRef && waypointRef.current && manualInputLen >= 0.02) {
+      // User took over — cancel the waypoint.
+      waypointRef.current = null;
+      onWaypointReached?.();
+    }
+
     const len = moveDir.length();
     const inputActive = len > 0.02;
 
@@ -97,8 +144,11 @@ export default function PlayerController({ config, onPositionUpdate, speed = 8, 
       const vel = velocityRef.current;
       vel.lerp(moveDir.clone().multiplyScalar(speed), 0.15);
 
-      const desiredX = groupRef.current.position.x + vel.x * delta;
-      const desiredZ = groupRef.current.position.z + vel.z * delta;
+      const prevX = groupRef.current.position.x;
+      const prevZ = groupRef.current.position.z;
+
+      const desiredX = prevX + vel.x * delta;
+      const desiredZ = prevZ + vel.z * delta;
 
       // Clamp to world bounds first (cheaper than collider test).
       const clampedX = Math.max(-45, Math.min(45, desiredX));
@@ -109,6 +159,20 @@ export default function PlayerController({ config, onPositionUpdate, speed = 8, 
 
       groupRef.current.position.x = resolvedX;
       groupRef.current.position.z = resolvedZ;
+
+      // Stall detection for auto-walk: if the collider is pushing us back to
+      // where we started, the path is blocked — cancel the waypoint so the
+      // player can reroute manually.
+      if (autoWalking && waypointRef) {
+        const actualMove = Math.hypot(resolvedX - prevX, resolvedZ - prevZ);
+        if (actualMove < 0.003) {
+          waypointRef.current = null;
+          onWaypointReached?.();
+          // Also zero velocity to avoid creeping past the obstacle over
+          // several frames when we release.
+          velocityRef.current.multiplyScalar(0);
+        }
+      }
     } else {
       // Coast + friction when no input
       velocityRef.current.multiplyScalar(0.9);
@@ -141,6 +205,13 @@ export default function PlayerController({ config, onPositionUpdate, speed = 8, 
     );
     camera.position.lerp(targetCameraPos, 0.05);
     camera.lookAt(playerPos.x, playerPos.y + 1.2, playerPos.z);
+
+    // Publish live position to the shared ref so other scene components
+    // (ZoneMarker, future: NPC AI) can react to it without prop drilling.
+    if (playerPosRef) {
+      playerPosRef.current.x = playerPos.x;
+      playerPosRef.current.z = playerPos.z;
+    }
 
     // ── Moving state for Avatar3D limb animation ──
     // True if the user is holding input OR the player is still gliding from

@@ -22,6 +22,7 @@ import AvatarCustomizer from '@/components/plaza/AvatarCustomizer';
 import VirtualJoystick from '@/components/plaza/VirtualJoystick';
 import JourneyLog, { type JourneyEntry } from '@/components/plaza/JourneyLog';
 import ZoneEntryToast from '@/components/plaza/ZoneEntryToast';
+import FPSMeter from '@/components/plaza/FPSMeter';
 import {
   updatePosition, getPlayers, sendBubble, getBubbles, saveAvatar, leavePlaza,
   DEFAULT_AVATAR,
@@ -66,6 +67,25 @@ export default function Plaza() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const touchDirRef = useRef({ x: 0, z: 0 });
 
+  // ── v3 additions ──
+  // Shared ref for the live player position. Written by PlayerController every
+  // frame, read by ZoneMarker (and any future proximity-reactive scene node).
+  const playerPosRef = useRef({ x: 0, z: 5 });
+
+  // Waypoint: click-to-travel destination. useRef so PlayerController can
+  // mutate it on arrival without forcing a re-render of the whole Plaza tree.
+  // The mirror state `waypointTarget` is used only to drive the MiniMap pin.
+  const waypointRef = useRef<{ x: number; z: number } | null>(null);
+  const [waypointTarget, setWaypointTarget] = useState<{ x: number; z: number } | null>(null);
+
+  // Player rotation (radians) — mirrored from posRef so the MiniMap facing
+  // arrow gets a live value without subscribing to a ref.
+  const [myRotation, setMyRotation] = useState(0);
+
+  // Movement-log HUD pill: expanded on zone change, auto-collapses after 3s.
+  const [logPillExpanded, setLogPillExpanded] = useState(true);
+  const pillCollapseTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   // Hide welcome overlay after 3.5s
   useEffect(() => {
     const timer = setTimeout(() => setShowWelcome(false), 3500);
@@ -84,6 +104,12 @@ export default function Plaza() {
     if (prevZoneRef.current && prevZoneRef.current !== currentZone) {
       setZoneChangeFlash(true);
       setShowZonePanel(currentZone !== 'center');
+
+      // Expand the movement-log pill on every zone change, then auto-collapse
+      // after 3s so it doesn't sit at full width in the user's way.
+      setLogPillExpanded(true);
+      if (pillCollapseTimerRef.current) clearTimeout(pillCollapseTimerRef.current);
+      pillCollapseTimerRef.current = setTimeout(() => setLogPillExpanded(false), 3000);
 
       // Log journey entry (session-only) and show toast
       setJourney((prev) => {
@@ -110,6 +136,14 @@ export default function Plaza() {
     }
     prevZoneRef.current = currentZone;
   }, [currentZone]);
+
+  // Collapse pill after 3s on first mount too (so it doesn't sit at full width forever)
+  useEffect(() => {
+    pillCollapseTimerRef.current = setTimeout(() => setLogPillExpanded(false), 3000);
+    return () => {
+      if (pillCollapseTimerRef.current) clearTimeout(pillCollapseTimerRef.current);
+    };
+  }, []);
 
   // Clean up toast timer on unmount
   useEffect(() => {
@@ -152,8 +186,29 @@ export default function Plaza() {
   const handlePositionUpdate = useCallback((x: number, y: number, z: number, rotation: number, zone: string, isMoving: boolean) => {
     posRef.current = { x, y, z, rotation, zone, isMoving };
     setMyPosition({ x, z });
+    setMyRotation(rotation);
     setCurrentZone(zone);
     updatePosition({ x, y, z, rotation, zone, is_moving: isMoving }).catch(() => {});
+  }, []);
+
+  // Click-to-travel: MiniMap hands us a world-space target. We store it in
+  // both the ref (so PlayerController can read/mutate it without renders)
+  // and state (so the MiniMap pin updates reactively).
+  const handleSetWaypoint = useCallback((worldX: number, worldZ: number) => {
+    waypointRef.current = { x: worldX, z: worldZ };
+    setWaypointTarget({ x: worldX, z: worldZ });
+  }, []);
+
+  // Controller signals arrival (or cancel) by calling this. Clears the
+  // visible pin on the minimap.
+  const handleWaypointReached = useCallback(() => {
+    waypointRef.current = null;
+    setWaypointTarget(null);
+  }, []);
+
+  const handleClearWaypoint = useCallback(() => {
+    waypointRef.current = null;
+    setWaypointTarget(null);
   }, []);
 
   const handleSendBubble = async () => {
@@ -296,11 +351,14 @@ export default function Plaza() {
         <fog attach="fog" args={['#F2D0B0', 40, 110]} />
 
         <Suspense fallback={null}>
-          <Environment3D lang={lang} currentZone={currentZone} />
+          <Environment3D lang={lang} currentZone={currentZone} playerPosRef={playerPosRef} />
           <PlayerController
             config={avatarConfig}
             onPositionUpdate={handlePositionUpdate}
             touchDirRef={touchDirRef}
+            waypointRef={waypointRef}
+            onWaypointReached={handleWaypointReached}
+            playerPosRef={playerPosRef}
           />
           <OtherPlayers
             players={players}
@@ -312,6 +370,30 @@ export default function Plaza() {
 
       {/* ─── Top cinematic gradient banner (concept-art style) ─── */}
       <div className="pointer-events-none absolute top-0 left-0 right-0 h-24 z-20 bg-gradient-to-b from-black/50 via-black/20 to-transparent" />
+
+      {/* ─── Zone transition color wash ───
+          Subtle full-screen tint in the new zone's colour when crossing a
+          boundary. Reuses `zoneChangeFlash` (already set in the zone-change
+          effect) so it stays in sync with the HUD pill's pulse. */}
+      <AnimatePresence>
+        {zoneChangeFlash && (
+          <motion.div
+            key={`wash-${currentZone}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.22 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-none absolute inset-0 z-[25]"
+            style={{
+              background: `radial-gradient(ellipse at center, ${activeZoneColor} 0%, ${activeZoneColor}00 65%)`,
+              mixBlendMode: 'screen',
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ─── Dev-toggle FPS meter (Shift+F) ─── */}
+      <FPSMeter />
 
       {/* ─── Welcome overlay (fades after 3.5s) ─── */}
       <AnimatePresence>
@@ -381,7 +463,11 @@ export default function Plaza() {
         <MiniMap
           players={players}
           myPosition={myPosition}
+          myRotation={myRotation}
           waypoints={journey.map(e => ({ zone: e.zone, sequenceNumber: e.sequenceNumber }))}
+          waypointTarget={waypointTarget}
+          onSetWaypoint={handleSetWaypoint}
+          onClearWaypoint={handleClearWaypoint}
         />
         <div className="flex items-center gap-1.5">
           <div className="bg-black/40 backdrop-blur-xl rounded-xl px-2.5 py-1.5 border border-white/15 shadow-lg flex items-center gap-1.5">
@@ -408,13 +494,23 @@ export default function Plaza() {
       </div>
 
       {/* ─── HUD Pill: Character Movement Log (concept-art style) ─── */}
+      {/* Collapses to icon-only after 3s. Expands on zone change or on tap. */}
       <div
         className={`absolute left-4 z-40 top-[5.75rem] md:top-auto md:bottom-20 ${
           showZonePanel || showJourneyLog ? 'hidden md:block' : 'block'
         }`}
       >
         <motion.button
-          onClick={() => setShowJourneyLog(true)}
+          onClick={() => {
+            if (logPillExpanded) {
+              setShowJourneyLog(true);
+            } else {
+              // First tap expands — then a second tap opens the log.
+              setLogPillExpanded(true);
+              if (pillCollapseTimerRef.current) clearTimeout(pillCollapseTimerRef.current);
+              pillCollapseTimerRef.current = setTimeout(() => setLogPillExpanded(false), 3000);
+            }
+          }}
           animate={zoneChangeFlash ? { scale: [1, 1.06, 1] } : { scale: 1 }}
           transition={{ duration: 0.5 }}
           className="relative rounded-[22px] p-[2px] shadow-2xl group"
@@ -424,11 +520,14 @@ export default function Plaza() {
           }}
           aria-label={lang === 'zh' ? '開啟角色移動日誌' : 'Open character movement log'}
         >
-          <div
-            className="relative rounded-[20px] px-4 py-2.5 flex items-center gap-3 overflow-hidden"
+          <motion.div
+            layout
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="relative rounded-[20px] flex items-center gap-3 overflow-hidden"
             style={{
               background:
                 'linear-gradient(180deg, rgba(30,30,40,0.92) 0%, rgba(20,20,30,0.95) 100%)',
+              padding: logPillExpanded ? '10px 16px' : '6px',
             }}
           >
             {/* Glossy highlight */}
@@ -460,27 +559,40 @@ export default function Plaza() {
               )}
             </div>
 
-            {/* Label */}
-            <div className="flex flex-col items-start min-w-0 relative">
-              <span
-                className="text-[9px] uppercase tracking-[0.15em] font-bold leading-none"
-                style={{ color: activeZoneColor }}
-              >
-                {lang === 'zh' ? 'HUD 詳細視角' : 'HUD Detailed Perspectives'}
-              </span>
-              <span className="text-sm font-bold text-white leading-tight truncate max-w-[160px] mt-1">
-                {lang === 'zh' ? '角色移動日誌' : 'Character Movement Log'}
-              </span>
-              <span className="text-[10px] text-white/60 leading-tight truncate max-w-[160px] mt-0.5">
-                {lang === 'zh' ? '目前:' : 'Now:'}{' '}
-                <span style={{ color: activeZoneColor }} className="font-semibold">
-                  {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
-                </span>
-              </span>
-            </div>
+            {/* Label — hidden when collapsed. AnimatePresence does the fade. */}
+            <AnimatePresence initial={false}>
+              {logPillExpanded && (
+                <motion.div
+                  key="pill-label"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.22 }}
+                  className="flex flex-col items-start min-w-0 relative overflow-hidden"
+                >
+                  <span
+                    className="text-[9px] uppercase tracking-[0.15em] font-bold leading-none whitespace-nowrap"
+                    style={{ color: activeZoneColor }}
+                  >
+                    {lang === 'zh' ? 'HUD 詳細視角' : 'HUD Detailed Perspectives'}
+                  </span>
+                  <span className="text-sm font-bold text-white leading-tight truncate max-w-[160px] mt-1 whitespace-nowrap">
+                    {lang === 'zh' ? '角色移動日誌' : 'Character Movement Log'}
+                  </span>
+                  <span className="text-[10px] text-white/60 leading-tight truncate max-w-[160px] mt-0.5 whitespace-nowrap">
+                    {lang === 'zh' ? '目前:' : 'Now:'}{' '}
+                    <span style={{ color: activeZoneColor }} className="font-semibold">
+                      {ZONE_LABELS[currentZone]?.[lang === 'zh' ? 'zh' : 'en'] || currentZone}
+                    </span>
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            <ChevronRight className="w-4 h-4 text-white/70 transition-transform shrink-0 relative group-hover:translate-x-0.5" />
-          </div>
+            {logPillExpanded && (
+              <ChevronRight className="w-4 h-4 text-white/70 transition-transform shrink-0 relative group-hover:translate-x-0.5" />
+            )}
+          </motion.div>
         </motion.button>
       </div>
 

@@ -1,153 +1,212 @@
-# Plaza upgrade v2 — walk animation + collision
+# Plaza upgrade v3 — HUD polish, waypoints, feedback
 
-This drop adds two things that were missing from the plaza:
-
-1. **Character walk cycle** — arms and legs now swing in proper contralateral
-   gait while the player is moving. They ease back to neutral when you stop.
-2. **Collision detection** — the player can no longer walk through buildings,
-   the fountain, ponds, trees, lamp posts, benches, bushes, rocks, or zone
-   landmarks. Obstacles bump the player out along the collision normal so
-   you can slide along walls instead of sticking.
+Build on top of v2 (which added limb walk-cycle and collision). This drop
+targets the UI polish list: clearer zone affordances, better mini-map,
+click-to-travel, polished name tags, auto-collapsing movement-log pill,
+zone-transition feedback, and a dev FPS meter.
 
 ## Files in this zip
 
 ```
-client/src/components/plaza/Avatar3D.tsx          (modified)
-client/src/components/plaza/PlayerController.tsx  (modified)
-client/src/components/plaza/colliders.ts          (new)
-Avatar3D.diff                                     (unified diff)
-PlayerController.diff                             (unified diff)
-CHANGES.md                                        (this file)
+client/src/components/plaza/Environment3D.tsx   (modified)
+client/src/components/plaza/PlayerController.tsx (modified — builds on v2)
+client/src/components/plaza/MiniMap.tsx         (rewritten)
+client/src/components/plaza/OtherPlayers.tsx    (rewritten)
+client/src/components/plaza/FPSMeter.tsx        (new)
+client/src/components/plaza/Avatar3D.tsx        (carried over from v2)
+client/src/components/plaza/colliders.ts        (carried over from v2)
+client/src/pages/Plaza.tsx                      (modified)
+diffs/Environment3D.diff                        (vs original repo)
+diffs/MiniMap.diff                              (vs original repo)
+diffs/OtherPlayers.diff                         (vs original repo)
+diffs/Plaza.diff                                (vs original repo)
+diffs/PlayerController.vs-v2.diff               (vs v2 drop)
+CHANGES.md                                      (this file)
 ```
 
-To apply, unzip at your repo root (same folder that contains `client/`):
+To apply:
 
 ```bash
-unzip -o ~/Downloads/unigo-plaza-upgrade-v2.zip
+# From your repo root (the one containing client/, server/, package.json).
+# If you haven't applied v2 yet, this zip also contains v2's Avatar3D,
+# PlayerController, and colliders.ts — so unzipping this alone is enough.
+unzip -o ~/Downloads/unigo-plaza-upgrade-v3.zip
 ```
 
 No new dependencies. No changes to `package.json`.
 
-## 1. Walk cycle (Avatar3D.tsx)
+---
 
-### What changed
+## What shipped
 
-Before: arms, hands, legs, and shoes were individual meshes at fixed
-positions. The only animation was a full-body vertical bounce + subtle
-Z-roll when `isMoving` was true — so the character looked like it was
-gliding.
+### 1. Zone approach affordance (`Environment3D.tsx`)
 
-After: each arm and each leg lives inside its own `<group>` pivoted at the
-shoulder (y=1.2) / hip (y=0.7). Hands are parented *into* the arm group so
-they swing with the forearm. Shoes are parented into the leg group. A
-`useFrame` callback drives `rotation.x` on each group with a sine wave:
+The light-blue zone discs used to just sit there. Now they react to your
+proximity:
 
-- Arms: ±0.55 rad, opposite L/R phase
-- Legs: ±0.75 rad, opposite L/R phase
-- Arms counter-phased vs. legs (standard contralateral gait: left arm
-  forward pairs with right leg forward)
-- Step frequency: 2.2 Hz, matching a natural walking cadence
+- A **pulsing glow ring** fades in as you get within 10m of a zone and peaks
+  at the 5m "enter ring", drawn as a ring mesh above the disc so it renders
+  cleanly without z-fighting.
+- A **floating bilingual "Enter ⟶ <zone>" prompt** appears above the
+  landmark, styled as a glassy pill in the zone's colour. Slides out once
+  you're clearly inside the zone (< 3.5m) so it doesn't sit on top of you.
+- Position updates are driven by a **shared `playerPosRef`** written by
+  `PlayerController` every frame and read inside `ZoneMarker`'s frame loop.
+  No React re-renders — the pill toggles `display`/`opacity` directly.
 
-### Tuning knobs
-
-Top of the file, three constants:
+Tuning constants at the top of the ZoneMarker section:
 
 ```ts
-const STEP_HZ = 2.2;      // steps/sec
-const ARM_SWING = 0.55;   // ± radians at peak
-const LEG_SWING = 0.75;   // ± radians at peak
-const IDLE_DAMP = 6;      // how fast limbs return to neutral
+const APPROACH_DIST = 10;  // prompt starts fading in
+const ENTER_DIST = 5;      // prompt peaks
+const INSIDE_DIST = 3.5;   // prompt fades out (you've arrived)
 ```
 
-If you later add a run state, multiply both swing amps by ~1.4 and bump
-STEP_HZ to ~3.2 for a run cycle — no geometry changes needed.
+### 2. Mini-map overhaul (`MiniMap.tsx`)
 
-### Behavior details
+- **20 % bigger** (`w-40 h-40` → `w-48 h-48`).
+- **Player facing arrow** — a chevron rotates around the player dot, driven
+  by a new `myRotation` prop.
+- **Click to set a waypoint** — tap anywhere on the map and a gold pin
+  appears at that world position; a dashed route line connects you to it.
+- **Right-click (desktop) or "Cancel ✕" button (mobile)** clears the
+  waypoint.
+- A small **"Tap to travel"** hint replaces the bottom-left badge when no
+  waypoint is active.
+- Distinct zone icons (library, stage, heart, café) were already there and
+  are preserved.
 
-- The walk phase accumulator only advances while `isMoving` is true. When
-  you stop, limbs ease back to rotation=0 over ~150ms via the `IDLE_DAMP`
-  lerp. This is why stopping feels natural instead of freeze-framed.
-- The original full-body bounce and Z-sway are preserved, so the torso
-  still rocks subtly while walking.
+SVG coord conversion is straightforward:
+`worldX = svgX / SCALE - MAP_SIZE / 2` (and same for Z). The scale is
+`SCALE = 100 / MAP_SIZE` with `MAP_SIZE = 140` — covers the full playable
+region (±45 in X/Z) with margin.
 
-## 2. Collision detection (colliders.ts + PlayerController.tsx)
+### 3. Waypoint auto-walk (`PlayerController.tsx`)
 
-### The new module
+Tapping the mini-map sets `waypointRef.current`. Each frame, if the user
+isn't actively steering, the controller:
 
-`colliders.ts` is a single source of truth for everything the player
-shouldn't walk through. Two primitive types:
+1. Computes the vector from player to target.
+2. Normalises it, applies a gentle slow-down under 2.5m from the target so
+   you don't skid into a wall.
+3. Feeds it into the existing velocity/collision pipeline — so auto-walk
+   respects every collider from v2 automatically.
+4. Clears the waypoint on arrival (< 0.6m), on manual input, or if the
+   collision resolver stops progress (`< 3mm` of actual movement ⇒ the
+   path is blocked, cancel).
 
-- **CircleCollider**: cheap radial test. Used for fountain, ponds, trees,
-  bushes, rocks, lamp posts, benches, and the four zone landmarks.
-- **BoxCollider**: AABB (axis-aligned bounding box). Used for the four
-  edge buildings (Library, Student Union, Main Building, Canteen), because
-  they're long and thin and a single circle would either let you clip the
-  corners or block half the sidewalk.
+No pathfinding here — it's a straight-line "magnet" with collision bounce.
+Good enough for an open plaza; if you later add enclosed rooms, this is the
+place to slot in A* over a coarse grid.
 
-Positions are lifted directly from `Environment3D.tsx`'s `TREE_POSITIONS`,
-`BENCH_POSITIONS`, etc. — if you move a prop in the environment, update
-the matching entry in `colliders.ts` and it'll just work.
+### 4. Name-tag polish (`OtherPlayers.tsx`)
 
-Total collider count: 4 buildings + 4 landmarks + 1 fountain + 2 ponds +
-20 trees + 8 lamps + 8 benches + 12 rocks + 12 bushes = **71 colliders**.
-That's well under the cost of a single draw call per frame.
+Old tag: one dark plane + two text lines. New tag: a layered glass pill:
 
-### The resolution algorithm
+```
+[ drop shadow ] [ dark body 72% ] [ bottom accent tint ] [ top accent strip ] [ speaker dot ]
+```
 
-`resolveCollision(nx, nz)` takes the *intended* next position and returns
-a corrected position. For each collider:
+- The **top accent strip** picks up the player's own shirt colour by
+  default — subtle personal identifier — and switches to gold when the
+  player has an active chat bubble (a pulsing dot also appears next to the
+  name).
+- We can't actually run `backdrop-filter` inside Three.js; layered planes
+  at different opacities fake the glassy look well enough.
 
-- **Circle vs. circle**: if `dist < radius + PLAYER_RADIUS`, push along
-  the centre-to-centre normal.
-- **AABB vs. circle**: find the closest point on the box to the player,
-  then do a circle-vs-point test. If the player is somehow inside the box
-  (shouldn't happen, but belt-and-braces), push along the shallowest axis.
+I did **not** wire a real "friends" colour because no friends system exists
+in the codebase. If you add one, replace `isSpeaking` with something like
+`player.friend_status === 'friends'` and it'll just work.
 
-Two iterations, because corners can produce a push that clips into a
-neighbour. Two is enough for this scene; I verified by hand that no
-colliders overlap pathologically.
+### 5. Zone transition feedback (`Plaza.tsx`)
 
-The player's own collision radius is `PLAYER_RADIUS = 0.35` — small enough
-to fit between trees, big enough that corner-clipping looks natural.
+When you cross a zone boundary:
 
-### PlayerController changes
+- The existing HUD pill pulses (was already there).
+- A **radial colour wash** in the new zone's hue fades in over 600ms and
+  out again — rendered as an absolute-positioned gradient with
+  `mix-blend-mode: screen` so it tints the scene rather than obscuring it.
+- Reuses the same `zoneChangeFlash` state that already drives the pill
+  animation, so both effects stay in sync.
 
-Three things changed in the controller:
+### 6. Movement-log pill auto-collapse (`Plaza.tsx`)
 
-1. **Collision pass** — after computing `desiredX`/`desiredZ` from
-   velocity, call `resolveCollision()` before writing to
-   `groupRef.current.position`. Applied to both the active-input and
-   coasting branches, so friction can't slide you into a wall.
+The pill that opens the journey log used to sit at full width at all
+times. Now:
 
-2. **Real `isMoving` for Avatar3D** — the old code passed
-   `isMoving={keysRef.current.size > 0}`, which meant (a) joystick-only
-   input never triggered animation, and (b) coast-to-stop looked like
-   instant freeze. Now `isMoving` is React state driven by
-   `inputActive || velocityRef.current.length() > 0.1`, set only on
-   threshold crossings to avoid per-frame React re-renders.
+- It expands on mount, then **auto-collapses to an icon-only pill after 3 s**.
+- Zone change → re-expands for another 3 s.
+- First tap on the collapsed pill expands it; second tap opens the journey
+  log. The `AnimatePresence` + `layout` animation keeps the transition
+  smooth.
 
-3. **Position-update callback** now receives the same `effectivelyMoving`
-   signal as the avatar, so the journey log and other-player broadcasts
-   stay consistent with what the character is actually doing.
+This reclaims about 180 px of bottom-left screen real estate after the
+first few seconds.
 
-### What's NOT collided
+### 7. FPS / frame-time meter (`FPSMeter.tsx`)
 
-Grass tufts, flower patches, and clouds are intentionally walkable —
-they're decoration, not obstacles. NPCs and other players are also not
-colliders (they move), but if you want bump-collision with them later,
-build a second collider list per frame from `NPCs.tsx` / `OtherPlayers.tsx`
-positions and call `resolveCollision` against both lists.
+New component. Hidden by default. Press **Shift+F** to toggle.
 
-## Known limitations / possible follow-ups
+- Samples the last 60 frames via `requestAnimationFrame`.
+- Shows averaged FPS and "peak ms" (worst frame in the window — a rough
+  1% low proxy, which is actually what perception of smoothness tracks).
+- Colour-coded: green ≥ 55 fps, amber ≥ 30, red below.
+- Updates its displayed numbers only ~4× per second so the meter itself
+  doesn't show up in its own measurements.
 
-- Collider radii are hand-tuned. If the fountain footprint changes or you
-  move the zone landmarks, `colliders.ts` needs to be updated by hand.
-  A future pass could have `Environment3D` itself export colliders.
-- The landmark radii (3.2–4.2m) block the *whole* footprint. If you later
-  want interactive seating at the pergola or the café counter, carve out
-  a narrower collider and have the landmark export its own collider list.
-- No vertical collision — the plaza is flat, so 2D is enough.
-- I couldn't run `tsc` or a dev-server build (no `node_modules`, network
-  disabled), so this is hand-verified. Braces/parens balance; imports
-  resolve to real paths; no remaining references to removed symbols.
-  If the build surfaces anything, paste the error and I'll fix it.
+No dependency on Three.js or drei — pure React + RAF, so it keeps running
+even if the canvas unmounts during hot reloads.
+
+---
+
+## What was intentionally NOT shipped
+
+Everything below was in your list but depends on a system that doesn't exist
+in the current codebase. Building a convincing-looking fake for any of
+these would be worse than not having them at all — users would think the
+feature works when it doesn't. Called out here so you know they're not
+forgotten, just waiting for the underlying system.
+
+- **Proximity voice chat indicators**. There is no voice transport in the
+  plaza today — no WebRTC, no audio mixer. I hinted at this by making the
+  name-tag speaker state driven by the presence of a chat bubble, so the
+  visual hook is ready; when real voice state exists, replace `isSpeaking`
+  in `OtherPlayers.tsx` with the real flag.
+- **Friend colour-coding on name tags**. No friends system in the code.
+  Same story: the accent-colour pipeline is there, feed it the real status.
+- **"Join Table" quick-action near grouped NPCs**. `NPCs.tsx` doesn't know
+  about seats or tables as first-class entities — they're just positions.
+  Needs a data model (which bench belongs to which group, how many seats)
+  before a UI makes sense.
+- **Focus Mode notification mute in the study zone**. There's no generic
+  notification stream to mute; `toast()` calls are scattered ad-hoc.
+  Needs a central notification service first.
+- **Interactive books / laptops / whiteboards triggering collab tools**.
+  That's a product, not a polish pass. The collab tools don't exist yet.
+- **Gazebo availability (N/M seats taken)**. Needs seat semantics on the
+  pergola and some way to reserve them — out of scope for a UI commit.
+- **Progressive LOD on props**. The props are already instanced (one draw
+  call per prop type from v2's instancing work). LOD would need per-prop
+  detail levels and a distance-based switcher; not worth half-doing, and
+  the FPS meter now ships so you can actually measure whether it's needed.
+- **Quick-emote wheel (wave / sit / dance)**. Would need avatar animation
+  support beyond the walk cycle — an `action` state on `Avatar3D` plus
+  animation curves. Doable but it's its own commit; the UI button layout
+  in `Plaza.tsx` has space reserved for it next to the joystick.
+
+---
+
+## Known limitations
+
+- **Auto-walk is straight-line only.** If a collider sits between you and
+  the waypoint, the player will push against it until stall-detection
+  cancels the trip (< 3mm of movement). Feels like "oh, can't get there
+  from here" rather than a smart reroute.
+- **`<Html>` in `ZoneMarker`.** Four zones = four DOM nodes added to the
+  Canvas portal. That's fine, but if you add more zones the performance
+  tradeoff vs. a pure-3D Billboard prompt is worth revisiting.
+- **I couldn't run `tsc` or a dev-server build** (no `node_modules`,
+  network disabled). Hand-verified: braces / parens / brackets balanced
+  across all files, imports resolve to real module paths, all new props
+  are consumed by their targets. If the build surfaces anything, paste it
+  and I'll fix it.
