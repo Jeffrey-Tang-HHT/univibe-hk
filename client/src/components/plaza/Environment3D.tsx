@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { Text } from '@react-three/drei';
+import { Text, Instances, Instance } from '@react-three/drei';
 import ZoneLandmarks from './ZoneLandmarks';
 import ZoneLabels from './ZoneLabels';
 import FountainCallout from './FountainCallout';
@@ -24,9 +24,25 @@ const ZONES: ZoneConfig[] = [
 ];
 
 export default function Environment({ lang = 'zh', currentZone = 'center' }: { lang?: string; currentZone?: string }) {
-  // Stable randomized values — computed once per mount, not per render
-  const treeScales = useMemo(
-    () => TREE_POSITIONS.map(() => 0.8 + Math.random() * 0.4),
+  // Stable randomized values — computed once per mount, not per render.
+  // We pre-compute per-instance scale AND a small hue offset so instanced trees/bushes
+  // don't look identical. Three.Color handles HSL shifts cleanly.
+  const treeVariations = useMemo(
+    () =>
+      TREE_POSITIONS.map(() => ({
+        scale: 0.8 + Math.random() * 0.4,
+        hueShift: (Math.random() - 0.5) * 0.08, // ±8% hue rotation
+        lightShift: (Math.random() - 0.5) * 0.08,
+      })),
+    []
+  );
+
+  const bushVariations = useMemo(
+    () =>
+      BUSH_POSITIONS.map(() => ({
+        hueShift: (Math.random() - 0.5) * 0.06,
+        lightShift: (Math.random() - 0.5) * 0.1,
+      })),
     []
   );
 
@@ -54,10 +70,8 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
       {/* NPCs — bring the plaza to life with 8 ambient characters */}
       <NPCs lang={lang} />
 
-      {/* Trees */}
-      {TREE_POSITIONS.map((pos, i) => (
-        <Tree key={`tree-${i}`} position={pos} scale={treeScales[i]} />
-      ))}
+      {/* Trees — instanced (1 draw call per sub-mesh instead of per tree) */}
+      <InstancedTrees positions={TREE_POSITIONS} variations={treeVariations} />
 
       {/* Benches */}
       {BENCH_POSITIONS.map((pos, i) => (
@@ -73,9 +87,16 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
       <Building position={[0, 0, -35]} scale={[20, 8, 3]} color="#8B97AC" label="主教學樓" labelEn="Main Building" lang={lang} />
       <Building position={[0, 0, 38]} scale={[15, 5, 3]} color="#A0AEC0" label="飯堂" labelEn="Canteen" lang={lang} />
 
-      {/* Lamp posts */}
+      {/* Lamp posts — pole + bulb instanced; pointLights stay per-lamp (can't instance lights) */}
+      <InstancedLamps positions={LAMP_POSITIONS} />
       {LAMP_POSITIONS.map((pos, i) => (
-        <LampPost key={`lamp-${i}`} position={pos} />
+        <pointLight
+          key={`lamp-light-${i}`}
+          position={[pos[0], 3.1, pos[2]]}
+          intensity={0.5}
+          distance={8}
+          color="#FFF9C4"
+        />
       ))}
 
       {/* Winding paths from centre to each zone */}
@@ -88,20 +109,14 @@ export default function Environment({ lang = 'zh', currentZone = 'center' }: { l
       <Pond position={[-26, 0, 3]} radius={2.5} />
       <Pond position={[26, 0, 3]} radius={2.2} />
 
-      {/* Rocks scattered around */}
-      {ROCK_POSITIONS.map((r, i) => (
-        <Rock key={`rock-${i}`} position={r.pos} scale={r.scale} rotation={r.rot} />
-      ))}
+      {/* Rocks scattered around — instanced */}
+      <InstancedRocks rocks={ROCK_POSITIONS} />
 
-      {/* Bushes filling in the grass */}
-      {BUSH_POSITIONS.map((b, i) => (
-        <Bush key={`bush-${i}`} position={b.pos} color={b.color} />
-      ))}
+      {/* Bushes filling in the grass — instanced */}
+      <InstancedBushes bushes={BUSH_POSITIONS} variations={bushVariations} />
 
-      {/* Grass tufts for ground detail */}
-      {GRASS_TUFT_POSITIONS.map((pos, i) => (
-        <GrassTuft key={`grass-${i}`} position={pos} />
-      ))}
+      {/* Grass tufts for ground detail — instanced */}
+      <InstancedGrassTufts positions={GRASS_TUFT_POSITIONS} />
 
       {/* Sky dome — golden-hour gradient (peach horizon → soft lavender-blue zenith) */}
       <mesh>
@@ -227,6 +242,93 @@ function Tree({ position, scale = 1 }: { position: [number, number, number]; sca
   );
 }
 
+// ─── Instanced Trees ───
+// One <Instances> per sub-mesh → 4 draw calls total for all trees instead of 4-per-tree.
+// Per-instance colour varies hue/lightness slightly so trees don't look cloned.
+type TreeVariation = { scale: number; hueShift: number; lightShift: number };
+
+function InstancedTrees({
+  positions,
+  variations,
+}: {
+  positions: [number, number, number][];
+  variations: TreeVariation[];
+}) {
+  const limit = Math.max(positions.length, 32);
+
+  // Pre-compute per-instance tint colours for each foliage layer (stable across renders).
+  const tints = useMemo(() => {
+    const base1 = new THREE.Color('#4CAF50');
+    const base2 = new THREE.Color('#66BB6A');
+    const base3 = new THREE.Color('#81C784');
+    return variations.map((v) => {
+      const c1 = base1.clone().offsetHSL(v.hueShift, 0, v.lightShift);
+      const c2 = base2.clone().offsetHSL(v.hueShift, 0, v.lightShift);
+      const c3 = base3.clone().offsetHSL(v.hueShift, 0, v.lightShift);
+      return [c1, c2, c3] as const;
+    });
+  }, [variations]);
+
+  return (
+    <group>
+      {/* Trunks */}
+      <Instances limit={limit} castShadow>
+        <cylinderGeometry args={[0.12, 0.18, 1.2, 8]} />
+        <meshToonMaterial color="#8B6E4E" />
+        {positions.map((pos, i) => (
+          <Instance
+            key={`trunk-${i}`}
+            position={[pos[0], pos[1] + 0.6 * variations[i].scale, pos[2]]}
+            scale={variations[i].scale}
+          />
+        ))}
+      </Instances>
+
+      {/* Foliage layer 1 (largest, darkest) */}
+      <Instances limit={limit} castShadow>
+        <sphereGeometry args={[0.8, 8, 8]} />
+        <meshToonMaterial color="#4CAF50" />
+        {positions.map((pos, i) => (
+          <Instance
+            key={`fol1-${i}`}
+            position={[pos[0], pos[1] + 1.6 * variations[i].scale, pos[2]]}
+            scale={variations[i].scale}
+            color={tints[i][0]}
+          />
+        ))}
+      </Instances>
+
+      {/* Foliage layer 2 */}
+      <Instances limit={limit} castShadow>
+        <sphereGeometry args={[0.6, 8, 8]} />
+        <meshToonMaterial color="#66BB6A" />
+        {positions.map((pos, i) => (
+          <Instance
+            key={`fol2-${i}`}
+            position={[pos[0], pos[1] + 2.1 * variations[i].scale, pos[2]]}
+            scale={variations[i].scale}
+            color={tints[i][1]}
+          />
+        ))}
+      </Instances>
+
+      {/* Foliage layer 3 (top, brightest) — no shadow, small */}
+      <Instances limit={limit}>
+        <sphereGeometry args={[0.35, 8, 8]} />
+        <meshToonMaterial color="#81C784" />
+        {positions.map((pos, i) => (
+          <Instance
+            key={`fol3-${i}`}
+            position={[pos[0], pos[1] + 2.5 * variations[i].scale, pos[2]]}
+            scale={variations[i].scale}
+            color={tints[i][2]}
+          />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
 // ─── Bench ───
 function Bench({ position, rotation = 0 }: { position: [number, number, number]; rotation?: number }) {
   return (
@@ -277,17 +379,17 @@ function Fountain({ position }: { position: [number, number, number] }) {
         <cylinderGeometry args={[3.0, 3.0, 0.25, 32]} />
         <meshStandardMaterial color={darkStoneColor} roughness={0.9} />
       </mesh>
-      {/* Water in outer basin */}
+      {/* Water in outer basin — restrained emissive so the tone-mapped highlights don't bloom into a solid disc */}
       <mesh ref={waterRef} position={[0, 0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[2.95, 32]} />
         <meshStandardMaterial
           color="#5FBCD9"
           transparent
-          opacity={0.78}
+          opacity={0.7}
           roughness={0.2}
           metalness={0.15}
           emissive="#88D4E8"
-          emissiveIntensity={0.12}
+          emissiveIntensity={0.04}
         />
       </mesh>
 
@@ -305,7 +407,7 @@ function Fountain({ position }: { position: [number, number, number] }) {
       {/* Middle bowl water */}
       <mesh position={[0, 1.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1.3, 24]} />
-        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.8} roughness={0.2} emissive="#88D4E8" emissiveIntensity={0.15} />
+        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.75} roughness={0.2} emissive="#88D4E8" emissiveIntensity={0.05} />
       </mesh>
 
       {/* Top pedestal */}
@@ -322,7 +424,7 @@ function Fountain({ position }: { position: [number, number, number] }) {
       {/* Top bowl water */}
       <mesh position={[0, 2.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.6, 16]} />
-        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.8} emissive="#88D4E8" emissiveIntensity={0.2} />
+        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.75} emissive="#88D4E8" emissiveIntensity={0.06} />
       </mesh>
 
       {/* Central water jets — multi-stream spout */}
@@ -343,20 +445,22 @@ function WaterJets() {
     const arr = new Float32Array(count * 3);
     const velocities = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      // Randomly assigned to one of 5 jets (center + 4 angled outward)
+      // Randomly assigned to one of 5 jets (center + 4 angled outward).
+      // Narrower `outward` and tighter `spread` keep the plume reading as a column,
+      // not a fan — crucial from the default 55° fov top-down camera angle.
       const jet = Math.floor(Math.random() * 5);
       const angle = jet === 0 ? 0 : ((jet - 1) / 4) * Math.PI * 2;
-      const spread = jet === 0 ? 0.05 : 0.12;
-      const outward = jet === 0 ? 0 : 0.06;
+      const spread = jet === 0 ? 0.04 : 0.08;
+      const outward = jet === 0 ? 0 : 0.025;
 
       arr[i * 3] = Math.cos(angle) * outward + (Math.random() - 0.5) * spread;
       arr[i * 3 + 1] = 2.3 + Math.random() * 0.1;
       arr[i * 3 + 2] = Math.sin(angle) * outward + (Math.random() - 0.5) * spread;
 
-      // Upward + outward velocity
-      velocities[i * 3] = jet === 0 ? 0 : Math.cos(angle) * 0.015;
-      velocities[i * 3 + 1] = 0.06 + Math.random() * 0.04;
-      velocities[i * 3 + 2] = jet === 0 ? 0 : Math.sin(angle) * 0.015;
+      // Upward + (much smaller) outward velocity; wider upward variance
+      velocities[i * 3] = jet === 0 ? 0 : Math.cos(angle) * 0.008;
+      velocities[i * 3 + 1] = 0.06 + Math.random() * 0.07;
+      velocities[i * 3 + 2] = jet === 0 ? 0 : Math.sin(angle) * 0.008;
     }
     return { arr, velocities };
   }, []);
@@ -375,14 +479,14 @@ function WaterJets() {
       if (pos[i * 3 + 1] < 1.5) {
         const jet = Math.floor(Math.random() * 5);
         const angle = jet === 0 ? 0 : ((jet - 1) / 4) * Math.PI * 2;
-        const spread = jet === 0 ? 0.05 : 0.12;
-        const outward = jet === 0 ? 0 : 0.06;
+        const spread = jet === 0 ? 0.04 : 0.08;
+        const outward = jet === 0 ? 0 : 0.025;
         pos[i * 3] = Math.cos(angle) * outward + (Math.random() - 0.5) * spread;
         pos[i * 3 + 1] = 2.3 + Math.random() * 0.1;
         pos[i * 3 + 2] = Math.sin(angle) * outward + (Math.random() - 0.5) * spread;
-        vel[i * 3] = jet === 0 ? 0 : Math.cos(angle) * 0.015;
-        vel[i * 3 + 1] = 0.06 + Math.random() * 0.04;
-        vel[i * 3 + 2] = jet === 0 ? 0 : Math.sin(angle) * 0.015;
+        vel[i * 3] = jet === 0 ? 0 : Math.cos(angle) * 0.008;
+        vel[i * 3 + 1] = 0.06 + Math.random() * 0.07;
+        vel[i * 3 + 2] = jet === 0 ? 0 : Math.sin(angle) * 0.008;
       }
     }
     ref.current.geometry.attributes.position.needsUpdate = true;
@@ -398,7 +502,16 @@ function WaterJets() {
           itemSize={3}
         />
       </bufferGeometry>
-      <pointsMaterial color="#B8E6F5" size={0.11} transparent opacity={0.85} sizeAttenuation />
+      <pointsMaterial
+        color="#CFEEF9"
+        size={0.09}
+        transparent
+        opacity={0.9}
+        sizeAttenuation
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        fog={false}
+      />
     </points>
   );
 }
@@ -446,7 +559,16 @@ function WaterCascade() {
           itemSize={3}
         />
       </bufferGeometry>
-      <pointsMaterial color="#A8DCEA" size={0.06} transparent opacity={0.6} sizeAttenuation />
+      <pointsMaterial
+        color="#C8E8F4"
+        size={0.055}
+        transparent
+        opacity={0.7}
+        sizeAttenuation
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        fog={false}
+      />
     </points>
   );
 }
@@ -577,6 +699,32 @@ function LampPost({ position }: { position: [number, number, number] }) {
         <meshBasicMaterial color="#FFF9C4" />
       </mesh>
       <pointLight position={[0, 3.1, 0]} intensity={0.5} distance={8} color="#FFF9C4" />
+    </group>
+  );
+}
+
+// ─── Instanced Lamps ───
+// Poles + bulbs instanced; the pointLights are emitted separately by the caller.
+function InstancedLamps({ positions }: { positions: [number, number, number][] }) {
+  const limit = Math.max(positions.length, 16);
+  return (
+    <group>
+      {/* Poles */}
+      <Instances limit={limit} castShadow>
+        <cylinderGeometry args={[0.04, 0.06, 3, 8]} />
+        <meshToonMaterial color="#555555" />
+        {positions.map((pos, i) => (
+          <Instance key={`pole-${i}`} position={[pos[0], pos[1] + 1.5, pos[2]]} />
+        ))}
+      </Instances>
+      {/* Bulbs (emissive-looking, but meshBasicMaterial so they stay bright) */}
+      <Instances limit={limit}>
+        <sphereGeometry args={[0.15, 8, 8]} />
+        <meshBasicMaterial color="#FFF9C4" />
+        {positions.map((pos, i) => (
+          <Instance key={`bulb-${i}`} position={[pos[0], pos[1] + 3.1, pos[2]]} />
+        ))}
+      </Instances>
     </group>
   );
 }
@@ -898,6 +1046,63 @@ function Rock({
   );
 }
 
+// ─── Instanced Rocks ───
+// Two instance groups (main + pebble beside it), matching the original Rock shape.
+// To keep the same "pebble beside main stone" look, we pre-rotate the pebble offset
+// by each rock's rotation, then pass absolute positions to the pebble Instances.
+function InstancedRocks({
+  rocks,
+}: {
+  rocks: Array<{ pos: [number, number, number]; scale: number; rot: number }>;
+}) {
+  const limit = Math.max(rocks.length, 20);
+
+  const pebbles = useMemo(() => {
+    return rocks.map((r) => {
+      // Original pebble was at local [0.3, 0.1, 0.2] × scale with the main rock's Y rotation.
+      const lx = 0.3 * r.scale;
+      const lz = 0.2 * r.scale;
+      const cos = Math.cos(r.rot);
+      const sin = Math.sin(r.rot);
+      const wx = r.pos[0] + lx * cos - lz * sin;
+      const wz = r.pos[2] + lx * sin + lz * cos;
+      const wy = r.pos[1] + 0.1 * r.scale;
+      return { pos: [wx, wy, wz] as [number, number, number], scale: r.scale * 0.5, rot: r.rot };
+    });
+  }, [rocks]);
+
+  return (
+    <group>
+      {/* Main boulders */}
+      <Instances limit={limit} castShadow receiveShadow>
+        <dodecahedronGeometry args={[0.5, 0]} />
+        <meshToonMaterial color="#90A4AE" />
+        {rocks.map((r, i) => (
+          <Instance
+            key={`rock-main-${i}`}
+            position={r.pos}
+            rotation={[0, r.rot, 0]}
+            scale={r.scale}
+          />
+        ))}
+      </Instances>
+      {/* Pebbles */}
+      <Instances limit={limit} castShadow>
+        <dodecahedronGeometry args={[0.4, 0]} />
+        <meshToonMaterial color="#78909C" />
+        {pebbles.map((p, i) => (
+          <Instance
+            key={`rock-pebble-${i}`}
+            position={p.pos}
+            rotation={[0, p.rot, 0]}
+            scale={p.scale}
+          />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
 // ─── Bush — rounded green shrub ───
 function Bush({
   position,
@@ -924,6 +1129,70 @@ function Bush({
   );
 }
 
+// ─── Instanced Bushes ───
+// Three sphere sub-lobes per bush → 3 draw calls for all 12.
+// Per-instance hue shift keeps them from looking like clones.
+function InstancedBushes({
+  bushes,
+  variations,
+}: {
+  bushes: Array<{ pos: [number, number, number]; color: string }>;
+  variations: Array<{ hueShift: number; lightShift: number }>;
+}) {
+  const limit = Math.max(bushes.length, 20);
+
+  const tints = useMemo(
+    () =>
+      bushes.map((b, i) => {
+        const c = new THREE.Color(b.color);
+        c.offsetHSL(variations[i].hueShift, 0, variations[i].lightShift);
+        return c;
+      }),
+    [bushes, variations]
+  );
+
+  return (
+    <group>
+      {/* Main lobe */}
+      <Instances limit={limit} castShadow>
+        <sphereGeometry args={[0.55, 10, 10]} />
+        <meshToonMaterial color="#4CAF50" />
+        {bushes.map((b, i) => (
+          <Instance
+            key={`bush-m-${i}`}
+            position={[b.pos[0], b.pos[1] + 0.35, b.pos[2]]}
+            color={tints[i]}
+          />
+        ))}
+      </Instances>
+      {/* Right lobe */}
+      <Instances limit={limit} castShadow>
+        <sphereGeometry args={[0.3, 8, 8]} />
+        <meshToonMaterial color="#4CAF50" />
+        {bushes.map((b, i) => (
+          <Instance
+            key={`bush-r-${i}`}
+            position={[b.pos[0] + 0.3, b.pos[1] + 0.45, b.pos[2] + 0.15]}
+            color={tints[i]}
+          />
+        ))}
+      </Instances>
+      {/* Left lobe */}
+      <Instances limit={limit} castShadow>
+        <sphereGeometry args={[0.32, 8, 8]} />
+        <meshToonMaterial color="#4CAF50" />
+        {bushes.map((b, i) => (
+          <Instance
+            key={`bush-l-${i}`}
+            position={[b.pos[0] - 0.25, b.pos[1] + 0.4, b.pos[2] - 0.1]}
+            color={tints[i]}
+          />
+        ))}
+      </Instances>
+    </group>
+  );
+}
+
 // ─── Grass Tuft — small foliage accent ───
 function GrassTuft({ position }: { position: [number, number, number] }) {
   return (
@@ -940,6 +1209,37 @@ function GrassTuft({ position }: { position: [number, number, number] }) {
         <coneGeometry args={[0.06, 0.22, 5]} />
         <meshToonMaterial color="#4CAF50" />
       </mesh>
+    </group>
+  );
+}
+
+// ─── Instanced Grass Tufts ───
+// Three tiny cones per tuft × 28 tufts → 3 draw calls instead of 84.
+function InstancedGrassTufts({ positions }: { positions: [number, number, number][] }) {
+  const limit = Math.max(positions.length, 32);
+  return (
+    <group>
+      <Instances limit={limit}>
+        <coneGeometry args={[0.08, 0.25, 5]} />
+        <meshToonMaterial color="#66BB6A" />
+        {positions.map((pos, i) => (
+          <Instance key={`g1-${i}`} position={[pos[0], pos[1] + 0.1, pos[2]]} />
+        ))}
+      </Instances>
+      <Instances limit={limit}>
+        <coneGeometry args={[0.06, 0.2, 5]} />
+        <meshToonMaterial color="#81C784" />
+        {positions.map((pos, i) => (
+          <Instance key={`g2-${i}`} position={[pos[0] + 0.08, pos[1] + 0.08, pos[2] + 0.05]} />
+        ))}
+      </Instances>
+      <Instances limit={limit}>
+        <coneGeometry args={[0.06, 0.22, 5]} />
+        <meshToonMaterial color="#4CAF50" />
+        {positions.map((pos, i) => (
+          <Instance key={`g3-${i}`} position={[pos[0] - 0.06, pos[1] + 0.09, pos[2] - 0.03]} />
+        ))}
+      </Instances>
     </group>
   );
 }

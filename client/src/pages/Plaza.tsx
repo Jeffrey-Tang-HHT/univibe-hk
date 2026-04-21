@@ -28,6 +28,12 @@ import {
   type PlazaPlayer, type PlazaBubble, type AvatarConfig,
 } from '@/lib/plaza';
 
+// Rough "is mobile" check used once at module load for shadow-map sizing.
+// Matches typical iOS/Android browsers without being cute about tablets.
+const IS_MOBILE =
+  typeof navigator !== 'undefined' &&
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 export default function Plaza() {
   const { user, isLoggedIn } = useAuth();
   const { lang, setLang, t } = useLanguage();
@@ -258,14 +264,16 @@ export default function Plaza() {
         {/* Golden-hour ambient — warm peachy fill */}
         <ambientLight intensity={0.55} color="#FFE4C4" />
 
-        {/* Low-angle warm sun — casts long shadows */}
+        {/* Low-angle warm sun — casts long shadows.
+            Shadow map is 2048² on desktop, 1024² on mobile — cheap way to regain
+            ~10 FPS on mid-range Android without hurting desktop quality. */}
         <directionalLight
           position={[22, 14, 8]}
           intensity={1.45}
           color="#FFB27A"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={IS_MOBILE ? 1024 : 2048}
+          shadow-mapSize-height={IS_MOBILE ? 1024 : 2048}
           shadow-camera-far={100}
           shadow-camera-left={-50}
           shadow-camera-right={50}
