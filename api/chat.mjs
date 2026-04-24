@@ -1,8 +1,6 @@
-import { supabaseQuery } from '../lib/supabase.mjs';
+import { randomUUID } from 'crypto';
+import { getSupabaseAdminConfig, supabaseQuery } from '../lib/supabase.mjs';
 import { setCors, requireAuth, authenticate, isValidUUID, rateLimit, getClientIP, sanitizeContent, checkBodySize, validateImageBytes } from '../lib/security.mjs';
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
 export default async function handler(req, res) {
   setCors(req, res);
@@ -207,6 +205,7 @@ export default async function handler(req, res) {
 
       let image_url = null;
       if (type === 'image' && image_base64) {
+        const { url: supabaseUrl, key: supabaseKey } = getSupabaseAdminConfig();
         const imgMatches = image_base64.match(/^data:image\/(jpeg|png|webp|gif);base64,(.+)$/);
         if (!imgMatches) return res.status(400).json({ error: 'Invalid image format. Only jpeg/png/webp/gif allowed.' });
         const mimeType = `image/${imgMatches[1]}`;
@@ -223,16 +222,16 @@ export default async function handler(req, res) {
         }
 
         const ext = mimeType.includes('png') ? 'png' : mimeType.includes('gif') ? 'gif' : 'jpg';
-        const fileName = `chat_${match_id}_${Date.now()}.${ext}`;
+        const fileName = `${match_id}/${Date.now()}-${randomUUID()}.${ext}`;
 
         try {
           const uploadRes = await fetch(
-            `${SUPABASE_URL}/storage/v1/object/chat-images/${fileName}`,
+            `${supabaseUrl}/storage/v1/object/chat-images/${fileName}`,
             {
               method: 'POST',
               headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'apikey': supabaseKey,
+                'Authorization': `Bearer ${supabaseKey}`,
                 'Content-Type': mimeType,
                 'x-upsert': 'true',
               },
@@ -240,7 +239,7 @@ export default async function handler(req, res) {
             }
           );
           if (uploadRes.ok) {
-            image_url = `${SUPABASE_URL}/storage/v1/object/public/chat-images/${fileName}`;
+            image_url = `${supabaseUrl}/storage/v1/object/public/chat-images/${fileName}`;
           } else {
             return res.status(500).json({ error: 'Image upload failed' });
           }

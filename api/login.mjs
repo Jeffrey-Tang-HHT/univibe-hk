@@ -1,8 +1,7 @@
-import { getUserByUsername } from '../lib/supabase.mjs';
-import { verifyPassword } from '../lib/password.mjs';
-import { createToken } from '../lib/token.mjs';
-import { updateLastLogin } from '../lib/supabase.mjs';
+import { hashPassword, verifyPassword } from '../lib/password.mjs';
 import { setCors, rateLimit, getClientIP } from '../lib/security.mjs';
+import { getUserByUsername, updateLastLogin, updateUser } from '../lib/supabase.mjs';
+import { createToken } from '../lib/token.mjs';
 
 export default async function handler(req, res) {
   setCors(req, res);
@@ -11,43 +10,52 @@ export default async function handler(req, res) {
 
   const ip = getClientIP(req);
 
-  // Rate limit: 10 login attempts per IP per 15 min
   if (!rateLimit(`login:${ip}`, 10, 15 * 60 * 1000)) {
-    return res.status(429).json({ error: '登入嘗試太頻繁，請15分鐘後再試' });
+    return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
   }
 
   try {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: '請輸入用戶名和密碼' });
+    if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
     if (typeof username !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ error: '無效的輸入' });
+      return res.status(400).json({ error: 'Invalid request payload.' });
     }
 
-    // Rate limit per username too (prevents distributed brute-force on one account)
     if (!rateLimit(`login:user:${username.toLowerCase()}`, 5, 15 * 60 * 1000)) {
-      return res.status(429).json({ error: '此帳號登入嘗試太頻繁，請稍後再試' });
+      return res.status(429).json({ error: 'Too many attempts for this account. Please try again later.' });
     }
 
     const user = await getUserByUsername(username.toLowerCase());
-    if (!user) return res.status(401).json({ error: '用戶名或密碼錯誤' });
+    if (!user) return res.status(401).json({ error: 'Invalid username or password.' });
 
-    const valid = await verifyPassword(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: '用戶名或密碼錯誤' });
+    const { valid, needsRehash } = await verifyPassword(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Invalid username or password.' });
 
     await updateLastLogin(user.id).catch(() => {});
-    const token = createToken(user.id, user.username);
+    if (needsRehash) {
+      hashPassword(password)
+        .then(passwordHash => updateUser(user.id, { password_hash: passwordHash }))
+        .catch(() => {});
+    }
 
-    // Return all profile fields so localStorage has complete data
+    const token = createToken(user.id, user.username);
     const { password_hash, ...profile } = user;
-    if (typeof profile.photos === 'string') { try { profile.photos = JSON.parse(profile.photos); } catch { profile.photos = []; } }
+    if (typeof profile.photos === 'string') {
+      try {
+        profile.photos = JSON.parse(profile.photos);
+      } catch {
+        profile.photos = [];
+      }
+    }
     if (!Array.isArray(profile.photos)) profile.photos = [];
 
     return res.status(200).json({
-      success: true, token,
+      success: true,
+      token,
       user: profile
     });
   } catch (err) {
     console.error('Login error:', err);
-    return res.status(500).json({ error: '登入失敗，請稍後再試' });
+    return res.status(500).json({ error: 'Login failed.' });
   }
 }

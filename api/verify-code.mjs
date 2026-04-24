@@ -1,18 +1,21 @@
 import { createHmac } from 'crypto';
-import { setCors, rateLimit, getClientIP } from '../lib/security.mjs';
+import { getRequiredEnv } from '../lib/env.mjs';
+import { getClientIP, rateLimit, safeCompareText, setCors } from '../lib/security.mjs';
 
-const VERIFY_SECRET = process.env.VERIFY_SECRET;
+function getVerifySecret() {
+  return getRequiredEnv('VERIFY_SECRET', { minLength: 32 });
+}
 
 function generateExpectedCodes(email, windowMinutes = 10) {
   const now = Date.now();
   const codes = [];
   for (let i = 0; i <= windowMinutes; i++) {
     const windowTime = Math.floor((now - i * 60 * 1000) / (60 * 1000));
-    const hmac = createHmac('sha256', VERIFY_SECRET)
+    const hmac = createHmac('sha256', getVerifySecret())
       .update(`${email}:${windowTime}`)
       .digest('hex');
-    codes.push(hmac.substring(0, 6).replace(/[a-f]/g, c =>
-      String(c.charCodeAt(0) - 87)
+    codes.push(hmac.substring(0, 6).replace(/[a-f]/g, char =>
+      String(char.charCodeAt(0) - 87)
     ).substring(0, 6).padStart(6, '0'));
   }
   return codes;
@@ -25,38 +28,35 @@ export default async function handler(req, res) {
 
   const ip = getClientIP(req);
 
-  // Rate limit: 5 attempts per email per 10 min (prevents brute-force of 6-digit code)
   if (!rateLimit(`verify:ip:${ip}`, 15, 10 * 60 * 1000)) {
-    return res.status(429).json({ error: '驗證嘗試太頻繁，請稍後再試' });
+    return res.status(429).json({ error: 'Too many verification attempts. Please try again later.' });
   }
 
   try {
     const { email, code } = req.body;
-    if (!email || !code) return res.status(400).json({ error: '請提供電郵和驗證碼' });
+    if (!email || !code) return res.status(400).json({ error: 'Email and code are required.' });
     if (typeof email !== 'string' || typeof code !== 'string') {
-      return res.status(400).json({ error: '無效的輸入' });
+      return res.status(400).json({ error: 'Invalid request payload.' });
     }
 
     const emailLower = email.toLowerCase().trim();
 
-    // Per-email rate limit
     if (!rateLimit(`verify:email:${emailLower}`, 5, 10 * 60 * 1000)) {
-      return res.status(429).json({ error: '驗證嘗試太頻繁，請10分鐘後再試' });
+      return res.status(429).json({ error: 'Too many attempts for this email. Please try again later.' });
     }
 
-    // Only accept 6-digit codes
     if (!/^\d{6}$/.test(code)) {
-      return res.status(400).json({ error: '驗證碼格式無效' });
+      return res.status(400).json({ error: 'Verification code must be 6 digits.' });
     }
 
     const validCodes = generateExpectedCodes(emailLower);
-    if (validCodes.includes(code)) {
-      return res.status(200).json({ success: true, message: '驗證成功' });
-    } else {
-      return res.status(400).json({ error: '驗證碼錯誤或已過期' });
+    if (validCodes.some(candidate => safeCompareText(candidate, code))) {
+      return res.status(200).json({ success: true, message: 'Verification succeeded.' });
     }
+
+    return res.status(400).json({ error: 'Invalid verification code.' });
   } catch (err) {
     console.error('Verify error:', err);
-    return res.status(500).json({ error: '驗證失敗' });
+    return res.status(500).json({ error: 'Verification failed.' });
   }
 }
