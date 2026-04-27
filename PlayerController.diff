@@ -1,0 +1,112 @@
+--- /home/claude/work/unigo-hk-main/client/src/components/plaza/PlayerController.tsx	2026-04-21 14:15:56.000000000 +0000
++++ /home/claude/output/unigo-plaza-upgrade-v2/client/src/components/plaza/PlayerController.tsx	2026-04-21 14:50:09.083574195 +0000
+@@ -1,7 +1,8 @@
+-import { useRef, useEffect, useCallback } from 'react';
++import { useRef, useEffect, useCallback, useState } from 'react';
+ import * as THREE from 'three';
+ import { useFrame, useThree } from '@react-three/fiber';
+ import Avatar3D from './Avatar3D';
++import { resolveCollision } from './colliders';
+ import type { AvatarConfig } from '@/lib/plaza';
+ 
+ interface PlayerControllerProps {
+@@ -37,6 +38,12 @@
+   const lastUpdateRef = useRef(0);
+   const { camera } = useThree();
+ 
++  // isMoving is reactive state so Avatar3D re-renders and animates its limbs
++  // whenever the player starts/stops. We only flip it when crossing the
++  // threshold to avoid tearing through React state on every frame.
++  const [isMoving, setIsMoving] = useState(false);
++  const wasMovingRef = useRef(false);
++
+   // Keyboard handlers
+   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+     const key = e.key.toLowerCase();
+@@ -77,29 +84,42 @@
+     }
+ 
+     const len = moveDir.length();
+-    const isMoving = len > 0.02;
++    const inputActive = len > 0.02;
+ 
+-    if (isMoving) {
++    if (inputActive) {
+       // Clamp magnitude to 1 (preserves analog joystick speed when len < 1)
+       if (len > 1) moveDir.divideScalar(len);
+ 
+-      // Calculate target rotation based on movement direction
++      // Target rotation from movement direction
+       targetRotRef.current = Math.atan2(moveDir.x, moveDir.z);
+ 
+-      // Apply movement
++      // Apply movement into velocity, then into position (with collision).
+       const vel = velocityRef.current;
+       vel.lerp(moveDir.clone().multiplyScalar(speed), 0.15);
+-      groupRef.current.position.x += vel.x * delta;
+-      groupRef.current.position.z += vel.z * delta;
+ 
+-      // Clamp to bounds
+-      groupRef.current.position.x = Math.max(-45, Math.min(45, groupRef.current.position.x));
+-      groupRef.current.position.z = Math.max(-45, Math.min(45, groupRef.current.position.z));
++      const desiredX = groupRef.current.position.x + vel.x * delta;
++      const desiredZ = groupRef.current.position.z + vel.z * delta;
++
++      // Clamp to world bounds first (cheaper than collider test).
++      const clampedX = Math.max(-45, Math.min(45, desiredX));
++      const clampedZ = Math.max(-45, Math.min(45, desiredZ));
++
++      // Resolve against the scene's colliders (buildings, fountain, trees, …).
++      const { x: resolvedX, z: resolvedZ } = resolveCollision(clampedX, clampedZ);
++
++      groupRef.current.position.x = resolvedX;
++      groupRef.current.position.z = resolvedZ;
+     } else {
++      // Coast + friction when no input
+       velocityRef.current.multiplyScalar(0.9);
+       if (velocityRef.current.length() > 0.01) {
+-        groupRef.current.position.x += velocityRef.current.x * delta;
+-        groupRef.current.position.z += velocityRef.current.z * delta;
++        const desiredX = groupRef.current.position.x + velocityRef.current.x * delta;
++        const desiredZ = groupRef.current.position.z + velocityRef.current.z * delta;
++        const clampedX = Math.max(-45, Math.min(45, desiredX));
++        const clampedZ = Math.max(-45, Math.min(45, desiredZ));
++        const { x: resolvedX, z: resolvedZ } = resolveCollision(clampedX, clampedZ);
++        groupRef.current.position.x = resolvedX;
++        groupRef.current.position.z = resolvedZ;
+       }
+     }
+ 
+@@ -122,6 +142,15 @@
+     camera.position.lerp(targetCameraPos, 0.05);
+     camera.lookAt(playerPos.x, playerPos.y + 1.2, playerPos.z);
+ 
++    // ── Moving state for Avatar3D limb animation ──
++    // True if the user is holding input OR the player is still gliding from
++    // residual velocity. We flip React state only on threshold crossings.
++    const effectivelyMoving = inputActive || velocityRef.current.length() > 0.1;
++    if (effectivelyMoving !== wasMovingRef.current) {
++      wasMovingRef.current = effectivelyMoving;
++      setIsMoving(effectivelyMoving);
++    }
++
+     // Send position updates every 200ms
+     const now = Date.now();
+     if (now - lastUpdateRef.current > 200) {
+@@ -133,14 +162,14 @@
+         playerPos.z,
+         currentRotRef.current,
+         zone,
+-        isMoving || velocityRef.current.length() > 0.1
++        effectivelyMoving
+       );
+     }
+   });
+ 
+   return (
+     <group ref={groupRef} position={[0, 0, 5]}>
+-      <Avatar3D config={config} isMoving={keysRef.current.size > 0} />
++      <Avatar3D config={config} isMoving={isMoving} />
+     </group>
+   );
+ }

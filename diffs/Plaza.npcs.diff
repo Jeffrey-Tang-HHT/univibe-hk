@@ -1,0 +1,27 @@
+--- /home/claude/project/unigo-hk-main/client/src/pages/Plaza.tsx	2026-04-21 15:19:28.000000000 +0000
++++ client/src/pages/Plaza.tsx	2026-04-27 11:22:48.070882336 +0000
+@@ -23,6 +23,13 @@
+ import JourneyLog, { type JourneyEntry } from '@/components/plaza/JourneyLog';
+ import ZoneEntryToast from '@/components/plaza/ZoneEntryToast';
+ import FPSMeter from '@/components/plaza/FPSMeter';
++import { NPC_COUNT } from '@/components/plaza/NPCs';
++
++// Whether NPCs count toward the displayed "online students" number in the
++// top-right HUD pill. Set to `false` to show only real, authenticated users
++// (honest mode). Kept as a constant so it's a one-line flip when the user
++// base is large enough that the seeding crutch isn't needed.
++const COUNT_NPCS_AS_PLAYERS = true;
+ import {
+   updatePosition, getPlayers, sendBubble, getBubbles, saveAvatar, leavePlaza,
+   DEFAULT_AVATAR,
+@@ -472,7 +479,9 @@
+         <div className="flex items-center gap-1.5">
+           <div className="bg-black/40 backdrop-blur-xl rounded-xl px-2.5 py-1.5 border border-white/15 shadow-lg flex items-center gap-1.5">
+             <Users className="w-3.5 h-3.5 text-white/80" />
+-            <span className="text-xs text-white font-semibold">{players.length}</span>
++            <span className="text-xs text-white font-semibold">
++              {COUNT_NPCS_AS_PLAYERS ? players.length + NPC_COUNT : players.length}
++            </span>
+           </div>
+           <Button
+             variant="ghost"
