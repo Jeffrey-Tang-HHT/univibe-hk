@@ -1,0 +1,179 @@
+--- unigo-hk-main/client/src/pages/Plaza.tsx	2026-04-27 11:35:54.000000000 +0000
++++ work/client/src/pages/Plaza.tsx	2026-04-27 16:11:54.329768098 +0000
+@@ -8,13 +8,14 @@
+   Send, Paintbrush, Users, MessageCircle, X, Box,
+   BookOpen, TrendingUp, Sparkles, Calculator, Plus, Zap, Clock, Star, ChevronRight,
+   Compass, Route,
++  Volume2, VolumeX,
+ } from 'lucide-react';
+ import { Button } from '@/components/ui/button';
+ import { useAuth } from '@/contexts/AuthContext';
+ import { useLanguage } from '@/contexts/LanguageContext';
+ import { useTheme } from '@/contexts/ThemeContext';
++import { SceneProvider, useScene } from '@/contexts/SceneContext';
+ import { toast } from 'sonner';
+-import Environment3D from '@/components/plaza/Environment3D';
+ import PlayerController from '@/components/plaza/PlayerController';
+ import OtherPlayers from '@/components/plaza/OtherPlayers';
+ import MiniMap from '@/components/plaza/MiniMap';
+@@ -23,6 +24,10 @@
+ import JourneyLog, { type JourneyEntry } from '@/components/plaza/JourneyLog';
+ import ZoneEntryToast from '@/components/plaza/ZoneEntryToast';
+ import FPSMeter from '@/components/plaza/FPSMeter';
++import SceneRouter from '@/components/plaza/SceneRouter';
++import SceneTransition from '@/components/plaza/SceneTransition';
++import AmbientSound from '@/components/plaza/AmbientSound';
++import ZoneParticles from '@/components/plaza/ZoneParticles';
+ import { NPC_COUNT } from '@/components/plaza/NPCs';
+ 
+ // Whether NPCs count toward the displayed "online students" number in the
+@@ -42,10 +47,21 @@
+   typeof navigator !== 'undefined' &&
+   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+ 
++// ─── Top-level export wraps everything in <SceneProvider>. The original
++// component is now `PlazaInner` so it can call `useScene()`. ───
+ export default function Plaza() {
++  return (
++    <SceneProvider initial="plaza">
++      <PlazaInner />
++    </SceneProvider>
++  );
++}
++
++function PlazaInner() {
+   const { user, isLoggedIn } = useAuth();
+   const { lang, setLang, t } = useLanguage();
+   const { theme, toggleTheme } = useTheme();
++  const { currentScene, muted, setMuted, spawnPointRef } = useScene();
+   const [, setLocation] = useLocation();
+ 
+   const [players, setPlayers] = useState<PlazaPlayer[]>([]);
+@@ -93,6 +109,23 @@
+   const [logPillExpanded, setLogPillExpanded] = useState(true);
+   const pillCollapseTimerRef = useRef<ReturnType<typeof setTimeout>>();
+ 
++  // ── Scene-switching teleport ──
++  // PlayerController consumes this ref imperatively: when it's non-null it
++  // warps the avatar to the given world position and clears the ref. We
++  // write to it whenever `currentScene` changes so the player respawns at
++  // the destination scene's spawn point.
++  const teleportRef = useRef<[number, number, number] | null>(null);
++
++  useEffect(() => {
++    // SceneContext exposes the canonical spawn for the *current* scene
++    // (already adjusted for any per-trigger override). Just forward it.
++    teleportRef.current = [
++      spawnPointRef.current[0],
++      spawnPointRef.current[1],
++      spawnPointRef.current[2],
++    ];
++  }, [currentScene, spawnPointRef]);
++
+   // Hide welcome overlay after 3.5s
+   useEffect(() => {
+     const timer = setTimeout(() => setShowWelcome(false), 3500);
+@@ -164,15 +197,17 @@
+     if (!isLoggedIn) setLocation('/login');
+   }, [isLoggedIn, setLocation]);
+ 
+-  // Poll for other players and bubbles
++  // Poll for other players and bubbles. Scene-scoped: players/bubbles in
++  // other scenes don't appear in this client. We re-bind the interval when
++  // `currentScene` changes so an entered interior immediately re-polls.
+   useEffect(() => {
+     if (!isLoggedIn) return;
+ 
+     const poll = async () => {
+       try {
+         const [playersData, bubblesData] = await Promise.all([
+-          getPlayers(),
+-          getBubbles(),
++          getPlayers(currentScene),
++          getBubbles(currentScene),
+         ]);
+         setPlayers(playersData.players);
+         setBubbles(bubblesData.bubbles);
+@@ -186,17 +221,23 @@
+ 
+     return () => {
+       clearInterval(pollRef.current);
++    };
++  }, [isLoggedIn, currentScene]);
++
++  // Best-effort cleanup on unmount only.
++  useEffect(() => {
++    return () => {
+       leavePlaza().catch(() => {});
+     };
+-  }, [isLoggedIn]);
++  }, []);
+ 
+   const handlePositionUpdate = useCallback((x: number, y: number, z: number, rotation: number, zone: string, isMoving: boolean) => {
+     posRef.current = { x, y, z, rotation, zone, isMoving };
+     setMyPosition({ x, z });
+     setMyRotation(rotation);
+     setCurrentZone(zone);
+-    updatePosition({ x, y, z, rotation, zone, is_moving: isMoving }).catch(() => {});
+-  }, []);
++    updatePosition({ x, y, z, rotation, zone, is_moving: isMoving, scene: currentScene }).catch(() => {});
++  }, [currentScene]);
+ 
+   // Click-to-travel: MiniMap hands us a world-space target. We store it in
+   // both the ref (so PlayerController can read/mutate it without renders)
+@@ -221,7 +262,7 @@
+   const handleSendBubble = async () => {
+     if (!chatInput.trim()) return;
+     try {
+-      await sendBubble(chatInput.trim(), posRef.current.x, posRef.current.y, posRef.current.z);
++      await sendBubble(chatInput.trim(), posRef.current.x, posRef.current.y, posRef.current.z, currentScene);
+       setChatInput('');
+       toast.success(lang === 'zh' ? '已發送' : 'Sent!');
+     } catch (e: any) {
+@@ -358,7 +399,8 @@
+         <fog attach="fog" args={['#F2D0B0', 40, 110]} />
+ 
+         <Suspense fallback={null}>
+-          <Environment3D lang={lang} currentZone={currentZone} playerPosRef={playerPosRef} />
++          <SceneRouter lang={lang} currentZone={currentZone} playerPosRef={playerPosRef} />
++          <ZoneParticles />
+           <PlayerController
+             config={avatarConfig}
+             onPositionUpdate={handlePositionUpdate}
+@@ -366,6 +408,7 @@
+             waypointRef={waypointRef}
+             onWaypointReached={handleWaypointReached}
+             playerPosRef={playerPosRef}
++            teleportRef={teleportRef}
+           />
+           <OtherPlayers
+             players={players}
+@@ -402,6 +445,12 @@
+       {/* ─── Dev-toggle FPS meter (Shift+F) ─── */}
+       <FPSMeter />
+ 
++      {/* ─── Scene transition fade overlay (interiors system) ─── */}
++      <SceneTransition lang={lang} />
++
++      {/* ─── Ambient sound (mounts an invisible audio crossfade) ─── */}
++      <AmbientSound />
++
+       {/* ─── Welcome overlay (fades after 3.5s) ─── */}
+       <AnimatePresence>
+         {showWelcome && (
+@@ -486,6 +535,15 @@
+           <Button
+             variant="ghost"
+             size="icon"
++            className="w-8 h-8 bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60"
++            onClick={() => setMuted(!muted)}
++            aria-label={muted ? (lang === 'zh' ? '取消靜音' : 'Unmute') : (lang === 'zh' ? '靜音' : 'Mute')}
++          >
++            {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
++          </Button>
++          <Button
++            variant="ghost"
++            size="icon"
+             className="w-8 h-8 bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60"
+             onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+           >

@@ -1,6 +1,18 @@
 import { supabaseQuery, getUserById, updateUser } from '../lib/supabase.mjs';
 import { setCors, requireAuth, rateLimit, getClientIP, sanitizeText, isValidUUID, checkBodySize } from '../lib/security.mjs';
 
+// ─── Allowed scenes ───
+// Mirror the CHECK constraint in migration-v7-interiors.sql. Anything not
+// in this list is coerced to 'plaza'. Adding a new scene later means
+// touching this list, the migration, the client `scenes.ts` registry, and
+// the SceneId TS union — that's it.
+const VALID_SCENES = ['plaza', 'library', 'cafe', 'social', 'dating'];
+const DEFAULT_SCENE = 'plaza';
+
+function normalizeScene(s) {
+  return VALID_SCENES.includes(s) ? s : DEFAULT_SCENE;
+}
+
 export default async function handler(req, res) {
   setCors(req, res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -19,7 +31,7 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many updates' });
       }
 
-      const { x, y, z, rotation, zone, is_moving } = req.body;
+      const { x, y, z, rotation, zone, is_moving, scene } = req.body;
 
       // Validate position bounds
       const px = Math.max(-50, Math.min(50, parseFloat(x) || 0));
@@ -29,12 +41,17 @@ export default async function handler(req, res) {
       const validZones = ['center', 'study', 'social', 'dating', 'cafe'];
       const safeZone = validZones.includes(zone) ? zone : 'center';
 
+      // Scene defaults to 'plaza' if missing/invalid — keeps an old client
+      // working against the new API without crashing presence.
+      const safeScene = normalizeScene(scene);
+
       // Upsert presence
       const presenceData = {
         user_id: user.userId,
         x: px, y: py, z: pz,
         rotation: rot,
         zone: safeZone,
+        scene: safeScene,
         is_moving: !!is_moving,
         updated_at: new Date().toISOString()
       };
@@ -77,10 +94,14 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many requests' });
       }
 
-      // Get all active presences (updated in last 15 seconds)
+      // Filter by scene — players in other scenes shouldn't appear in your list.
+      // Missing query param → default to 'plaza' so an old client keeps working.
+      const sceneFilter = normalizeScene(req.query.scene);
+
+      // Get all active presences (updated in last 15 seconds) in this scene.
       const cutoff = new Date(Date.now() - 15000).toISOString();
       const presences = await supabaseQuery('plaza_presence', {
-        filters: `updated_at=gte.${cutoff}`,
+        filters: `updated_at=gte.${cutoff}&scene=eq.${sceneFilter}`,
         select: '*'
       });
 
@@ -99,6 +120,7 @@ export default async function handler(req, res) {
             x: p.x, y: p.y, z: p.z,
             rotation: p.rotation,
             zone: p.zone,
+            scene: p.scene || DEFAULT_SCENE,
             is_moving: p.is_moving,
             is_me: p.user_id === user.userId
           });
@@ -117,7 +139,7 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many messages' });
       }
 
-      const { content, x, y, z } = req.body;
+      const { content, x, y, z, scene } = req.body;
       if (!content || typeof content !== 'string' || content.trim().length === 0) {
         return res.status(400).json({ error: 'Message required' });
       }
@@ -126,13 +148,15 @@ export default async function handler(req, res) {
       const px = Math.max(-50, Math.min(50, parseFloat(x) || 0));
       const py = Math.max(0, Math.min(10, parseFloat(y) || 0));
       const pz = Math.max(-50, Math.min(50, parseFloat(z) || 0));
+      const safeScene = normalizeScene(scene);
 
       const bubble = await supabaseQuery('plaza_bubbles', {
         method: 'POST',
         body: {
           user_id: user.userId,
           content: safeContent,
-          x: px, y: py, z: pz
+          x: px, y: py, z: pz,
+          scene: safeScene
         }
       });
 
@@ -148,10 +172,12 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many requests' });
       }
 
-      // Get bubbles from last 5 minutes
+      const sceneFilter = normalizeScene(req.query.scene);
+
+      // Get bubbles from last 5 minutes, filtered by scene.
       const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const bubbles = await supabaseQuery('plaza_bubbles', {
-        filters: `created_at=gte.${cutoff}&order=created_at.desc&limit=50`,
+        filters: `created_at=gte.${cutoff}&scene=eq.${sceneFilter}&order=created_at.desc&limit=50`,
         select: '*'
       });
 
@@ -166,6 +192,7 @@ export default async function handler(req, res) {
             display_name: u?.display_name || u?.username || 'Anonymous',
             content: b.content,
             x: b.x, y: b.y, z: b.z,
+            scene: b.scene || DEFAULT_SCENE,
             created_at: b.created_at
           });
         } catch (e) {}

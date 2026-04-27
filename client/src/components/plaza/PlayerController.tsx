@@ -18,6 +18,11 @@ interface PlayerControllerProps {
    *  ZoneMarker (and potentially others) to react to proximity without prop
    *  drilling state changes through React. */
   playerPosRef?: React.MutableRefObject<{ x: number; z: number }>;
+  /** Imperative teleport hook. When set to a [x, y, z] tuple, the player is
+   *  warped to that world position on the next frame and the ref is cleared.
+   *  Used by the scene-switching system (entering an interior teleports the
+   *  player to that scene's spawn). Null/undefined → no teleport. */
+  teleportRef?: React.MutableRefObject<[number, number, number] | null>;
 }
 
 const ZONE_MAP = [
@@ -45,6 +50,7 @@ export default function PlayerController({
   waypointRef,
   onWaypointReached,
   playerPosRef,
+  teleportRef,
 }: PlayerControllerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const keysRef = useRef<Set<string>>(new Set());
@@ -84,6 +90,20 @@ export default function PlayerController({
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
+
+    // ── Imperative teleport ──
+    // The scene-switching system writes a target into teleportRef when the
+    // player enters/exits an interior; we apply it here and clear, so the
+    // next frame proceeds as if the player simply spawned at that spot.
+    if (teleportRef && teleportRef.current) {
+      const [tx, ty, tz] = teleportRef.current;
+      groupRef.current.position.set(tx, ty, tz);
+      velocityRef.current.set(0, 0, 0);
+      // Cancel any waypoint — the world they were targeting may not exist now.
+      if (waypointRef) waypointRef.current = null;
+      teleportRef.current = null;
+    }
+
     const keys = keysRef.current;
     const moveDir = new THREE.Vector3();
 
