@@ -1,0 +1,518 @@
+--- /home/claude/work/unigo-hk-main/client/src/components/plaza/AmbientSound.tsx	2026-04-27 16:29:41.000000000 +0000
++++ client/src/components/plaza/AmbientSound.tsx	2026-04-28 14:53:38.246616042 +0000
+@@ -1,141 +1,402 @@
+ // ─────────────────────────────────────────────────────────────
+-// AmbientSound — plays the active scene's ambient track in a loop.
++// AmbientSound — procedural ambient pad per scene.
+ //
+-// Uses an HTMLAudioElement (cheap, broadly compatible) instead of
+-// the WebAudio graph. We crossfade between scenes by overlapping
+-// two elements: fade out the old, fade in the new.
+-//
+-// Browser autoplay rules require a user gesture before audio can
+-// start. The first scene change happens because the user clicked
+-// or tapped the entry trigger, which counts. If we can't start
+-// audio (no gesture yet, file missing, decoder error), we fail
+-// silently — sound is decoration, never blocking.
+-//
+-// Drop 1 ships with the system but no audio files. Drop in CC0
+-// loops at:
+-//   client/public/audio/library.mp3
+-//   client/public/audio/cafe.mp3
+-//   client/public/audio/social.mp3
+-//   client/public/audio/dating.mp3
+-// Recommended sources: Pixabay Music, freepd.com, tabletopaudio.
+-// If a file is missing, that scene just stays silent.
++// Why procedural? Drop 1 shipped a file-based crossfade system,
++// but no audio files were committed (size + licensing). End
++// result: the plaza was silent. This rewrite synthesises a soft
++// pad at runtime with Web Audio, so every scene gets ambient
++// audio out of the box, with zero asset bytes and zero licensing
++// headaches.
++//
++// Per scene we build a small graph:
++//
++//   chord oscillators (3-5) ──┐
++//                             ├──► lowpass filter ──► scene gain ──► master gain ──► destination
++//   noise (looped buffer) ────┘                                         │
++//                                                                       │
++//   LFO ──► gain ──► (added to filter cutoff for slow movement)         │
++//
++//   master gain is also where the mute toggle clamps to 0.
++//
++// Each scene has its own root note, chord intervals, filter
++// cutoff, LFO depth, and noise colour. We crossfade by ramping
++// scene-specific gains: old → 0, new → target.
++//
++// Browser autoplay rules require a user gesture before audio
++// can start. We initialise the AudioContext on mount and resume
++// it on the first pointer/key/touch event. Failures are
++// swallowed silently — audio is decoration, never blocking.
++//
++// If you ever drop real .mp3 files into client/public/audio/
++// and want to switch back to the file-based version, the
++// SceneConfig.ambientSound field is still in the registry and
++// unused — easy to wire back up.
+ // ─────────────────────────────────────────────────────────────
+ 
+ import { useEffect, useRef } from 'react';
+ import { useScene } from '@/contexts/SceneContext';
+-import { getSceneConfig } from '@/lib/scenes';
++import type { SceneId } from '@/lib/plaza';
++
++const MASTER_TARGET = 0.18;       // overall pad volume (0..1)
++const SCENE_RAMP_MS = 700;        // crossfade duration on scene change
++const MUTE_RAMP_MS = 180;         // quick fade for mute toggle
++
++// ─── Per-scene synthesis recipes ───
++//
++// Frequencies chosen low so the result feels like a pad rather than a
++// melody. `chord` is intervals in semitones above `rootHz`, kept simple
++// (1 to 5 voices). `cutoff` is a Hz target for the lowpass; lower = warmer.
++// `lfoHz` and `lfoDepth` add slow movement to the cutoff.
++// `noise` blends in a coloured noise loop for atmosphere.
++
++interface SceneRecipe {
++  rootHz: number;
++  chord: number[];                // semitone offsets, e.g. [0, 7, 12]
++  oscType: OscillatorType;        // 'sine' | 'triangle' | 'sawtooth' | 'square'
++  cutoffHz: number;
++  resonanceQ: number;
++  lfoHz: number;
++  lfoDepthHz: number;             // how much the LFO moves the cutoff
++  noiseColor: 'pink' | 'brown' | 'none';
++  noiseGain: number;              // 0..1, how loud the noise blend is
++  // Per-scene gain trim. Voices with more notes need less per-scene gain.
++  trim: number;                   // multiplier on MASTER_TARGET, 0..1
++}
++
++const RECIPES: Record<SceneId, SceneRecipe> = {
++  // Plaza — warm balanced outdoor pad. Open, neutral, slow.
++  plaza: {
++    rootHz: 110,                  // A2
++    chord: [0, 7, 12],            // root + fifth + octave
++    oscType: 'sine',
++    cutoffHz: 600,
++    resonanceQ: 0.7,
++    lfoHz: 0.07,
++    lfoDepthHz: 180,
++    noiseColor: 'brown',
++    noiseGain: 0.05,
++    trim: 0.9,
++  },
++  // Library — very low, almost subliminal. Studious calm.
++  library: {
++    rootHz: 65.4,                 // C2
++    chord: [0, 7],                // pure fifth, austere
++    oscType: 'sine',
++    cutoffHz: 350,
++    resonanceQ: 0.5,
++    lfoHz: 0.04,
++    lfoDepthHz: 60,
++    noiseColor: 'pink',
++    noiseGain: 0.02,
++    trim: 0.7,
++  },
++  // Café — major chord, slightly warmer, livelier movement.
++  cafe: {
++    rootHz: 73.4,                 // D2
++    chord: [0, 4, 7, 11],         // maj7 voicing, cosy
++    oscType: 'triangle',
++    cutoffHz: 850,
++    resonanceQ: 0.9,
++    lfoHz: 0.12,
++    lfoDepthHz: 220,
++    noiseColor: 'brown',
++    noiseGain: 0.07,
++    trim: 1.0,
++  },
++  // Social — brighter, faster movement, sense of energy.
++  social: {
++    rootHz: 130.8,                // C3
++    chord: [0, 4, 7, 12],         // major + octave
++    oscType: 'triangle',
++    cutoffHz: 1200,
++    resonanceQ: 1.1,
++    lfoHz: 0.22,
++    lfoDepthHz: 350,
++    noiseColor: 'pink',
++    noiseGain: 0.04,
++    trim: 1.0,
++  },
++  // Dating — dreamy maj7, slow movement, soft sparkle.
++  dating: {
++    rootHz: 87.3,                 // F2
++    chord: [0, 4, 7, 11, 14],     // maj9-ish, romantic
++    oscType: 'sine',
++    cutoffHz: 950,
++    resonanceQ: 0.8,
++    lfoHz: 0.06,
++    lfoDepthHz: 280,
++    noiseColor: 'pink',
++    noiseGain: 0.03,
++    trim: 0.95,
++  },
++};
++
++// Convert a semitone offset to a frequency multiplier. 12 semitones = 2x.
++function semitones(n: number): number {
++  return Math.pow(2, n / 12);
++}
++
++// ─── Noise buffer factory ───
++function makeNoiseBuffer(ctx: AudioContext, color: 'pink' | 'brown'): AudioBuffer {
++  const duration = 2; // 2-second loop, plenty for atmospheric noise
++  const sampleRate = ctx.sampleRate;
++  const buffer = ctx.createBuffer(1, sampleRate * duration, sampleRate);
++  const data = buffer.getChannelData(0);
++
++  if (color === 'pink') {
++    // Paul Kellet's pink-noise approximation — cheap and good enough.
++    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
++    for (let i = 0; i < data.length; i++) {
++      const white = Math.random() * 2 - 1;
++      b0 = 0.99886 * b0 + white * 0.0555179;
++      b1 = 0.99332 * b1 + white * 0.0750759;
++      b2 = 0.96900 * b2 + white * 0.1538520;
++      b3 = 0.86650 * b3 + white * 0.3104856;
++      b4 = 0.55000 * b4 + white * 0.5329522;
++      b5 = -0.7616 * b5 - white * 0.0168980;
++      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
++      b6 = white * 0.115926;
++    }
++  } else {
++    // Brown noise — random-walk integration of white noise. Warmer hum.
++    let last = 0;
++    for (let i = 0; i < data.length; i++) {
++      const white = Math.random() * 2 - 1;
++      last = (last + 0.02 * white) / 1.02;
++      data[i] = last * 3.5;
++    }
++  }
+ 
+-const FADE_MS = 450;
+-const TARGET_VOLUME = 0.35;
++  return buffer;
++}
++
++// ─── Per-scene voice graph ───
++//
++// Each "voice" is built once on AudioContext creation. We don't tear it
++// down on scene change — that would risk audible clicks. Instead, each
++// scene has its own gain node, and we ramp those gains to crossfade.
++
++interface SceneVoice {
++  gain: GainNode;
++  oscillators: OscillatorNode[];
++  noiseSource: AudioBufferSourceNode | null;
++  lfo: OscillatorNode;
++  filter: BiquadFilterNode;
++  started: boolean;
++}
++
++function buildVoice(ctx: AudioContext, recipe: SceneRecipe, master: GainNode): SceneVoice {
++  // Lowpass filter — defines warmth. LFO modulates the cutoff slowly.
++  const filter = ctx.createBiquadFilter();
++  filter.type = 'lowpass';
++  filter.frequency.value = recipe.cutoffHz;
++  filter.Q.value = recipe.resonanceQ;
++
++  // LFO: slow oscillator → gain (depth) → filter.frequency
++  const lfo = ctx.createOscillator();
++  lfo.type = 'sine';
++  lfo.frequency.value = recipe.lfoHz;
++  const lfoGain = ctx.createGain();
++  lfoGain.gain.value = recipe.lfoDepthHz;
++  lfo.connect(lfoGain);
++  lfoGain.connect(filter.frequency);
++
++  // Per-voice (per-scene) gain — this is what we ramp for crossfades.
++  const gain = ctx.createGain();
++  gain.gain.value = 0;
++  filter.connect(gain);
++  gain.connect(master);
++
++  // Chord oscillators feed the filter.
++  const oscillators: OscillatorNode[] = [];
++  for (const interval of recipe.chord) {
++    const osc = ctx.createOscillator();
++    osc.type = recipe.oscType;
++    osc.frequency.value = recipe.rootHz * semitones(interval);
++    // Tiny detune per voice keeps the chord from sounding too clinical.
++    osc.detune.value = (Math.random() - 0.5) * 6;
++    // Per-oscillator trim so voices stack without clipping.
++    const oscGain = ctx.createGain();
++    oscGain.gain.value = 1 / recipe.chord.length;
++    osc.connect(oscGain);
++    oscGain.connect(filter);
++    oscillators.push(osc);
++  }
++
++  // Optional noise layer — blends through the same filter.
++  let noiseSource: AudioBufferSourceNode | null = null;
++  if (recipe.noiseColor !== 'none' && recipe.noiseGain > 0) {
++    noiseSource = ctx.createBufferSource();
++    noiseSource.buffer = makeNoiseBuffer(ctx, recipe.noiseColor);
++    noiseSource.loop = true;
++    const noiseGain = ctx.createGain();
++    noiseGain.gain.value = recipe.noiseGain;
++    noiseSource.connect(noiseGain);
++    noiseGain.connect(filter);
++  }
++
++  return { gain, oscillators, noiseSource, lfo, filter, started: false };
++}
++
++function startVoice(voice: SceneVoice, when: number) {
++  if (voice.started) return;
++  voice.started = true;
++  for (const osc of voice.oscillators) {
++    try { osc.start(when); } catch { /* already started */ }
++  }
++  if (voice.noiseSource) {
++    try { voice.noiseSource.start(when); } catch { /* already started */ }
++  }
++  try { voice.lfo.start(when); } catch { /* already started */ }
++}
+ 
+ export default function AmbientSound() {
+   const { currentScene, muted } = useScene();
+-  const elARef = useRef<HTMLAudioElement | null>(null);
+-  const elBRef = useRef<HTMLAudioElement | null>(null);
+-  const activeRef = useRef<'A' | 'B' | null>(null);
+-  const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
++  const ctxRef = useRef<AudioContext | null>(null);
++  const masterRef = useRef<GainNode | null>(null);
++  const voicesRef = useRef<Partial<Record<SceneId, SceneVoice>>>({});
++  const activeSceneRef = useRef<SceneId | null>(null);
++  // Latest values stashed in refs so the resume callback can read them
++  // without re-binding the gesture listeners on every prop change.
++  const currentSceneRef = useRef(currentScene);
++  const mutedRef = useRef(muted);
++  useEffect(() => { currentSceneRef.current = currentScene; }, [currentScene]);
++  useEffect(() => { mutedRef.current = muted; }, [muted]);
+ 
+-  // Lazy-create the elements on mount. Two elements so we can crossfade.
++  // Lazy init of AudioContext on mount; resume on first user gesture.
+   useEffect(() => {
+-    elARef.current = new Audio();
+-    elARef.current.loop = true;
+-    elARef.current.volume = 0;
+-    elARef.current.preload = 'auto';
+-
+-    elBRef.current = new Audio();
+-    elBRef.current.loop = true;
+-    elBRef.current.volume = 0;
+-    elBRef.current.preload = 'auto';
++    let cancelled = false;
+ 
+-    return () => {
+-      try {
+-        elARef.current?.pause();
+-        elBRef.current?.pause();
+-      } catch {}
+-      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+-      elARef.current = null;
+-      elBRef.current = null;
+-    };
+-  }, []);
++    const init = () => {
++      if (cancelled || ctxRef.current) return;
++      const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
++      if (!Ctor) return; // very old browser, no audio
+ 
+-  // React to scene changes (and mute changes) by crossfading.
+-  useEffect(() => {
+-    const cfg = getSceneConfig(currentScene);
+-    const url = cfg.ambientSound;
+-    const elA = elARef.current;
+-    const elB = elBRef.current;
+-    if (!elA || !elB) return;
+-
+-    // No track for this scene → fade everything to silence.
+-    if (!url) {
+-      crossfadeTo(null);
+-      return;
+-    }
++      let ctx: AudioContext;
++      try {
++        ctx = new Ctor();
++      } catch {
++        return;
++      }
+ 
+-    // Pick the inactive element as the new one; load + fade in.
+-    const newOne = activeRef.current === 'A' ? elB : elA;
+-    const oldOne = activeRef.current === 'A' ? elA : activeRef.current === 'B' ? elB : null;
+-    const newKey: 'A' | 'B' = newOne === elA ? 'A' : 'B';
++      const master = ctx.createGain();
++      master.gain.value = mutedRef.current ? 0 : MASTER_TARGET;
++      master.connect(ctx.destination);
++
++      ctxRef.current = ctx;
++      masterRef.current = master;
++
++      // Build voices for every scene up-front but keep their gains at 0.
++      // This way crossfades are instantaneous and click-free.
++      for (const sceneId of Object.keys(RECIPES) as SceneId[]) {
++        try {
++          voicesRef.current[sceneId] = buildVoice(ctx, RECIPES[sceneId], master);
++        } catch {
++          // If creating one voice fails, skip it but keep the rest.
++        }
++      }
+ 
+-    try {
+-      // Only set src if it's actually different — avoids restart-on-rerender.
+-      if (newOne.src.endsWith(url) === false) {
+-        newOne.src = url;
+-        newOne.currentTime = 0;
++      // Apply current scene's gain immediately (in case mounting happens
++      // mid-scene).
++      applyScene(currentSceneRef.current, /*immediate=*/ true);
++
++      // If suspended (autoplay policy), wait for the next user gesture.
++      // We DON'T start oscillators until the context is running — starting
++      // them in a suspended context wastes work and can produce a click on
++      // resume.
++      if (ctx.state === 'suspended') {
++        const resume = () => {
++          ctx.resume().then(startEverything).catch(() => {});
++          window.removeEventListener('pointerdown', resume);
++          window.removeEventListener('keydown', resume);
++          window.removeEventListener('touchstart', resume);
++        };
++        window.addEventListener('pointerdown', resume, { once: true });
++        window.addEventListener('keydown', resume, { once: true });
++        window.addEventListener('touchstart', resume, { once: true });
++      } else {
++        startEverything();
+       }
+-      newOne.volume = 0;
+-      // Play promise can reject (autoplay). Swallow.
+-      const p = newOne.play();
+-      if (p && typeof p.catch === 'function') p.catch(() => {});
+-    } catch {}
++    };
+ 
+-    crossfadeTo(newKey);
++    const startEverything = () => {
++      const ctx = ctxRef.current;
++      if (!ctx) return;
++      // Schedule oscillator starts a hair in the future to avoid timing
++      // jitter at t=0.
++      const when = ctx.currentTime + 0.05;
++      for (const sceneId of Object.keys(voicesRef.current) as SceneId[]) {
++        const v = voicesRef.current[sceneId];
++        if (v) startVoice(v, when);
++      }
++    };
+ 
+-    function crossfadeTo(newKeyArg: 'A' | 'B' | null) {
+-      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+-      const startTime = performance.now();
+-      const targetNew = newKeyArg && !muted ? TARGET_VOLUME : 0;
+-
+-      fadeIntervalRef.current = setInterval(() => {
+-        const t = Math.min(1, (performance.now() - startTime) / FADE_MS);
+-        // Quadratic ease for a smoother fade than linear.
+-        const eased = t * (2 - t);
+-
+-        if (newKeyArg) {
+-          const newEl = newKeyArg === 'A' ? elA : elB;
+-          if (newEl) newEl.volume = clamp01(eased * targetNew);
+-        }
+-        if (oldOne) {
+-          oldOne.volume = clamp01(oldOne.volume * (1 - eased * 0.6));
+-        }
++    // Defer slightly — gives React a frame to settle.
++    const t = window.setTimeout(init, 0);
+ 
+-        if (t >= 1) {
+-          if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+-          fadeIntervalRef.current = null;
+-          if (oldOne) {
+-            try { oldOne.pause(); } catch {}
+-            oldOne.volume = 0;
++    return () => {
++      cancelled = true;
++      window.clearTimeout(t);
++      const ctx = ctxRef.current;
++      if (ctx) {
++        try {
++          for (const sceneId of Object.keys(voicesRef.current) as SceneId[]) {
++            const v = voicesRef.current[sceneId];
++            if (!v) continue;
++            for (const osc of v.oscillators) { try { osc.stop(); } catch {} }
++            try { v.lfo.stop(); } catch {}
++            if (v.noiseSource) { try { v.noiseSource.stop(); } catch {} }
+           }
+-          activeRef.current = newKeyArg;
+-        }
+-      }, 16);
+-    }
++          ctx.close().catch(() => {});
++        } catch {}
++      }
++      ctxRef.current = null;
++      masterRef.current = null;
++      voicesRef.current = {};
++      activeSceneRef.current = null;
++    };
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [currentScene, muted]);
++  }, []);
+ 
+-  // Mute toggle: snap-fade the active element.
++  // Crossfade on scene change.
+   useEffect(() => {
+-    const elA = elARef.current;
+-    const elB = elBRef.current;
+-    if (!elA || !elB) return;
+-    const active = activeRef.current === 'A' ? elA : activeRef.current === 'B' ? elB : null;
+-    if (!active) return;
+-    active.volume = muted ? 0 : TARGET_VOLUME;
++    applyScene(currentScene, /*immediate=*/ false);
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [currentScene]);
++
++  // Mute toggle: ramp master gain.
++  useEffect(() => {
++    const ctx = ctxRef.current;
++    const master = masterRef.current;
++    if (!ctx || !master) return;
++    const target = muted ? 0 : MASTER_TARGET;
++    const now = ctx.currentTime;
++    try {
++      master.gain.cancelScheduledValues(now);
++      master.gain.setValueAtTime(master.gain.value, now);
++      master.gain.linearRampToValueAtTime(target, now + MUTE_RAMP_MS / 1000);
++    } catch {}
+   }, [muted]);
+ 
+-  return null;
+-}
++  // ─── helper: ramp scene gains to fade to `id`, optionally instant ───
++  function applyScene(id: SceneId, immediate: boolean) {
++    const ctx = ctxRef.current;
++    if (!ctx) return;
++    const ramp = immediate ? 0.01 : SCENE_RAMP_MS / 1000;
++    const now = ctx.currentTime;
++    for (const sceneId of Object.keys(voicesRef.current) as SceneId[]) {
++      const v = voicesRef.current[sceneId];
++      if (!v) continue;
++      const isActive = sceneId === id;
++      const target = isActive ? RECIPES[sceneId].trim : 0;
++      try {
++        v.gain.gain.cancelScheduledValues(now);
++        v.gain.gain.setValueAtTime(v.gain.gain.value, now);
++        v.gain.gain.linearRampToValueAtTime(target, now + ramp);
++      } catch {}
++    }
++    activeSceneRef.current = id;
++  }
+ 
+-function clamp01(v: number) {
+-  return v < 0 ? 0 : v > 1 ? 1 : v;
++  return null;
+ }

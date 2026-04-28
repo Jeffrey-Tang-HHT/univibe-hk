@@ -1,0 +1,264 @@
+--- /home/claude/work/unigo-hk-main/client/src/pages/Dating.tsx	2026-04-27 16:29:41.000000000 +0000
++++ client/src/pages/Dating.tsx	2026-04-28 14:54:56.978367046 +0000
+@@ -603,8 +603,30 @@
+   const [superLikesRemaining, setSuperLikesRemaining] = useState(3);
+   const [showCompatibility, setShowCompatibility] = useState(false);
+   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
++  // Fast-poll plumbing: send handlers grab fastPollRef.current and call
++  // it via the schedule in burstTimersRef, so a successful send picks
++  // up read receipts and any quick reply within ~200ms instead of
++  // waiting for the next 1.5s tick. Both are cleared on chat unmount.
++  const fastPollRef = useRef<(() => void) | null>(null);
++  const burstTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+   const chatEndRef = useRef<HTMLDivElement | null>(null);
+ 
++  // Schedule a short burst of polls (200/600/1200ms) after a send, on
++  // top of the regular 1.5s interval. If the chat closes before these
++  // fire, the cleanup in the polling effect drains them.
++  const burstPoll = () => {
++    for (const id of burstTimersRef.current) clearTimeout(id);
++    burstTimersRef.current = [];
++    const delays = [200, 600, 1200];
++    for (const ms of delays) {
++      const id = setTimeout(() => {
++        const fn = fastPollRef.current;
++        if (fn) fn();
++      }, ms);
++      burstTimersRef.current.push(id);
++    }
++  };
++
+   // Auto-scroll to bottom when messages change or chat opens
+   useEffect(() => {
+     if (activeChatId && chatEndRef.current) {
+@@ -680,11 +702,30 @@
+     }).catch(() => {});
+   }, [user?.id]);
+ 
+-  // Poll for new messages when in a chat
++  // Poll for new messages when in a chat.
++  //
++  // Two changes from the v1 polling loop:
++  //
++  // 1) Smart merge: any local message whose id starts with "temp:" is an
++  //    optimistic message that hasn't been confirmed yet. The poll
++  //    response is authoritative for everything else — but we keep those
++  //    pending temps tacked on the end so they don't disappear from the
++  //    UI in the (rare) race where a poll fires while sendMessage is
++  //    still in flight on the server.
++  //
++  // 2) Idle interval is 1500ms (was 3000ms) — twice as fresh for the
++  //    partner's incoming messages without doubling the cost during
++  //    inactive sessions, since polling stops the moment the chat closes.
++  //    The send handlers also kick a burst of fast polls right after a
++  //    successful send, see fastPollRef below.
+   useEffect(() => {
+     if (!activeChatId || !user?.id || !activeMatchId) return;
++    const chatId = activeChatId;
++    const matchId = activeMatchId;
++    const userId = user.id;
++
+     const fetchMessages = () => {
+-      getMessages(activeMatchId, user.id).then(data => {
++      getMessages(matchId, userId).then(data => {
+         if (data.messages) {
+           const formatted: ChatMsg[] = data.messages.map((m: any) => ({
+             id: m.id,
+@@ -696,13 +737,27 @@
+             imageUrl: m.image_url || undefined,
+             read: m.read,
+           }));
+-          setChatMessages(prev => ({ ...prev, [activeChatId]: formatted }));
++          setChatMessages(prev => {
++            const existing = prev[chatId] || [];
++            // Keep optimistic messages that haven't been replaced yet.
++            const pendingTemps = existing.filter(m => m.id?.startsWith("temp:"));
++            return { ...prev, [chatId]: [...formatted, ...pendingTemps] };
++          });
+         }
+       }).catch(() => {});
+     };
++
+     fetchMessages();
+-    pollRef.current = setInterval(fetchMessages, 3000); // poll every 3s
+-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
++    pollRef.current = setInterval(fetchMessages, 1500);
++    fastPollRef.current = fetchMessages; // exposed so send handlers can burst
++    return () => {
++      if (pollRef.current) clearInterval(pollRef.current);
++      fastPollRef.current = null;
++      // Clear any burst-poll timers that might still be queued from a send
++      // we did just before navigating away.
++      for (const id of burstTimersRef.current) clearTimeout(id);
++      burstTimersRef.current = [];
++    };
+   }, [activeChatId, activeMatchId, user?.id, lang]);
+ 
+   // Use real profiles if available, otherwise mock
+@@ -814,37 +869,55 @@
+   };
+   const handleSendMessage = () => {
+     if (!chatMessage.trim() || !activeChatId) return;
+-    const newMsg: ChatMsg = { text: chatMessage, isMe: true, time: lang === "zh" ? "剛剛" : "Just now", read: false, replyTo: replyingTo || undefined };
+-    setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), newMsg] }));
++    // Stable temp id so the polling merge can keep this message visible
++    // even if a poll fires before sendMessage's response comes back.
++    const tempId = `temp:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
++    const newMsg: ChatMsg = { id: tempId, text: chatMessage, isMe: true, time: lang === "zh" ? "剛剛" : "Just now", read: false, replyTo: replyingTo || undefined };
++    const chatId = activeChatId;
++    setChatMessages(prev => ({ ...prev, [chatId]: [...(prev[chatId] || []), newMsg] }));
+     const msgText = chatMessage;
+     setChatMessage("");
+     setReplyingTo(null);
+ 
+     // Try real API
+-    const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
++    const matchProfile = matchedProfiles.find(p => p.id === chatId);
+     const matchId = (matchProfile as any)?._matchId || activeMatchId;
+     if (user?.id && matchId && !matchId.startsWith("m")) {
+       sendMessage(matchId, user.id, msgText).then(data => {
+         if (data.message) {
+-          // Mark as read after 1s
+-          setTimeout(() => {
+-            setChatMessages(prev => {
+-              const msgs = [...(prev[activeChatId] || [])];
+-              const last = msgs[msgs.length - 1];
+-              if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true };
+-              return { ...prev, [activeChatId]: msgs };
+-            });
+-          }, 1000);
++          // Replace the temp with the real server message — this both
++          // gives us the real id and silences any future poll's attempt
++          // to keep the temp around (see polling-effect merge).
++          setChatMessages(prev => {
++            const msgs = (prev[chatId] || []).map(m => m.id === tempId ? {
++              id: data.message.id,
++              text: data.message.text ?? msgText,
++              isMe: true,
++              time: lang === "zh" ? "剛剛" : "Just now",
++              type: "text" as const,
++              read: false,
++              replyTo: m.replyTo,
++            } : m);
++            return { ...prev, [chatId]: msgs };
++          });
++          // Burst-poll so the read receipt + any quick reply land fast.
++          burstPoll();
++        } else {
++          // API rejected (e.g. rate-limited) — leave the temp visible so
++          // the user can see what they tried to send and retry by re-typing.
++          // Could add a 'failed' badge here later.
+         }
+-      }).catch(() => {});
++      }).catch(() => {
++        // Network error — same: keep the temp message in place.
++      });
+     } else {
+       // Mock: simulate read receipt + auto-reply
+       setTimeout(() => {
+         setChatMessages(prev => {
+-          const msgs = [...(prev[activeChatId] || [])];
++          const msgs = [...(prev[chatId] || [])];
+           const last = msgs[msgs.length - 1];
+           if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true };
+-          return { ...prev, [activeChatId]: msgs };
++          return { ...prev, [chatId]: msgs };
+         });
+       }, 1000);
+       setTimeout(() => setIsTyping(true), 1500);
+@@ -854,7 +927,7 @@
+           ? ["哈哈真係？😂", "好呀！", "有意思 🤔", "我都覺得！", "可以再講多啲嗎？"]
+           : ["Haha really? 😂", "Sure!", "Interesting 🤔", "I agree!", "Tell me more?"];
+         const reply: ChatMsg = { text: replies[Math.floor(Math.random() * replies.length)], isMe: false, time: lang === "zh" ? "剛剛" : "Just now", read: true };
+-        setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), reply] }));
++        setChatMessages(prev => ({ ...prev, [chatId]: [...(prev[chatId] || []), reply] }));
+         sendNotification(lang === "zh" ? "💬 新訊息" : "💬 New Message", reply.text);
+       }, 2500 + Math.random() * 2000);
+     }
+@@ -985,7 +1058,8 @@
+     // Show preview INSTANTLY using object URL — no waiting for resize
+     const previewUrl = URL.createObjectURL(file);
+     const chatId = activeChatId;
+-    const tempMsg: ChatMsg = { text: '📷', isMe: true, time: lang === 'zh' ? '剛剛' : 'Just now', type: 'image', imageUrl: previewUrl, read: false };
++    const tempId = `temp:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
++    const tempMsg: ChatMsg = { id: tempId, text: '📷', isMe: true, time: lang === 'zh' ? '剛剛' : 'Just now', type: 'image', imageUrl: previewUrl, read: false };
+     setChatMessages(prev => ({ ...prev, [chatId]: [...(prev[chatId] || []), tempMsg] }));
+ 
+     // Resize + upload in background
+@@ -996,17 +1070,22 @@
+       if (user?.id && matchId && !matchId.startsWith('m')) {
+         sendImageMessage(matchId, user.id, resized).then(data => {
+           if (data.message) {
+-            // Replace preview URL with server URL + mark as read
++            // Replace temp with the real server message + URL.
+             const serverUrl = data.message.image_url || resized;
+-            setTimeout(() => {
+-              setChatMessages(prev => {
+-                const msgs = [...(prev[chatId] || [])];
+-                const idx = msgs.findLastIndex(m => m.isMe && m.type === 'image' && m.imageUrl === previewUrl);
+-                if (idx >= 0) msgs[idx] = { ...msgs[idx], imageUrl: serverUrl, read: true };
+-                return { ...prev, [chatId]: msgs };
+-              });
+-              URL.revokeObjectURL(previewUrl);
+-            }, 500);
++            setChatMessages(prev => {
++              const msgs = (prev[chatId] || []).map(m => m.id === tempId ? {
++                id: data.message.id,
++                text: '📷',
++                isMe: true,
++                time: lang === 'zh' ? '剛剛' : 'Just now',
++                type: 'image' as const,
++                imageUrl: serverUrl,
++                read: false,
++              } : m);
++              return { ...prev, [chatId]: msgs };
++            });
++            URL.revokeObjectURL(previewUrl);
++            burstPoll();
+           }
+         }).catch(() => toast.error(lang === 'zh' ? '發送失敗' : 'Send failed'));
+       }
+@@ -1078,17 +1157,38 @@
+       if (recordingRef.current) clearInterval(recordingRef.current);
+       setIsRecording(false);
+       if (!activeChatId || recordingTime < 1) { setRecordingTime(0); return; }
+-      const msg: ChatMsg = { text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "voice", voiceDuration: recordingTime, read: false };
+-      setChatMessages(prev => ({ ...prev, [activeChatId]: [...(prev[activeChatId] || []), msg] }));
++      const chatId = activeChatId;
++      const tempId = `temp:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
++      const msg: ChatMsg = { id: tempId, text: "", isMe: true, time: lang === "zh" ? "剛剛" : "Just now", type: "voice", voiceDuration: recordingTime, read: false };
++      setChatMessages(prev => ({ ...prev, [chatId]: [...(prev[chatId] || []), msg] }));
+       const dur = recordingTime;
+       setRecordingTime(0);
+       // Try real API
+-      const matchProfile = matchedProfiles.find(p => p.id === activeChatId);
++      const matchProfile = matchedProfiles.find(p => p.id === chatId);
+       const matchId = (matchProfile as any)?._matchId || activeMatchId;
+       if (user?.id && matchId && !matchId.startsWith("m")) {
+-        sendVoiceMessage(matchId, user.id, dur).catch(() => {});
++        sendVoiceMessage(matchId, user.id, dur).then(data => {
++          if (data?.message) {
++            // Replace temp with server message so polling won't double it.
++            setChatMessages(prev => {
++              const msgs = (prev[chatId] || []).map(m => m.id === tempId ? {
++                id: data.message.id,
++                text: "",
++                isMe: true,
++                time: lang === "zh" ? "剛剛" : "Just now",
++                type: "voice" as const,
++                voiceDuration: dur,
++                read: false,
++              } : m);
++              return { ...prev, [chatId]: msgs };
++            });
++            burstPoll();
++          }
++        }).catch(() => {});
++      } else {
++        // Mock: mark read after 1s
++        setTimeout(() => setChatMessages(prev => { const msgs = [...(prev[chatId] || [])]; const last = msgs[msgs.length - 1]; if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true }; return { ...prev, [chatId]: msgs }; }), 1000);
+       }
+-      setTimeout(() => setChatMessages(prev => { const msgs = [...(prev[activeChatId] || [])]; const last = msgs[msgs.length - 1]; if (last?.isMe) msgs[msgs.length - 1] = { ...last, read: true }; return { ...prev, [activeChatId]: msgs }; }), 1000);
+     } else {
+       setIsRecording(true);
+       setRecordingTime(0);
