@@ -71,27 +71,31 @@ interface Keyframe {
 }
 
 const KEYFRAMES: Keyframe[] = [
-  { // 00:00 deep night
+  { // 00:00 deep night — moonlit, NOT pitch-black.
+    // Stylized cartoon plazas need lifted ambient at night or
+    // toon materials go to silhouette. Sun position is kept above
+    // the horizon and reframed as the moon, so we get cool blue
+    // shadows that look intentional.
     hour: 0,
-    sunIntensity: 0.05, sunColor: '#3A4A78',
-    ambientIntensity: 0.25, ambientColor: '#3D4670',
-    hemiSky: '#1A2342', hemiGround: '#0E1428', hemiIntensity: 0.35,
-    fogColor: '#1A2342', fogNear: 25, fogFar: 90,
-    skyTop: '#0A1024', skyMid: '#1A2540', skyBottom: '#2A3358',
-    sunAzimuth: -Math.PI / 2, sunElevation: -0.5,
+    sunIntensity: 0.55, sunColor: '#A8BCDC',     // cool moonlight, was 0.05/#3A4A78
+    ambientIntensity: 0.55, ambientColor: '#5C6E94',  // lifted from 0.25/#3D4670
+    hemiSky: '#3A4A72', hemiGround: '#1F2540', hemiIntensity: 0.7,  // lifted from 0.35
+    fogColor: '#2D3A5C', fogNear: 38, fogFar: 115,   // pushed back from 25/90
+    skyTop: '#0E1530', skyMid: '#222D52', skyBottom: '#3A4878',
+    sunAzimuth: -Math.PI / 2, sunElevation: 0.65,    // moon high overhead, was -0.5
     starOpacity: 1,
   },
-  { // 05:00 pre-dawn
+  { // 05:00 pre-dawn — moon descending in west, faint warmth on horizon.
     hour: 5,
-    sunIntensity: 0.15, sunColor: '#6080A8',
-    ambientIntensity: 0.35, ambientColor: '#5C6A88',
-    hemiSky: '#3D4A75', hemiGround: '#2A2D45', hemiIntensity: 0.45,
-    fogColor: '#4A5A78', fogNear: 25, fogFar: 95,
+    sunIntensity: 0.6, sunColor: '#9CB4D6',          // bumped from 0.15
+    ambientIntensity: 0.55, ambientColor: '#7A86A8', // bumped from 0.35/#5C6A88
+    hemiSky: '#5266A0', hemiGround: '#34384F', hemiIntensity: 0.65,
+    fogColor: '#5266A0', fogNear: 38, fogFar: 115,
     skyTop: '#1F2A50', skyMid: '#3D4A78', skyBottom: '#5A6B95',
-    sunAzimuth: -0.4, sunElevation: -0.05,
+    sunAzimuth: -0.4, sunElevation: 0.35,            // moon low in west, was -0.05
     starOpacity: 0.4,
   },
-  { // 06:30 sunrise / golden hour
+  { // 06:30 sunrise / golden hour — unchanged, this looked right.
     hour: 6.5,
     sunIntensity: 1.25, sunColor: '#FFB078',
     ambientIntensity: 0.55, ambientColor: '#FFE0C0',
@@ -131,7 +135,7 @@ const KEYFRAMES: Keyframe[] = [
     sunAzimuth: Math.PI - 0.5, sunElevation: 0.45,
     starOpacity: 0,
   },
-  { // 19:00 sunset / dusk
+  { // 19:00 sunset / dusk — unchanged.
     hour: 19,
     sunIntensity: 0.9, sunColor: '#FF9468',
     ambientIntensity: 0.5, ambientColor: '#E0A890',
@@ -141,24 +145,26 @@ const KEYFRAMES: Keyframe[] = [
     sunAzimuth: Math.PI - 0.05, sunElevation: 0.05,
     starOpacity: 0.15,
   },
-  { // 21:00 night settled
+  { // 21:00 night settled — moon rising in east, takes over from sun.
     hour: 21,
-    sunIntensity: 0.1, sunColor: '#4A5878',
-    ambientIntensity: 0.3, ambientColor: '#4A547A',
-    hemiSky: '#283655', hemiGround: '#181E32', hemiIntensity: 0.4,
-    fogColor: '#283655', fogNear: 25, fogFar: 90,
-    skyTop: '#0E1530', skyMid: '#1F2845', skyBottom: '#384668',
-    sunAzimuth: Math.PI + 0.5, sunElevation: -0.3,
+    sunIntensity: 0.55, sunColor: '#A8BCDC',         // bumped from 0.1
+    ambientIntensity: 0.55, ambientColor: '#5C6E94', // bumped from 0.3
+    hemiSky: '#3D4D78', hemiGround: '#252E48', hemiIntensity: 0.65,  // bumped from 0.4
+    fogColor: '#2F3D5E', fogNear: 36, fogFar: 110,   // pushed back from 25/90
+    skyTop: '#0E1530', skyMid: '#222D52', skyBottom: '#384670',
+    sunAzimuth: Math.PI + 0.5, sunElevation: 0.4,    // moon rising, was -0.3
     starOpacity: 0.85,
   },
-  { // 24:00 = wraps back to 00:00 (same values as hour 0)
+  { // 24:00 = wraps back to 00:00 (same values as hour 0). Keep azimuth
+    // continuous (-π/2 + 2π) so the interpolation between 21 and 24
+    // doesn't reverse direction.
     hour: 24,
-    sunIntensity: 0.05, sunColor: '#3A4A78',
-    ambientIntensity: 0.25, ambientColor: '#3D4670',
-    hemiSky: '#1A2342', hemiGround: '#0E1428', hemiIntensity: 0.35,
-    fogColor: '#1A2342', fogNear: 25, fogFar: 90,
-    skyTop: '#0A1024', skyMid: '#1A2540', skyBottom: '#2A3358',
-    sunAzimuth: -Math.PI / 2 + 2 * Math.PI, sunElevation: -0.5,
+    sunIntensity: 0.55, sunColor: '#A8BCDC',
+    ambientIntensity: 0.55, ambientColor: '#5C6E94',
+    hemiSky: '#3A4A72', hemiGround: '#1F2540', hemiIntensity: 0.7,
+    fogColor: '#2D3A5C', fogNear: 38, fogFar: 115,
+    skyTop: '#0E1530', skyMid: '#222D52', skyBottom: '#3A4878',
+    sunAzimuth: -Math.PI / 2 + 2 * Math.PI, sunElevation: 0.65,
     starOpacity: 1,
   },
 ];
