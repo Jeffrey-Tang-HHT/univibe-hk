@@ -9,6 +9,7 @@ import {
   BookOpen, TrendingUp, Sparkles, Calculator, Plus, Zap, Clock, Star, ChevronRight,
   Compass, Route,
   Volume2, VolumeX,
+  Sunrise, FastForward,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,6 +30,10 @@ import SceneTransition from '@/components/plaza/SceneTransition';
 import AmbientSound from '@/components/plaza/AmbientSound';
 import ZoneParticles from '@/components/plaza/ZoneParticles';
 import { NPC_COUNT } from '@/components/plaza/NPCs';
+// v6 additions
+import DayNightCycle, { type DayNightMode } from '@/components/plaza/DayNightCycle';
+import EmoteBar from '@/components/plaza/EmoteBar';
+import type { EmoteName } from '@/components/plaza/Avatar3D';
 
 // Whether NPCs count toward the displayed "online students" number in the
 // top-right HUD pill. Set to `false` to show only real, authenticated users
@@ -116,6 +121,28 @@ function PlazaInner() {
   // the destination scene's spawn point.
   const teleportRef = useRef<[number, number, number] | null>(null);
 
+  // ── v6: Emote ref ──
+  // Written by EmoteBar when the user picks an emote. Read by
+  // PlayerController every frame and forwarded into Avatar3D.
+  const emoteRef = useRef<{ name: EmoteName; startMs: number } | null>(null);
+
+  // ── v6: Camera zoom ref + pinch handling ──
+  // 1.0 = default 3rd-person distance. Mobile pinch on the canvas
+  // updates this; PlayerController multiplies the camera offset by it.
+  const cameraZoomRef = useRef<number>(1);
+
+  // ── v6: Day/night mode ──
+  // Persisted across reloads via localStorage so the user's preferred
+  // demo mode sticks. Default 'real-hk' = realistic clock-driven sun.
+  const [dayNightMode, setDayNightMode] = useState<DayNightMode>(() => {
+    if (typeof window === 'undefined') return 'real-hk';
+    const saved = localStorage.getItem('plaza:dayNightMode');
+    return (saved as DayNightMode) || 'real-hk';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('plaza:dayNightMode', dayNightMode); } catch {}
+  }, [dayNightMode]);
+
   useEffect(() => {
     // SceneContext exposes the canonical spawn for the *current* scene
     // (already adjusted for any per-trigger override). Just forward it.
@@ -196,6 +223,72 @@ function PlazaInner() {
   useEffect(() => {
     if (!isLoggedIn) setLocation('/login');
   }, [isLoggedIn, setLocation]);
+
+  // ── v6: Pinch-to-zoom (touch) + wheel zoom (desktop) ──
+  // Updates cameraZoomRef.current. PlayerController consumes it every
+  // frame to scale the third-person camera distance. We listen on the
+  // window so taps anywhere outside the HUD zoom the camera; HUD
+  // pieces with stopPropagation will still block when needed.
+  useEffect(() => {
+    let activePointers: Map<number, { x: number; y: number }> = new Map();
+    let lastPinchDist = 0;
+    const ZOOM_MIN = 0.55;
+    const ZOOM_MAX = 2.4;
+
+    const distOf = () => {
+      const pts = Array.from(activePointers.values());
+      if (pts.length < 2) return 0;
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.size === 2) lastPinchDist = distOf();
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      if (!activePointers.has(e.pointerId)) return;
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.size === 2) {
+        const newDist = distOf();
+        if (lastPinchDist > 0) {
+          const ratio = lastPinchDist / newDist; // pinch in (smaller) → zoom out
+          const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cameraZoomRef.current * ratio));
+          cameraZoomRef.current = next;
+        }
+        lastPinchDist = newDist;
+      }
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) lastPinchDist = 0;
+    };
+    const onWheel = (e: WheelEvent) => {
+      // Skip if event is over the chat input or other text controls
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return;
+      const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1;
+      const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cameraZoomRef.current * factor));
+      cameraZoomRef.current = next;
+    };
+
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('wheel', onWheel, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
   // Poll for other players and bubbles. Scene-scoped: players/bubbles in
   // other scenes don't appear in this client. We re-bind the interval when
@@ -357,49 +450,31 @@ function PlazaInner() {
         className="absolute inset-0"
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
         onCreated={({ gl }) => {
-          // Golden-hour sky clear colour (warm peachy blue)
-          gl.setClearColor('#E8C9A0');
+          // Initial clear colour — dawn-ish so the very first frame
+          // doesn't flash a wrong colour before DayNightCycle takes over.
+          gl.setClearColor('#3D4A78');
           // Enable tone mapping for cinematic look
           gl.toneMapping = THREE_TONE_MAPPING;
           gl.toneMappingExposure = 1.05;
         }}
       >
-        {/* Golden-hour ambient — warm peachy fill */}
-        <ambientLight intensity={0.55} color="#FFE4C4" />
-
-        {/* Low-angle warm sun — casts long shadows.
-            Shadow map is 2048² on desktop, 1024² on mobile — cheap way to regain
-            ~10 FPS on mid-range Android without hurting desktop quality. */}
-        <directionalLight
-          position={[22, 14, 8]}
-          intensity={1.45}
-          color="#FFB27A"
-          castShadow
-          shadow-mapSize-width={IS_MOBILE ? 1024 : 2048}
-          shadow-mapSize-height={IS_MOBILE ? 1024 : 2048}
-          shadow-camera-far={100}
-          shadow-camera-left={-50}
-          shadow-camera-right={50}
-          shadow-camera-top={50}
-          shadow-camera-bottom={-50}
-          shadow-bias={-0.0005}
+        {/* v6: lighting + sky + fog are now driven by DayNightCycle.
+            Replaces the static <ambientLight>/<directionalLight> x2/
+            <hemisphereLight>/<fog> block + the sky dome that lived in
+            Environment3D. */}
+        <DayNightCycle
+          mode={dayNightMode}
+          cycleMinutes={8}
+          isMobile={IS_MOBILE}
         />
-
-        {/* Cool sky fill from opposite side (rim light) */}
-        <directionalLight
-          position={[-18, 10, -6]}
-          intensity={0.35}
-          color="#B8D4E8"
-        />
-
-        {/* Hemisphere — pink/lavender sky top, warm earth bottom */}
-        <hemisphereLight args={['#F4C4A8', '#8B7355', 0.65]} />
-
-        {/* Rim fog — warm haze blends horizon */}
-        <fog attach="fog" args={['#F2D0B0', 40, 110]} />
 
         <Suspense fallback={null}>
-          <SceneRouter lang={lang} currentZone={currentZone} playerPosRef={playerPosRef} />
+          <SceneRouter
+            lang={lang}
+            currentZone={currentZone}
+            playerPosRef={playerPosRef}
+            onSetWaypoint={handleSetWaypoint}
+          />
           <ZoneParticles />
           <PlayerController
             config={avatarConfig}
@@ -409,6 +484,8 @@ function PlazaInner() {
             onWaypointReached={handleWaypointReached}
             playerPosRef={playerPosRef}
             teleportRef={teleportRef}
+            emoteRef={emoteRef}
+            cameraZoomRef={cameraZoomRef}
           />
           <OtherPlayers
             players={players}
@@ -549,6 +626,29 @@ function PlazaInner() {
           >
             <Globe className="w-3.5 h-3.5" />
           </Button>
+          {/* v6: Day/night mode cycler. real-hk → accelerated → fixed-noon → real-hk */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-8 h-8 bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60"
+            onClick={() =>
+              setDayNightMode((m) =>
+                m === 'real-hk' ? 'accelerated' : m === 'accelerated' ? 'fixed' : 'real-hk',
+              )
+            }
+            title={
+              dayNightMode === 'real-hk'
+                ? (lang === 'zh' ? '即時香港時間' : 'Live HK time')
+                : dayNightMode === 'accelerated'
+                  ? (lang === 'zh' ? '加速日夜循環 (8 分鐘)' : 'Accelerated cycle (8 min)')
+                  : (lang === 'zh' ? '固定中午' : 'Fixed midday')
+            }
+            aria-label={lang === 'zh' ? '日夜模式' : 'Day/Night mode'}
+          >
+            {dayNightMode === 'real-hk' && <Clock className="w-3.5 h-3.5" />}
+            {dayNightMode === 'accelerated' && <FastForward className="w-3.5 h-3.5" />}
+            {dayNightMode === 'fixed' && <Sunrise className="w-3.5 h-3.5" />}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -663,12 +763,13 @@ function PlazaInner() {
         </motion.button>
       </div>
 
-      {/* ─── Virtual Joystick ─── */}
-      <div className="absolute bottom-24 right-4 z-50">
+      {/* ─── Virtual Joystick + Emote Bar (v6) ─── */}
+      <div className="absolute bottom-24 right-4 z-50 flex flex-col items-end gap-3">
+        <EmoteBar emoteRef={emoteRef} lang={lang} />
         <VirtualJoystick dirRef={touchDirRef} />
       </div>
 
-      {/* ─── Movement instructions (desktop, auto-hides) ─── */}
+      {/* ─── Movement instructions (auto-hides) ─── */}
       <AnimatePresence>
         {showControlsHint && !showWelcome && (
           <motion.div
@@ -676,12 +777,18 @@ function PlazaInner() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.4 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none hidden md:block"
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
           >
             <div className="bg-black/50 backdrop-blur-md rounded-full px-3.5 py-1.5 border border-white/15 shadow-lg flex items-center gap-2">
               <Compass className="w-3 h-3 text-white/80" />
               <p className="text-[11px] text-white/90 font-medium whitespace-nowrap">
-                {lang === 'zh' ? '使用 WASD 或方向鍵移動' : 'Use WASD or Arrow Keys to move'}
+                {/* Show keyboard hint on desktop, touch hint on mobile */}
+                <span className="hidden md:inline">
+                  {lang === 'zh' ? 'WASD 移動 · 點擊地面前往 · 滾輪縮放' : 'WASD to move · Click ground to walk · Scroll to zoom'}
+                </span>
+                <span className="md:hidden">
+                  {lang === 'zh' ? '搖桿移動 · 雙擊地面前往 · 兩指縮放' : 'Joystick to move · Double-tap to walk · Pinch to zoom'}
+                </span>
               </p>
             </div>
           </motion.div>

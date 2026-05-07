@@ -128,47 +128,8 @@ export default function Environment({
       {/* Grass tufts for ground detail — instanced */}
       <InstancedGrassTufts positions={GRASS_TUFT_POSITIONS} />
 
-      {/* Sky dome — golden-hour gradient (peach horizon → soft lavender-blue zenith) */}
-      <mesh>
-        <sphereGeometry args={[80, 32, 32]} />
-        <shaderMaterial
-          side={THREE.BackSide}
-          fog={false}
-          uniforms={{
-            topColor: { value: new THREE.Color('#A8B8D8') },
-            midColor: { value: new THREE.Color('#E8B894') },
-            bottomColor: { value: new THREE.Color('#F4D4A8') },
-            offset: { value: 0 },
-            exponent: { value: 0.7 },
-          }}
-          vertexShader={`
-            varying vec3 vWorldPosition;
-            void main() {
-              vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-              vWorldPosition = worldPosition.xyz;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `}
-          fragmentShader={`
-            uniform vec3 topColor;
-            uniform vec3 midColor;
-            uniform vec3 bottomColor;
-            uniform float offset;
-            uniform float exponent;
-            varying vec3 vWorldPosition;
-            void main() {
-              float h = normalize(vWorldPosition + offset).y;
-              vec3 col;
-              if (h < 0.15) {
-                col = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
-              } else {
-                col = mix(midColor, topColor, pow(smoothstep(0.15, 1.0, h), exponent));
-              }
-              gl_FragColor = vec4(col, 1.0);
-            }
-          `}
-        />
-      </mesh>
+      {/* Sky dome moved to <DayNightCycle /> in Plaza.tsx — its uniforms
+          are animated by the day/night controller. (v6) */}
 
       {/* Clouds */}
       {CLOUD_POSITIONS.map((pos, i) => (

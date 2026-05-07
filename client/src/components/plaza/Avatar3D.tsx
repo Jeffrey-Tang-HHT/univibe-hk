@@ -14,10 +14,131 @@ const DEFAULT_CONFIG: AvatarConfig = {
   expression: 0,
 };
 
+// ─── Emote system ───────────────────────────────────────────────
+// An emote is a short scripted animation that overrides the walk-
+// cycle for a fixed duration. Each emote receives the elapsed time
+// since the emote started (0..duration) and writes target rotations
+// for arms / legs / body. The base avatar then lerps toward those
+// targets just like it does for walk.
+//
+// Adding a new emote: drop another entry into EMOTES below. Done.
+
+export type EmoteName = 'wave' | 'dance' | 'clap' | 'bow' | 'cheer' | 'sit' | 'point';
+
+interface EmotePose {
+  // All in radians. Optional → leave at 0 / current.
+  lArm?: number;          // left arm rotation.x (forward swing)
+  rArm?: number;          // right arm rotation.x
+  lArmZ?: number;         // left arm rotation.z (raise to side)
+  rArmZ?: number;         // right arm rotation.z
+  lLeg?: number;
+  rLeg?: number;
+  bodyTiltX?: number;     // group rotation.x (bow forward)
+  bodyTiltZ?: number;     // group rotation.z (sway / lean)
+  bodyY?: number;         // group position.y offset (sit / hop)
+}
+
+interface EmoteDef {
+  durationMs: number;
+  /** Returns the target pose at the given progress 0..1. */
+  pose: (progress: number, elapsedSec: number) => EmotePose;
+}
+
+const EMOTES: Record<EmoteName, EmoteDef> = {
+  wave: {
+    durationMs: 2400,
+    pose: (_p, t) => ({
+      // Right arm raised straight up, swinging side-to-side at the shoulder.
+      // Use rotation.z so the arm rotates *outward* about the body axis.
+      rArmZ: -Math.PI / 1.6 + Math.sin(t * 6) * 0.35,
+      rArm: 0,
+      lArm: 0,
+    }),
+  },
+  dance: {
+    durationMs: 4000,
+    pose: (_p, t) => ({
+      // Both arms up at angles, alternating left/right hop, body sway.
+      lArmZ: 0.9 + Math.sin(t * 8) * 0.25,
+      rArmZ: -0.9 - Math.sin(t * 8) * 0.25,
+      lArm: Math.sin(t * 6) * 0.15,
+      rArm: -Math.sin(t * 6) * 0.15,
+      bodyTiltZ: Math.sin(t * 8) * 0.08,
+      bodyY: Math.abs(Math.sin(t * 8)) * 0.18,
+      lLeg: Math.sin(t * 8) * 0.25,
+      rLeg: -Math.sin(t * 8) * 0.25,
+    }),
+  },
+  clap: {
+    durationMs: 2200,
+    pose: (_p, t) => {
+      // Both arms forward (~ -π/2 about x). Hands meet then part.
+      const meet = Math.abs(Math.sin(t * 6));
+      return {
+        lArm: -Math.PI / 2.2,
+        rArm: -Math.PI / 2.2,
+        lArmZ: 0.3 + meet * 0.25,
+        rArmZ: -0.3 - meet * 0.25,
+      };
+    },
+  },
+  bow: {
+    durationMs: 1800,
+    pose: (p) => {
+      // Tilt forward, hold, ease back. Triangular curve over progress.
+      const tilt = p < 0.5 ? p * 2 : 1 - (p - 0.5) * 2;
+      return {
+        bodyTiltX: tilt * 0.6,
+        lArm: -tilt * 0.4,
+        rArm: -tilt * 0.4,
+      };
+    },
+  },
+  cheer: {
+    durationMs: 2200,
+    pose: (_p, t) => ({
+      // Both arms shoot up; small bounce.
+      lArmZ: 1.1 + Math.sin(t * 10) * 0.08,
+      rArmZ: -1.1 - Math.sin(t * 10) * 0.08,
+      bodyY: Math.abs(Math.sin(t * 4)) * 0.12,
+    }),
+  },
+  sit: {
+    durationMs: 3000,
+    pose: () => ({
+      // Lower body, swing legs forward (away from torso).
+      bodyY: -0.35,
+      lLeg: -Math.PI / 2.5,
+      rLeg: -Math.PI / 2.5,
+      lArm: -0.2,
+      rArm: -0.2,
+    }),
+  },
+  point: {
+    durationMs: 2000,
+    pose: () => ({
+      // Right arm forward (-π/2 about x sends arm forward, since the arm
+      // hangs down by default). Slight outward angle for personality.
+      rArm: -Math.PI / 2,
+      rArmZ: -0.15,
+    }),
+  },
+};
+
+/** Public helper if other components need durations (e.g. the EmoteBar
+ *  cooldown indicator). Returns ms. */
+export function getEmoteDuration(name: EmoteName): number {
+  return EMOTES[name]?.durationMs ?? 2000;
+}
+
 interface AvatarProps {
   config?: AvatarConfig;
   isMoving?: boolean;
   onClick?: () => void;
+  /** Active emote name. Pass null/undefined when no emote is playing. */
+  emote?: EmoteName | null;
+  /** Wall-clock ms when the emote started. Used to compute progress. */
+  emoteStartMs?: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -35,7 +156,13 @@ const ARM_SWING = 0.55;                    // ± radians
 const LEG_SWING = 0.75;                    // ± radians
 const IDLE_DAMP = 6;                       // how fast limbs return to neutral when stopping
 
-export default function Avatar({ config = DEFAULT_CONFIG, isMoving = false, onClick }: AvatarProps) {
+export default function Avatar({
+  config = DEFAULT_CONFIG,
+  isMoving = false,
+  onClick,
+  emote = null,
+  emoteStartMs = 0,
+}: AvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
@@ -53,47 +180,80 @@ export default function Avatar({ config = DEFAULT_CONFIG, isMoving = false, onCl
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
-    // ── Overall body bounce (vertical) ──
-    bounceRef.current += delta * (isMoving ? 8 : 2);
-    const bounce = Math.sin(bounceRef.current) * (isMoving ? 0.08 : 0.03);
-    groupRef.current.position.y = bounce;
-
-    // ── Body sway when moving (subtle roll) ──
-    if (isMoving) {
-      groupRef.current.rotation.z = Math.sin(bounceRef.current * 0.5) * 0.05;
-    } else {
-      groupRef.current.rotation.z *= 0.95;
+    // ── Emote takeover check ─────────────────────────────────────
+    // When an emote is active and not yet expired, it overrides the
+    // walk-cycle. The walk cycle runs unchanged otherwise.
+    let emoteActive = false;
+    let emotePose: EmotePose | null = null;
+    if (emote && emoteStartMs > 0) {
+      const def = EMOTES[emote];
+      if (def) {
+        const elapsedMs = Date.now() - emoteStartMs;
+        if (elapsedMs >= 0 && elapsedMs <= def.durationMs) {
+          emoteActive = true;
+          const progress = elapsedMs / def.durationMs;
+          emotePose = def.pose(progress, elapsedMs / 1000);
+        }
+      }
     }
 
-    // ── Limb walk cycle ──
-    // Advance phase only while walking so the pose is deterministic from the
-    // *distance* walked rather than wall-clock time (feels more anchored).
-    if (isMoving) {
+    // ── Overall body bounce (vertical) ──
+    bounceRef.current += delta * (isMoving ? 8 : 2);
+    const baseBounce = Math.sin(bounceRef.current) * (isMoving ? 0.08 : 0.03);
+    const targetY = (emotePose?.bodyY ?? 0) + (emoteActive ? 0 : baseBounce);
+    groupRef.current.position.y = THREE.MathUtils.lerp(
+      groupRef.current.position.y, targetY, Math.min(1, delta * 8),
+    );
+
+    // ── Body tilt / sway ──
+    const targetTiltZ = emotePose?.bodyTiltZ ?? (isMoving ? Math.sin(bounceRef.current * 0.5) * 0.05 : 0);
+    const targetTiltX = emotePose?.bodyTiltX ?? 0;
+    groupRef.current.rotation.z = THREE.MathUtils.lerp(
+      groupRef.current.rotation.z, targetTiltZ, Math.min(1, delta * 6),
+    );
+    groupRef.current.rotation.x = THREE.MathUtils.lerp(
+      groupRef.current.rotation.x, targetTiltX, Math.min(1, delta * 6),
+    );
+
+    // ── Limb walk cycle / emote ──
+    if (isMoving && !emoteActive) {
       phaseRef.current += delta * STEP_HZ * Math.PI * 2;
     }
 
-    // Target rotations. Arms and legs on the same side swing OPPOSITE to
-    // each other (standard contralateral gait): left arm forward pairs with
-    // right leg forward.
     const walkPhase = phaseRef.current;
-    const armAmp = isMoving ? ARM_SWING : 0;
-    const legAmp = isMoving ? LEG_SWING : 0;
+    const armAmp = (isMoving && !emoteActive) ? ARM_SWING : 0;
+    const legAmp = (isMoving && !emoteActive) ? LEG_SWING : 0;
 
-    const targetLArm = Math.sin(walkPhase) * armAmp;
-    const targetRArm = -Math.sin(walkPhase) * armAmp;
-    const targetLLeg = -Math.sin(walkPhase) * legAmp;
-    const targetRLeg = Math.sin(walkPhase) * legAmp;
+    // Walk targets
+    const walkLArm = Math.sin(walkPhase) * armAmp;
+    const walkRArm = -Math.sin(walkPhase) * armAmp;
+    const walkLLeg = -Math.sin(walkPhase) * legAmp;
+    const walkRLeg = Math.sin(walkPhase) * legAmp;
 
-    // Ease toward target. When stopping (amp=0), limbs settle to neutral.
-    const ease = Math.min(1, delta * IDLE_DAMP);
-    if (leftArmRef.current)
-      leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, targetLArm, ease);
-    if (rightArmRef.current)
-      rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, targetRArm, ease);
+    // Emote targets (override walk when active). Default 0 for any axis
+    // the emote doesn't drive, so unspecified limbs return to neutral.
+    const targetLArmX = emoteActive ? (emotePose?.lArm ?? 0) : walkLArm;
+    const targetRArmX = emoteActive ? (emotePose?.rArm ?? 0) : walkRArm;
+    const targetLLegX = emoteActive ? (emotePose?.lLeg ?? 0) : walkLLeg;
+    const targetRLegX = emoteActive ? (emotePose?.rLeg ?? 0) : walkRLeg;
+    const targetLArmZ = emoteActive ? (emotePose?.lArmZ ?? 0) : 0;
+    const targetRArmZ = emoteActive ? (emotePose?.rArmZ ?? 0) : 0;
+
+    // Ease toward target. Slightly faster ease during emotes so the
+    // pose actually arrives within the emote's duration.
+    const ease = Math.min(1, delta * (emoteActive ? 9 : IDLE_DAMP));
+    if (leftArmRef.current) {
+      leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, targetLArmX, ease);
+      leftArmRef.current.rotation.z = THREE.MathUtils.lerp(leftArmRef.current.rotation.z, targetLArmZ, ease);
+    }
+    if (rightArmRef.current) {
+      rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, targetRArmX, ease);
+      rightArmRef.current.rotation.z = THREE.MathUtils.lerp(rightArmRef.current.rotation.z, targetRArmZ, ease);
+    }
     if (leftLegRef.current)
-      leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, targetLLeg, ease);
+      leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, targetLLegX, ease);
     if (rightLegRef.current)
-      rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, targetRLeg, ease);
+      rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, targetRLegX, ease);
   });
 
   const skinMat = useMemo(() => new THREE.MeshToonMaterial({ color: c.skinColor }), [c.skinColor]);

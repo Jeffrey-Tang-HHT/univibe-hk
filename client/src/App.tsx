@@ -13,6 +13,7 @@ import Feed from "./pages/Feed";
 import Dating from "./pages/Dating";
 import Tools from "./pages/Tools";
 import Profile from "./pages/Profile";
+import PlazaLoader from "./components/plaza/PlazaLoader";
 
 // Lazy load Plaza (heavy 3D deps)
 const Plaza = lazy(() => import("./pages/Plaza"));
@@ -27,7 +28,7 @@ function Router() {
       <Route path={"/tools"} component={Tools} />
       <Route path={"/plaza"}>
         {() => (
-          <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-background"><div className="text-muted-foreground text-sm">Loading 3D Plaza...</div></div>}>
+          <Suspense fallback={<PlazaLoader />}>
             <Plaza />
           </Suspense>
         )}

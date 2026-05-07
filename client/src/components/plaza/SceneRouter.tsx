@@ -19,9 +19,11 @@ interface SceneRouterProps {
   lang: string;
   currentZone: string;
   playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
+  /** Forwarded to PlazaScene for double-tap-to-walk. */
+  onSetWaypoint?: (x: number, z: number) => void;
 }
 
-export default function SceneRouter({ lang, currentZone, playerPosRef }: SceneRouterProps) {
+export default function SceneRouter({ lang, currentZone, playerPosRef, onSetWaypoint }: SceneRouterProps) {
   const { currentScene } = useScene();
 
   if (currentScene === 'plaza') {
@@ -30,6 +32,7 @@ export default function SceneRouter({ lang, currentZone, playerPosRef }: SceneRo
         lang={lang}
         currentZone={currentZone}
         playerPosRef={playerPosRef}
+        onSetWaypoint={onSetWaypoint}
       />
     );
   }

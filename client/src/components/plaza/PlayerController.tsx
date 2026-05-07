@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
-import Avatar3D from './Avatar3D';
+import Avatar3D, { type EmoteName } from './Avatar3D';
 import { resolveCollision } from './colliders';
 import type { AvatarConfig } from '@/lib/plaza';
 
@@ -23,6 +23,13 @@ interface PlayerControllerProps {
    *  Used by the scene-switching system (entering an interior teleports the
    *  player to that scene's spawn). Null/undefined → no teleport. */
   teleportRef?: React.MutableRefObject<[number, number, number] | null>;
+  /** v6: shared ref for the active emote. Written by EmoteBar, read here
+   *  every frame and forwarded to Avatar3D. We also auto-clear it once
+   *  the player starts moving so emotes don't get stuck on. */
+  emoteRef?: React.MutableRefObject<{ name: EmoteName; startMs: number } | null>;
+  /** v6: pinch-zoom multiplier. 1.0 = default distance, 0.5 = closer,
+   *  2.5 = far. Camera offset is multiplied by this every frame. */
+  cameraZoomRef?: React.MutableRefObject<number>;
 }
 
 const ZONE_MAP = [
@@ -51,6 +58,8 @@ export default function PlayerController({
   onWaypointReached,
   playerPosRef,
   teleportRef,
+  emoteRef,
+  cameraZoomRef,
 }: PlayerControllerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const keysRef = useRef<Set<string>>(new Set());
@@ -65,6 +74,13 @@ export default function PlayerController({
   // threshold to avoid tearing through React state on every frame.
   const [isMoving, setIsMoving] = useState(false);
   const wasMovingRef = useRef(false);
+
+  // v6: emote state mirror. We pull from emoteRef every frame, but
+  // forward it to Avatar3D as React props so it re-renders when the
+  // emote name changes (Avatar3D's useFrame already reads emoteStartMs
+  // every tick, so the *progress* updates without re-renders — only
+  // the emote-name change needs a render).
+  const [activeEmote, setActiveEmote] = useState<{ name: EmoteName; startMs: number } | null>(null);
 
   // Keyboard handlers
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -215,9 +231,12 @@ export default function PlayerController({
     );
     groupRef.current.rotation.y = currentRotRef.current;
 
-    // Camera follow (third-person, slightly isometric)
+    // Camera follow (third-person, slightly isometric).
+    // v6: cameraZoomRef multiplies the offset distance. 1.0 = default,
+    // 0.5 = pulled in, 2.5 = pulled out. Mobile pinch writes this.
+    const zoom = cameraZoomRef ? Math.max(0.5, Math.min(2.5, cameraZoomRef.current)) : 1;
     const playerPos = groupRef.current.position;
-    const cameraOffset = new THREE.Vector3(0, 14, 14);
+    const cameraOffset = new THREE.Vector3(0, 14 * zoom, 14 * zoom);
     const targetCameraPos = new THREE.Vector3(
       playerPos.x + cameraOffset.x,
       playerPos.y + cameraOffset.y,
@@ -242,6 +261,26 @@ export default function PlayerController({
       setIsMoving(effectivelyMoving);
     }
 
+    // ── v6: Emote sync ──
+    // Pull the active emote from the shared ref. Movement cancels the
+    // current emote (player intent wins). We only call setState when
+    // the emote *identity* changes — Avatar3D recomputes pose from the
+    // start time every frame, so progress updates don't need renders.
+    if (emoteRef) {
+      // Auto-cancel on movement.
+      if (inputActive && emoteRef.current) {
+        emoteRef.current = null;
+      }
+      const cur = emoteRef.current;
+      const prev = activeEmote;
+      const sameRef =
+        (cur === null && prev === null) ||
+        (cur !== null && prev !== null && cur.startMs === prev.startMs && cur.name === prev.name);
+      if (!sameRef) {
+        setActiveEmote(cur);
+      }
+    }
+
     // Send position updates every 200ms
     const now = Date.now();
     if (now - lastUpdateRef.current > 200) {
@@ -260,7 +299,12 @@ export default function PlayerController({
 
   return (
     <group ref={groupRef} position={[0, 0, 5]}>
-      <Avatar3D config={config} isMoving={isMoving} />
+      <Avatar3D
+        config={config}
+        isMoving={isMoving}
+        emote={activeEmote?.name ?? null}
+        emoteStartMs={activeEmote?.startMs ?? 0}
+      />
     </group>
   );
 }

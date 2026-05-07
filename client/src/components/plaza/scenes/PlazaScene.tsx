@@ -9,15 +9,18 @@
 
 import Environment3D from '../Environment3D';
 import EntryTrigger from '../EntryTrigger';
+import TapToWalk from '../TapToWalk';
 import { INTERIOR_SCENES, SCENES } from '@/lib/scenes';
 
 interface PlazaSceneProps {
   lang: string;
   currentZone: string;
   playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
+  /** Optional. When provided, double-tap-to-walk is enabled. */
+  onSetWaypoint?: (x: number, z: number) => void;
 }
 
-export default function PlazaScene({ lang, currentZone, playerPosRef }: PlazaSceneProps) {
+export default function PlazaScene({ lang, currentZone, playerPosRef, onSetWaypoint }: PlazaSceneProps) {
   return (
     <group>
       <Environment3D
@@ -25,6 +28,10 @@ export default function PlazaScene({ lang, currentZone, playerPosRef }: PlazaSce
         currentZone={currentZone}
         playerPosRef={playerPosRef}
       />
+
+      {/* Click / double-tap on the ground → walk there. Same waypoint
+          path as MiniMap's click-to-travel. */}
+      {onSetWaypoint && <TapToWalk onSetWaypoint={onSetWaypoint} />}
 
       {/* Entry triggers — one per interior scene. Each is an invisible
           cylinder near the corresponding zone landmark. Walking into it
