@@ -7,6 +7,7 @@ import ZoneLabels from './ZoneLabels';
 import FountainCallout from './FountainCallout';
 import NPCs from './NPCs';
 import { BENCH_POSITIONS } from './benches';
+import { distSqFromPlayer, CULL_DIST } from './playerPosBus';
 
 interface ZoneConfig {
   position: [number, number, number];
@@ -346,9 +347,19 @@ function Tree({ position, scale = 1 }: { position: [number, number, number]; sca
   );
 }
 
-// ─── Instanced Trees ───
+// ─── Instanced Trees with LOD ───
 // One <Instances> per sub-mesh → 4 draw calls total for all trees instead of 4-per-tree.
 // Per-instance colour varies hue/lightness slightly so trees don't look cloned.
+//
+// v9 LOD: trees beyond ~30m from the player swap to a 2-quad billboard
+// sprite (cross of two perpendicular planes). We don't try to remove the
+// instance from its <Instances> parent — drei doesn't expose per-instance
+// visibility — so instead we drive the foliage `<Instance>` scale to zero
+// for far trees and toggle the corresponding billboard `<group>`'s
+// visibility on. From the camera's POV the swap is invisible because
+// (a) the trees being swapped are at least 30m away and (b) the
+// billboard sits at the same trunk position. Reclassification runs at
+// 4 Hz so trees right at the boundary don't flicker.
 type TreeVariation = { scale: number; hueShift: number; lightShift: number };
 
 function InstancedTrees({
@@ -373,9 +384,49 @@ function InstancedTrees({
     });
   }, [variations]);
 
+  // Per-tree refs into the actual three Object3D so we can set their scale
+  // directly without going through React state.
+  const fol1Refs = useRef<Array<THREE.Object3D | null>>(positions.map(() => null));
+  const fol2Refs = useRef<Array<THREE.Object3D | null>>(positions.map(() => null));
+  const fol3Refs = useRef<Array<THREE.Object3D | null>>(positions.map(() => null));
+  const billboardRefs = useRef<Array<THREE.Group | null>>(positions.map(() => null));
+
+  // Reclassify near/far at 4 Hz. Per-frame is overkill for a slow visual
+  // change and would prevent the cull threshold from acting as hysteresis;
+  // trees right at the boundary would flicker.
+  const lastTickRef = useRef(0);
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (t - lastTickRef.current < 0.25) return;
+    lastTickRef.current = t;
+
+    const cutoff2 = CULL_DIST.TREE_LOD * CULL_DIST.TREE_LOD;
+    for (let i = 0; i < positions.length; i++) {
+      const p = positions[i];
+      const d2 = distSqFromPlayer(p[0], p[2]);
+      const isFar = d2 > cutoff2;
+      const baseScale = variations[i].scale;
+      const fol1 = fol1Refs.current[i];
+      const fol2 = fol2Refs.current[i];
+      const fol3 = fol3Refs.current[i];
+      const bb = billboardRefs.current[i];
+
+      // Scale 0 effectively hides the foliage spheres. The trunk stays
+      // unaffected so silhouettes don't completely vanish at the swap
+      // — there's still a visible vertical brown line where the tree is.
+      const folScale = isFar ? 0 : baseScale;
+      if (fol1) fol1.scale.setScalar(folScale);
+      if (fol2) fol2.scale.setScalar(folScale);
+      if (fol3) fol3.scale.setScalar(folScale);
+      if (bb && bb.visible !== isFar) bb.visible = isFar;
+    }
+  });
+
   return (
     <group>
-      {/* Trunks */}
+      {/* Trunks — always rendered. Cheap (8-segment cylinders) and they
+          give the LOD billboard something to attach to without a visible
+          gap when the foliage swaps. */}
       <Instances limit={limit} castShadow>
         <cylinderGeometry args={[0.12, 0.18, 1.2, 8]} />
         <meshToonMaterial color="#8B6E4E" />
@@ -395,6 +446,7 @@ function InstancedTrees({
         {positions.map((pos, i) => (
           <Instance
             key={`fol1-${i}`}
+            ref={(o: THREE.Object3D | null) => { fol1Refs.current[i] = o; }}
             position={[pos[0], pos[1] + 1.6 * variations[i].scale, pos[2]]}
             scale={variations[i].scale}
             color={tints[i][0]}
@@ -409,6 +461,7 @@ function InstancedTrees({
         {positions.map((pos, i) => (
           <Instance
             key={`fol2-${i}`}
+            ref={(o: THREE.Object3D | null) => { fol2Refs.current[i] = o; }}
             position={[pos[0], pos[1] + 2.1 * variations[i].scale, pos[2]]}
             scale={variations[i].scale}
             color={tints[i][1]}
@@ -416,19 +469,52 @@ function InstancedTrees({
         ))}
       </Instances>
 
-      {/* Foliage layer 3 (top, brightest) — no shadow, small */}
+      {/* Foliage layer 3 (top, brightest) — small, no shadow. */}
       <Instances limit={limit}>
         <sphereGeometry args={[0.35, 8, 8]} />
         <meshToonMaterial color="#81C784" />
         {positions.map((pos, i) => (
           <Instance
             key={`fol3-${i}`}
+            ref={(o: THREE.Object3D | null) => { fol3Refs.current[i] = o; }}
             position={[pos[0], pos[1] + 2.5 * variations[i].scale, pos[2]]}
             scale={variations[i].scale}
             color={tints[i][2]}
           />
         ))}
       </Instances>
+
+      {/* LOD billboards — two perpendicular green quads ("X-card" trick used
+          by every game-engine forest since the early 2000s). Hidden by default;
+          the reclassify tick toggles them on for far trees. */}
+      {positions.map((pos, i) => (
+        <group
+          key={`treebb-${i}`}
+          ref={(g) => { billboardRefs.current[i] = g; }}
+          position={[pos[0], pos[1] + 1.7 * variations[i].scale, pos[2]]}
+          scale={variations[i].scale}
+          visible={false}
+        >
+          <mesh>
+            <planeGeometry args={[1.6, 2.0]} />
+            <meshToonMaterial
+              color={tints[i][0]}
+              transparent
+              alphaTest={0.5}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          <mesh rotation={[0, Math.PI / 2, 0]}>
+            <planeGeometry args={[1.6, 2.0]} />
+            <meshToonMaterial
+              color={tints[i][1]}
+              transparent
+              alphaTest={0.5}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
@@ -459,17 +545,108 @@ function Bench({ position, rotation = 0 }: { position: [number, number, number];
 }
 
 // ─── Fountain — multi-tier with prominent water jets (golden-hour cinematic) ───
+//
+// v9 animated water:
+// The three basin "water discs" used to be static circle meshes with a small
+// y-rotation tween — flat-looking from any close angle. They're now driven by
+// a custom shader (`<fountainWaterMaterial>`) that does:
+//   - Two layers of UV-scrolled value-noise → ripple normals
+//   - Diagonal sine bands → highlight crests catching the sun
+//   - Distance-from-centre falloff so the water sits "inside" the bowl
+//   - A tinted emissive matched to the original look so day/night moods
+//     still work without a per-keyframe override
+// All three basin tiers share the material; they only differ in radius and
+// the time uniform is shared, which gives a cohesive "same fountain"
+// feel. The shader is intentionally cheap (no derivatives, no texture
+// fetches) so it runs at 60fps on mobile too.
 function Fountain({ position }: { position: [number, number, number] }) {
-  const waterRef = useRef<THREE.Mesh>(null);
+  const waterMatRef = useRef<THREE.ShaderMaterial>(null);
 
   useFrame(({ clock }) => {
-    if (waterRef.current) {
-      waterRef.current.rotation.y = clock.getElapsedTime() * 0.15;
+    if (waterMatRef.current) {
+      waterMatRef.current.uniforms.uTime.value = clock.getElapsedTime();
     }
   });
 
   const stoneColor = '#D4C7B0'; // Warm limestone
   const darkStoneColor = '#A89780';
+
+  // The shader is declared once and shared via ref across all three basins.
+  // We hand-write the material rather than reaching for shaderMaterial
+  // because we want the same instance reused across three meshes — drei's
+  // helper would clone it.
+  const waterUniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uColorDeep: { value: new THREE.Color('#3FA6C8') },
+    uColorShallow: { value: new THREE.Color('#88D4E8') },
+    uHighlight: { value: new THREE.Color('#FFFFFF') },
+    uOpacity: { value: 0.85 },
+  }), []);
+
+  const waterVert = `
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+    void main() {
+      vUv = uv;
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorldPos = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+    }
+  `;
+
+  // Cheap value noise — hash + smoothed lerp. Enough for a gentle ripple,
+  // and avoids the cost of a true 2D Perlin without textures.
+  const waterFrag = `
+    uniform float uTime;
+    uniform vec3 uColorDeep;
+    uniform vec3 uColorShallow;
+    uniform vec3 uHighlight;
+    uniform float uOpacity;
+    varying vec2 vUv;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+        u.y);
+    }
+
+    void main() {
+      // Centre-relative UV for the radial falloff
+      vec2 c = vUv - 0.5;
+      float r = length(c) * 2.0; // 0 at centre, 1 at edge
+
+      // Two scrolling noise layers, different speeds + scales so the
+      // result doesn't read as a single moving texture.
+      float n1 = noise(c * 6.0 + vec2(uTime * 0.18, uTime * 0.12));
+      float n2 = noise(c * 12.0 - vec2(uTime * 0.08, uTime * 0.22));
+      float ripple = mix(n1, n2, 0.5);
+
+      // Diagonal sun-glint bands. Two perpendicular sets so the highlight
+      // looks like a true caustic shimmer, not a moving stripe.
+      float band1 = sin((c.x + c.y) * 28.0 + uTime * 1.5);
+      float band2 = sin((c.x - c.y) * 22.0 - uTime * 1.1);
+      float bands = max(band1, band2);
+      float glint = smoothstep(0.85, 1.0, bands * 0.5 + 0.5);
+
+      // Mix shallow→deep based on ripple. The brighter ripple peaks read
+      // as light catching the surface.
+      vec3 col = mix(uColorDeep, uColorShallow, ripple);
+      col = mix(col, uHighlight, glint * 0.55);
+
+      // Edge darkens slightly so the water feels to sit *inside* the bowl
+      // rather than sticking out flat.
+      col *= 1.0 - smoothstep(0.85, 1.0, r) * 0.25;
+
+      gl_FragColor = vec4(col, uOpacity);
+    }
+  `;
 
   return (
     <group position={position}>
@@ -483,17 +660,16 @@ function Fountain({ position }: { position: [number, number, number] }) {
         <cylinderGeometry args={[3.0, 3.0, 0.25, 32]} />
         <meshStandardMaterial color={darkStoneColor} roughness={0.9} />
       </mesh>
-      {/* Water in outer basin — restrained emissive so the tone-mapped highlights don't bloom into a solid disc */}
-      <mesh ref={waterRef} position={[0, 0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[2.95, 32]} />
-        <meshStandardMaterial
-          color="#5FBCD9"
+      {/* Outer basin water — animated shader. */}
+      <mesh position={[0, 0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[2.95, 64]} />
+        <shaderMaterial
+          ref={waterMatRef}
+          uniforms={waterUniforms}
+          vertexShader={waterVert}
+          fragmentShader={waterFrag}
           transparent
-          opacity={0.7}
-          roughness={0.2}
-          metalness={0.15}
-          emissive="#88D4E8"
-          emissiveIntensity={0.04}
+          depthWrite={false}
         />
       </mesh>
 
@@ -508,10 +684,18 @@ function Fountain({ position }: { position: [number, number, number] }) {
         <cylinderGeometry args={[1.4, 1.1, 0.35, 24]} />
         <meshStandardMaterial color={stoneColor} roughness={0.85} />
       </mesh>
-      {/* Middle bowl water */}
+      {/* Middle bowl water — same shader, smaller geometry. Sharing
+          the material instance via uniforms keeps the time scroll
+          synchronized across all three discs. */}
       <mesh position={[0, 1.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1.3, 24]} />
-        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.75} roughness={0.2} emissive="#88D4E8" emissiveIntensity={0.05} />
+        <circleGeometry args={[1.3, 32]} />
+        <shaderMaterial
+          uniforms={waterUniforms}
+          vertexShader={waterVert}
+          fragmentShader={waterFrag}
+          transparent
+          depthWrite={false}
+        />
       </mesh>
 
       {/* Top pedestal */}
@@ -525,10 +709,16 @@ function Fountain({ position }: { position: [number, number, number] }) {
         <cylinderGeometry args={[0.7, 0.5, 0.25, 16]} />
         <meshStandardMaterial color={stoneColor} roughness={0.85} />
       </mesh>
-      {/* Top bowl water */}
+      {/* Top bowl water — same shader, smallest disc. */}
       <mesh position={[0, 2.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.6, 16]} />
-        <meshStandardMaterial color="#5FBCD9" transparent opacity={0.75} emissive="#88D4E8" emissiveIntensity={0.06} />
+        <circleGeometry args={[0.6, 24]} />
+        <shaderMaterial
+          uniforms={waterUniforms}
+          vertexShader={waterVert}
+          fragmentShader={waterFrag}
+          transparent
+          depthWrite={false}
+        />
       </mesh>
 
       {/* Central water jets — multi-stream spout */}

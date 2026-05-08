@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import Avatar3D, { type EmoteName } from './Avatar3D';
 import { resolveCollision } from './colliders';
 import { findNearestBench } from './benches';
+import { setPlayerPos } from './playerPosBus';
 import type { AvatarConfig } from '@/lib/plaza';
 
 interface PlayerControllerProps {
@@ -252,6 +253,11 @@ export default function PlayerController({
       playerPosRef.current.x = playerPos.x;
       playerPosRef.current.z = playerPos.z;
     }
+
+    // v9: Mirror to the module-level position bus consumed by frustum/distance
+    // culling in NPCs.tsx and OtherPlayers.tsx. Cheap (two number writes) and
+    // avoids forcing those components to subscribe to a React-level position.
+    setPlayerPos(playerPos.x, playerPos.z);
 
     // ── Moving state for Avatar3D limb animation ──
     // True if the user is holding input OR the player is still gliding from

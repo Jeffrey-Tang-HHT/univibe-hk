@@ -4,6 +4,137 @@ All notable changes to UniGo HK. Most-recent version first.
 
 ---
 
+## v9 — Plaza Polish 2: Settings, Perf, Ambience *(2026-05-08)*
+
+Seven items off the v8 follow-up list. No DB migration, no env-var
+changes, no new runtime dependencies (the lucide-react alias is a
+build-time config only).
+
+### Day/Night settings panel
+
+The v6 cycler-icon (real-hk → accelerated → fixed-noon, by tap) was
+fine for a demo but made it impossible to tune cycle length, pick a
+non-noon fixed hour, or turn off stars. Replaced with a proper
+settings dialog.
+
+- New `client/src/components/plaza/DayNightSettings.tsx` — compact
+  dialog mirroring `AvatarCustomizer`'s layout. Mode is a 3-button
+  radio group (`real-hk` / `accelerated` / `fixed`); the cycle-length
+  and fixed-hour controls only render in their respective modes.
+  Sliders for `cycleMinutes` (2–30) and `fixedHour` (0–23.75 in 15-min
+  steps) plus four golden-hour preset buttons (sunrise / noon /
+  sunset / midnight) for one-tap iconic lighting. A separate stars
+  toggle. Reset button restores the defaults.
+- `DayNightCycle.tsx` — new `starsEnabled` prop. Implementation gates
+  the keyframed `starOpacity` to 0 when disabled, so the user can
+  toggle without remounting the points geometry.
+- `Plaza.tsx` — replaced `dayNightMode` state with a full
+  `dayNightSettings` object. Persists to `plaza:dayNightSettings`
+  localStorage key. v6's `plaza:dayNightMode` value is read once and
+  migrated forward, so existing users don't lose their preference on
+  the upgrade. The settings dialog and `AvatarCustomizer` share the
+  top-right panel slot, so opening one closes the other.
+
+### Animated water on the fountain
+
+`Fountain` in `Environment3D.tsx` now uses a custom shader for all
+three basin water discs:
+
+- Two scrolling layers of value-noise (cheap hash + smoothed lerp;
+  no texture fetches) → ripple.
+- Two perpendicular sine bands → caustic-style sun-glint shimmer.
+- Radial falloff darkens the rim slightly so the water reads as
+  sitting *inside* the bowl.
+- Same uniforms object passed to all three meshes — sync stays
+  perfect across tiers without per-frame copies.
+
+Removed the rotating mesh trick (`useFrame` y-rotation on the outer
+basin) since the shader now drives all the visual motion.
+
+### Frustum/distance culling for NPCs and other players
+
+- New `client/src/components/plaza/playerPosBus.ts` — module-level
+  singleton holding the live player (x, z). Written every frame by
+  `PlayerController.tsx`, read by `NPCs.tsx`, `OtherPlayers.tsx`, and
+  `Environment3D.tsx` *inside their own useFrame loops*. Avoids the
+  cost of putting per-frame position state through React.
+- `NPCs.tsx` — the shared frame loop now toggles each NPC group's
+  `.visible` based on squared distance to the player vs. the
+  `CULL_DIST.AVATAR` (~40m) cutoff. Behaviour state machine still
+  ticks for hidden NPCs so they don't visibly teleport when they
+  re-enter range.
+- `OtherPlayers.tsx` — same cutoff applied to remote-player avatars.
+  Hides the entire subtree (avatar, billboarded nameplate, emote
+  popup) in one `.visible = false`.
+- Three `CULL_DIST` presets exported from `playerPosBus.ts` so future
+  scene additions inherit consistent thresholds.
+
+### LOD for distant trees
+
+`InstancedTrees` in `Environment3D.tsx` keeps the same instanced
+sub-meshes for near trees, but trees beyond `CULL_DIST.TREE_LOD`
+(~30m) swap to a 2-quad cross-card billboard. Reclassification runs
+at 4Hz inside a useFrame (per-frame is overkill for what's a slow
+visual change and would flicker right at the cutoff). The trunk
+cylinder stays visible at all distances so the silhouette doesn't
+break.
+
+### Footprint / dust trail
+
+New `client/src/components/plaza/FootprintTrail.tsx`. Ring buffer of
+24 small dark discs allocated once and recycled round-robin. A new
+print is dropped every 0.55m of player travel, with alternating
+left/right offset relative to travel direction so it reads as a
+two-foot trail. 5-second fade tied to a hold-then-decay curve. Read
+position from the same `playerPosBus`. Mounted only in
+`PlazaScene.tsx` (outdoor only).
+
+### Birds + butterflies (ambient creatures)
+
+New `client/src/components/plaza/AmbientCreatures.tsx`. Four
+billboarded birds in slow circular orbits at ~6m altitude (with
+gentle vertical drift). Six butterflies meandering between random
+anchor points, retargeting every 6–14s. Wing flap is faked by
+animating the X scale of each billboarded plane (3D rotation would
+break the billboard alignment). Birds use the wider AVATAR cull
+cutoff so the sky doesn't feel empty; butterflies cull at the
+tighter AMBIENT cutoff (~25m) since they're sub-pixel beyond that.
+
+### Bundle: split lucide-react imports
+
+- `vite.config.ts` — new `lucide-react/icons` alias mapping to the
+  package's `dist/esm/icons` directory.
+- `client/src/lucide.d.ts` — module declaration so TypeScript
+  recognises the per-icon import path.
+- Plaza-track files (`Plaza.tsx`, `JourneyLog.tsx`, `EmoteBar.tsx`)
+  now use one import line per icon instead of the destructured
+  barrel. Production builds tree-shook the barrel anyway, but dev
+  mode would bundle the entire icon set; this also marginally
+  speeds dev cold-start.
+
+### Tech-stack housekeeping cleanup
+
+- Removed `Avatar3D.diff` and `PlayerController.diff` from repo
+  root — they were marked as removed in v7 but the file deletion
+  hadn't actually been applied to the repo. (The `diffs/` folder
+  remains; those are intentional historical reference.)
+- Removed `CHANGES.md`, `CHANGES_v4_npcs.md`, `CHANGES_v5_interiors_drop1.md`,
+  `CHANGES_v5_interiors_fixes.md`, `CHANGES_v6_daynight_emotes.md` —
+  same situation. Their content lives in this `CHANGELOG.md` already.
+
+### LocalStorage migration (automatic, no user action)
+
+```
+plaza:dayNightMode         → plaza:dayNightSettings (read-once migration)
+```
+
+If a user has the v6 mode key, it's lifted into the new settings
+object on first load and the new key is written. The old key is
+left in place (cheap, no harm) so a downgrade to v6/v7/v8 still
+works.
+
+---
+
 ## v8 — Plaza Polish: Bench Sit, Long-Press Wave, Gesture Emoji, A11y *(2026-05-08)*
 
 Six small-but-visible upgrades to the 3D plaza, plus the missing v7 SQL migration.

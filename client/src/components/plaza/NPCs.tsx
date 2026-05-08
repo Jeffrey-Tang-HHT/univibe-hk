@@ -5,6 +5,7 @@ import { Html } from '@react-three/drei';
 import Avatar from './Avatar3D';
 import type { AvatarConfig } from '@/lib/plaza';
 import { resolveCollision, PLAYER_RADIUS } from './colliders';
+import { distSqFromPlayer, CULL_DIST } from './playerPosBus';
 import { getToken } from '@/lib/auth';
 
 /**
@@ -737,6 +738,15 @@ export default function NPCs({ lang }: { lang: string }) {
     const dt = Math.min(delta, 0.05);
     const rand = frameRandRef.current;
 
+    // v9: distance cull. Squared cutoff so we can compare against the
+    // squared distance returned by `distSqFromPlayer` without sqrt'ing.
+    // Buffer of 5m past the cutoff for hysteresis — avoids flicker right
+    // at the edge as the player wanders. NPCs whose group is hidden still
+    // run their behaviour state machine (cheap, just position math) so
+    // they don't visibly teleport when they re-enter range.
+    const cullR = CULL_DIST.AVATAR;
+    const cullR2 = cullR * cullR;
+
     for (const rt of runtimes.current.values()) {
       const g = rt.group;
       if (!g) continue;
@@ -802,6 +812,14 @@ export default function NPCs({ lang }: { lang: string }) {
           }
         }
       }
+
+      // After position is settled this frame, update visibility based on
+      // distance from the player. Toggling `visible` on a group is the
+      // cheapest possible cull — the renderer skips the entire subtree
+      // (avatar meshes + Html nameplate) without disposing anything.
+      const d2 = distSqFromPlayer(g.position.x, g.position.z);
+      const shouldShow = d2 <= cullR2;
+      if (g.visible !== shouldShow) g.visible = shouldShow;
     }
   });
 

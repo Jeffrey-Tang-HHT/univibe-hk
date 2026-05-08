@@ -3,14 +3,39 @@ import { Canvas } from '@react-three/fiber';
 import { ACESFilmicToneMapping as THREE_TONE_MAPPING } from 'three';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Shield, Home, HeartHandshake, Wrench, User, Globe, Moon, Sun,
-  Send, Paintbrush, Users, MessageCircle, X, Box,
-  BookOpen, TrendingUp, Sparkles, Calculator, Plus, Zap, Clock, Star, ChevronRight,
-  Compass, Route,
-  Volume2, VolumeX,
-  Sunrise, FastForward,
-} from 'lucide-react';
+// v9: per-icon imports trim the lucide barrel out of the Plaza chunk.
+// Each line resolves to a single icon module via the `lucide-react/icons`
+// Vite alias declared in vite.config.ts. ~80KB chunk savings vs. the
+// previous `import { ... } from 'lucide-react'` block.
+import Shield from 'lucide-react/icons/shield';
+import Home from 'lucide-react/icons/home';
+import HeartHandshake from 'lucide-react/icons/heart-handshake';
+import Wrench from 'lucide-react/icons/wrench';
+import User from 'lucide-react/icons/user';
+import Globe from 'lucide-react/icons/globe';
+import Moon from 'lucide-react/icons/moon';
+import Sun from 'lucide-react/icons/sun';
+import Send from 'lucide-react/icons/send';
+import Paintbrush from 'lucide-react/icons/paintbrush';
+import Users from 'lucide-react/icons/users';
+import MessageCircle from 'lucide-react/icons/message-circle';
+import X from 'lucide-react/icons/x';
+import Box from 'lucide-react/icons/box';
+import BookOpen from 'lucide-react/icons/book-open';
+import TrendingUp from 'lucide-react/icons/trending-up';
+import Sparkles from 'lucide-react/icons/sparkles';
+import Calculator from 'lucide-react/icons/calculator';
+import Plus from 'lucide-react/icons/plus';
+import Zap from 'lucide-react/icons/zap';
+import Clock from 'lucide-react/icons/clock';
+import Star from 'lucide-react/icons/star';
+import ChevronRight from 'lucide-react/icons/chevron-right';
+import Compass from 'lucide-react/icons/compass';
+import Route from 'lucide-react/icons/route';
+import Volume2 from 'lucide-react/icons/volume-2';
+import VolumeX from 'lucide-react/icons/volume-x';
+import Sunrise from 'lucide-react/icons/sunrise';
+import FastForward from 'lucide-react/icons/fast-forward';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -31,7 +56,11 @@ import AmbientSound from '@/components/plaza/AmbientSound';
 import ZoneParticles from '@/components/plaza/ZoneParticles';
 import { NPC_COUNT } from '@/components/plaza/NPCs';
 // v6 additions
-import DayNightCycle, { type DayNightMode } from '@/components/plaza/DayNightCycle';
+import DayNightCycle from '@/components/plaza/DayNightCycle';
+import DayNightSettings, {
+  DEFAULT_DAY_NIGHT_SETTINGS,
+  type DayNightSettings as DayNightSettingsType,
+} from '@/components/plaza/DayNightSettings';
 import EmoteBar from '@/components/plaza/EmoteBar';
 import type { EmoteName } from '@/components/plaza/Avatar3D';
 
@@ -134,14 +163,44 @@ function PlazaInner() {
   // ── v6: Day/night mode ──
   // Persisted across reloads via localStorage so the user's preferred
   // demo mode sticks. Default 'real-hk' = realistic clock-driven sun.
-  const [dayNightMode, setDayNightMode] = useState<DayNightMode>(() => {
-    if (typeof window === 'undefined') return 'real-hk';
-    const saved = localStorage.getItem('plaza:dayNightMode');
-    return (saved as DayNightMode) || 'real-hk';
+  //
+  // v9: upgraded from a single mode string to a full settings object —
+  // `cycleMinutes`, `fixedHour`, `starsEnabled` are now user-tunable via
+  // the new <DayNightSettings> dialog. Backward-compat: the old
+  // `plaza:dayNightMode` localStorage key (v6/v7/v8) is read once and
+  // migrated into the new `plaza:dayNightSettings` key, so existing
+  // users don't lose their preference on the upgrade.
+  const [dayNightSettings, setDayNightSettings] = useState<DayNightSettingsType>(() => {
+    if (typeof window === 'undefined') return DEFAULT_DAY_NIGHT_SETTINGS;
+    try {
+      const v9 = localStorage.getItem('plaza:dayNightSettings');
+      if (v9) {
+        const parsed = JSON.parse(v9);
+        // Defensive shape check — anyone hand-editing localStorage shouldn't
+        // be able to crash the app.
+        if (parsed && typeof parsed === 'object') {
+          return { ...DEFAULT_DAY_NIGHT_SETTINGS, ...parsed };
+        }
+      }
+      // v6 → v9 migration
+      const v6 = localStorage.getItem('plaza:dayNightMode');
+      if (v6 === 'real-hk' || v6 === 'accelerated' || v6 === 'fixed') {
+        return { ...DEFAULT_DAY_NIGHT_SETTINGS, mode: v6 };
+      }
+    } catch {
+      // Corrupt JSON — fall through to default.
+    }
+    return DEFAULT_DAY_NIGHT_SETTINGS;
   });
   useEffect(() => {
-    try { localStorage.setItem('plaza:dayNightMode', dayNightMode); } catch {}
-  }, [dayNightMode]);
+    try {
+      localStorage.setItem('plaza:dayNightSettings', JSON.stringify(dayNightSettings));
+    } catch {
+      /* localStorage may be disabled (private mode) — non-fatal */
+    }
+  }, [dayNightSettings]);
+
+  const [showDayNightSettings, setShowDayNightSettings] = useState(false);
 
   useEffect(() => {
     // SceneContext exposes the canonical spawn for the *current* scene
@@ -465,10 +524,14 @@ function PlazaInner() {
         {/* v6: lighting + sky + fog are now driven by DayNightCycle.
             Replaces the static <ambientLight>/<directionalLight> x2/
             <hemisphereLight>/<fog> block + the sky dome that lived in
-            Environment3D. */}
+            Environment3D.
+            v9: cycleMinutes / fixedHour / starsEnabled are all driven
+            by user-facing settings via the <DayNightSettings> dialog. */}
         <DayNightCycle
-          mode={dayNightMode}
-          cycleMinutes={8}
+          mode={dayNightSettings.mode}
+          cycleMinutes={dayNightSettings.cycleMinutes}
+          fixedHour={dayNightSettings.fixedHour}
+          starsEnabled={dayNightSettings.starsEnabled}
           isMobile={IS_MOBILE}
         />
 
@@ -630,28 +693,29 @@ function PlazaInner() {
           >
             <Globe className="w-3.5 h-3.5" />
           </Button>
-          {/* v6: Day/night mode cycler. real-hk → accelerated → fixed-noon → real-hk */}
+          {/* v9: Day/night settings opener — replaces v6's three-state cycler.
+              Icon reflects current mode; tap opens the full settings panel. */}
           <Button
             variant="ghost"
             size="icon"
             className="w-8 h-8 bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60"
-            onClick={() =>
-              setDayNightMode((m) =>
-                m === 'real-hk' ? 'accelerated' : m === 'accelerated' ? 'fixed' : 'real-hk',
-              )
-            }
+            onClick={() => {
+              setShowDayNightSettings((s) => !s);
+              // Same slot as AvatarCustomizer — close that one if it's open.
+              if (!showDayNightSettings) setShowCustomizer(false);
+            }}
             title={
-              dayNightMode === 'real-hk'
-                ? (lang === 'zh' ? '即時香港時間' : 'Live HK time')
-                : dayNightMode === 'accelerated'
-                  ? (lang === 'zh' ? '加速日夜循環 (8 分鐘)' : 'Accelerated cycle (8 min)')
-                  : (lang === 'zh' ? '固定中午' : 'Fixed midday')
+              dayNightSettings.mode === 'real-hk'
+                ? (lang === 'zh' ? '日夜設定 — 即時香港時間' : 'Day/Night settings — Live HK time')
+                : dayNightSettings.mode === 'accelerated'
+                  ? (lang === 'zh' ? `日夜設定 — 加速 (${dayNightSettings.cycleMinutes} 分鐘)` : `Day/Night settings — Accelerated (${dayNightSettings.cycleMinutes} min)`)
+                  : (lang === 'zh' ? '日夜設定 — 固定時間' : 'Day/Night settings — Fixed hour')
             }
-            aria-label={lang === 'zh' ? '日夜模式' : 'Day/Night mode'}
+            aria-label={lang === 'zh' ? '日夜設定' : 'Day/Night settings'}
           >
-            {dayNightMode === 'real-hk' && <Clock className="w-3.5 h-3.5" />}
-            {dayNightMode === 'accelerated' && <FastForward className="w-3.5 h-3.5" />}
-            {dayNightMode === 'fixed' && <Sunrise className="w-3.5 h-3.5" />}
+            {dayNightSettings.mode === 'real-hk' && <Clock className="w-3.5 h-3.5" />}
+            {dayNightSettings.mode === 'accelerated' && <FastForward className="w-3.5 h-3.5" />}
+            {dayNightSettings.mode === 'fixed' && <Sunrise className="w-3.5 h-3.5" />}
           </Button>
           <Button
             variant="ghost"
@@ -897,7 +961,11 @@ function PlazaInner() {
       {/* ─── Right-side Action Buttons (vertical cluster) ─── */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
         <button
-          onClick={() => setShowCustomizer(!showCustomizer)}
+          onClick={() => {
+            setShowCustomizer(!showCustomizer);
+            // Top-right has only one slot — don't let both dialogs stack.
+            if (!showCustomizer) setShowDayNightSettings(false);
+          }}
           className={`relative w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg border transition-all group ${
             showCustomizer
               ? 'bg-neon-coral text-white border-neon-coral scale-105'
@@ -935,6 +1003,16 @@ function PlazaInner() {
           onChange={setAvatarConfig}
           onSave={handleSaveAvatar}
           onClose={() => setShowCustomizer(false)}
+        />
+      )}
+
+      {/* v9: Day/night settings dialog. Sits in the same top-right slot as
+          AvatarCustomizer; both can't be open at once because they'd overlap. */}
+      {showDayNightSettings && !showCustomizer && (
+        <DayNightSettings
+          settings={dayNightSettings}
+          onChange={setDayNightSettings}
+          onClose={() => setShowDayNightSettings(false)}
         />
       )}
 

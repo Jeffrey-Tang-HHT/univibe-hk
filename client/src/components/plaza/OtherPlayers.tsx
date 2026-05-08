@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Text, Billboard, Html } from '@react-three/drei';
 import Avatar3D, { getEmoteDuration, type EmoteName } from './Avatar3D';
+import { distSqFromPlayer, CULL_DIST } from './playerPosBus';
 import type { PlazaPlayer, PlazaBubble } from '@/lib/plaza';
 
 interface OtherPlayersProps {
@@ -77,6 +78,15 @@ function RemotePlayer({
     const currentRot = groupRef.current.rotation.y;
     const targetRot = player.rotation;
     groupRef.current.rotation.y = THREE.MathUtils.lerp(currentRot, targetRot, 0.1);
+
+    // v9: distance cull. Remote-player avatars are visually identical
+    // to NPCs (same Avatar3D component) so we use the same cutoff.
+    // Toggling .visible skips the avatar mesh, billboarded nameplate
+    // AND any active emote popup in one go.
+    const cur = groupRef.current.position;
+    const d2 = distSqFromPlayer(cur.x, cur.z);
+    const shouldShow = d2 <= CULL_DIST.AVATAR * CULL_DIST.AVATAR;
+    if (groupRef.current.visible !== shouldShow) groupRef.current.visible = shouldShow;
   });
 
   const isSpeaking = !!bubble;

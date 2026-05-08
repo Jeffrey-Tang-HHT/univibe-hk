@@ -159,6 +159,21 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      // v9: per-icon imports for lucide-react. Maps `lucide-react/icons/foo`
+      // to the package's internal ESM file so each import pulls just one
+      // icon module instead of dragging the full barrel through the dev
+      // server (production builds tree-shake fine, but dev-mode bundles
+      // everything — see the lucide bundle-size issue tracker). The alias
+      // is purely for the Plaza track; non-plaza files keep their
+      // `import { ... } from 'lucide-react'` style.
+      "lucide-react/icons": path.resolve(
+        import.meta.dirname,
+        "node_modules",
+        "lucide-react",
+        "dist",
+        "esm",
+        "icons",
+      ),
     },
   },
   envDir: path.resolve(import.meta.dirname),

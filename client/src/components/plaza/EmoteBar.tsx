@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smile, ChevronUp } from 'lucide-react';
+// v9: per-icon imports — see vite.config.ts alias.
+import Smile from 'lucide-react/icons/smile';
+import ChevronUp from 'lucide-react/icons/chevron-up';
 import type { EmoteName } from './Avatar3D';
 import { getEmoteDuration } from './Avatar3D';
 

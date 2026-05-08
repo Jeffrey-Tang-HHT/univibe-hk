@@ -31,6 +31,13 @@ interface DayNightCycleProps {
   fixedHour?: number;
   /** Mobile shadow map fallback. */
   isMobile?: boolean;
+  /**
+   * Master toggle for the starfield. When false, stars never appear regardless
+   * of the current keyframe's `starOpacity`. The starfield geometry is still
+   * mounted (cheap — 600 points, 1 draw call) but its opacity is forced to 0
+   * each frame so the user can flip the switch without remounting.
+   */
+  starsEnabled?: boolean;
 }
 
 // ── Phase keyframes ────────────────────────────────────────────
@@ -217,6 +224,7 @@ export default function DayNightCycle({
   cycleMinutes = 8,
   fixedHour = 13,
   isMobile = false,
+  starsEnabled = true,
 }: DayNightCycleProps) {
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
@@ -337,7 +345,10 @@ export default function DayNightCycle({
       u.bottomColor.value.copy(tmp.skyBot);
     }
     if (starsMatRef.current) {
-      starsMatRef.current.opacity = starA;
+      // Master toggle short-circuits the keyframed opacity. Cheaper than
+      // conditionally mounting/unmounting the points node every time the
+      // user flips the switch.
+      starsMatRef.current.opacity = starsEnabled ? starA : 0;
     }
   });
 

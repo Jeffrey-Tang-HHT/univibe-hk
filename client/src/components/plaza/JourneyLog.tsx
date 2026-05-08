@@ -1,5 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, MapPin, Clock } from 'lucide-react';
+// v9: per-icon imports — see vite.config.ts alias.
+import X from 'lucide-react/icons/x';
+import MapPin from 'lucide-react/icons/map-pin';
+import Clock from 'lucide-react/icons/clock';
 
 /**
  * Journey log panel — shows the player's sequence of zone visits as numbered

@@ -1,16 +1,20 @@
 # UniGo HK — Follow-up TODO
 
-Curated post-v8 work, ordered by impact / effort. Items marked
+Curated post-v9 work, ordered by impact / effort. Items marked
 `[shippable]` can be tackled in isolation; `[depends-on:X]` need
 another item first.
 
 > **Status note (2026-05-08):** v7 shipped networked emotes,
-> AI-powered NPCs, and tap-to-walk in interiors (the v7 entry in
-> `CHANGELOG.md` covers details; the corresponding `migration-v8-emotes.sql`
-> shipped in v8 to catch up the schema). v8 then shipped the avatar
-> shadow fix, bench-anchored sit, reduced-motion, long-press wave,
-> and the remote-player emoji popup. The remaining items below are
-> still open.
+> AI-powered NPCs, and tap-to-walk in interiors. v8 shipped the
+> avatar shadow fix, bench-anchored sit, reduced-motion, long-press
+> wave, the remote-player emoji popup, and the v7 schema catch-up
+> (`migration-v8-emotes.sql`). v9 (this drop) shipped the day/night
+> settings panel, animated fountain water, distance-culling for
+> NPCs / remote players, LOD trees, footprint trails, birds +
+> butterflies, the lucide-react bundle split, and the housekeeping
+> file cleanup (`Avatar3D.diff` / `PlayerController.diff` /
+> `CHANGES_*.md` finally removed from the repo root). The remaining
+> items below are still open.
 
 ---
 
@@ -28,16 +32,13 @@ another item first.
   Mia, Uncle Raymond, Kai). 10 req/user/hour rate limit,
   client-side history, click-to-chat panel.
 
-- [ ] **Day/night settings panel** `[depends-on: settings menu skeleton]`
-  Right now the day/night mode is a single icon that cycles through
-  three options. Replace with a proper settings panel that lets the
-  user:
-  - Pick mode (radio: real-hk / accelerated / fixed)
-  - Adjust accelerated cycle length (slider, 2–30 minutes)
-  - Pick fixed hour (slider, 0–24)
-  - Toggle stars at night
-  Integrate into the existing AvatarCustomizer dialog as a second
-  tab, or create a new "Plaza Settings" dialog.
+- [x] **Day/night settings panel** — *shipped in v9*
+  New `DayNightSettings.tsx` dialog. Mode radio (real-hk /
+  accelerated / fixed), `cycleMinutes` slider (2–30), `fixedHour`
+  slider with golden-hour preset buttons (sunrise/noon/sunset/
+  midnight), stars on/off toggle, reset. Settings persist to
+  `plaza:dayNightSettings` localStorage; v6 `plaza:dayNightMode`
+  is migrated forward automatically.
 
 - [x] **Sit emote: anchor to benches** `[shippable]` — *shipped in v8*
   New `benches.ts` module with `findNearestBench`. `PlayerController`
@@ -57,10 +58,13 @@ another item first.
   `@react-three/drei`. Aim: keep total models <2MB by using draco
   compression.
 
-- [ ] **Animated water on the fountain**
-  The central fountain is static. Add a flowing-water shader to the
-  basin (Perlin noise + UV scrolling) and a small particle stream.
-  Reference: `FountainCallout.tsx` already exists for the labels.
+- [x] **Animated water on the fountain** — *shipped in v9*
+  `Fountain` in `Environment3D.tsx` now renders all three basin
+  water discs through a custom shader: two scrolling value-noise
+  layers (no texture fetches) drive the ripple, two perpendicular
+  sine bands fake caustic sun-glints, and a radial falloff seats
+  the water inside each bowl. Same uniforms object shared across
+  tiers so the time scroll stays in sync.
 
 - [ ] **Weather system**
   Optional per-day weather: clear / cloudy / light rain. Cloudy =
@@ -69,35 +73,48 @@ another item first.
   Could roll a daily seed off the date so all players see the same
   weather on the same day.
 
-- [ ] **Footprint / dust trail**
-  When the avatar walks on dirt zones, leave faint footprints that
-  fade after 5 seconds. Keep the count low — instanced quads work
-  well here.
+- [x] **Footprint / dust trail** — *shipped in v9*
+  `FootprintTrail.tsx` — ring buffer of 24 fading discs allocated
+  once, recycled round-robin. New print every 0.55m of travel with
+  alternating left/right offset so it reads as a two-foot trail.
+  5s hold-then-fade lifecycle. Reads from the shared player position
+  bus; mounted only in `PlazaScene.tsx` (outdoor only).
 
-- [ ] **Birds + butterflies**
-  Small 2D sprite ambient creatures that path between trees. Pure
-  decoration, but huge "alive world" feel.
+- [x] **Birds + butterflies** — *shipped in v9*
+  `AmbientCreatures.tsx` — 4 birds in slow circular orbits at ~6m,
+  6 butterflies on Lissajous paths between retargeted anchors. Wing
+  flap faked by X-scaling billboard quads (3D rotation would break
+  billboard alignment). Birds use the wider AVATAR cull cutoff so
+  the sky never feels empty; butterflies cull tighter at AMBIENT.
 
 ### Performance
 
-- [ ] **Frustum-cull NPCs and other players**
-  All NPCs render every frame regardless of camera position. Use the
-  player's position + a simple distance cutoff (40m) to skip rendering
-  NPCs that are off-camera. Reduces draw calls on busy plazas.
+- [x] **Frustum-cull NPCs and other players** — *shipped in v9*
+  New `playerPosBus.ts` exports a module-level player position +
+  `distSqFromPlayer` helper + `CULL_DIST` thresholds. `NPCs.tsx`
+  toggles each NPC's `.visible` against `CULL_DIST.AVATAR` (~40m);
+  `OtherPlayers.tsx` does the same for remote players. Behaviour
+  state machines still tick for hidden NPCs so they don't visibly
+  teleport when re-entering range.
 
-- [ ] **LOD for distant trees**
-  Trees beyond 30m can use a simple billboard sprite instead of full
-  geometry. Three.js `LOD` makes this trivial.
+- [x] **LOD for distant trees** — *shipped in v9*
+  `InstancedTrees` keeps full geometry near, swaps to a 2-quad
+  cross-card billboard past `CULL_DIST.TREE_LOD` (~30m). Reclassify
+  runs at 4Hz to avoid flicker right at the cutoff. Trunk cylinder
+  stays visible at all distances so silhouettes don't break.
 
 - [ ] **Migrate to WebGPU renderer (with WebGL fallback)**
   Three.js r170+ supports WebGPU. Roughly 30% faster on supported
   devices (current Chrome / Safari Tech Preview). Wrap the `<Canvas>`
   with a try-catch to fall back gracefully.
 
-- [ ] **Bundle: split lucide-react imports**
-  `import { ... } from 'lucide-react'` pulls in the full barrel.
-  Use `import Icon from 'lucide-react/icons/icon-name'` for the
-  Plaza-specific icons to drop ~80 KB from the chunk.
+- [x] **Bundle: split lucide-react imports** — *shipped in v9*
+  `vite.config.ts` adds the `lucide-react/icons` → `dist/esm/icons`
+  alias; `client/src/lucide.d.ts` declares the module shape; the
+  Plaza-track files (`Plaza.tsx`, `JourneyLog.tsx`, `EmoteBar.tsx`)
+  now use per-icon `import Icon from 'lucide-react/icons/foo'`
+  imports. Non-plaza files keep their barrel imports — Vite still
+  tree-shakes those in production.
 
 ### Multiplayer
 
@@ -188,11 +205,14 @@ another item first.
 - [ ] `npm outdated` — bump `lucide-react` (0.453 → latest), `recharts`
       v2 → v3, `vitest` v2 → v3.
 - [x] **Remove `Avatar3D.diff` and `PlayerController.diff`** from the
-      repo root — *shipped in v7*. (The `diffs/` folder still
-      contains historical reference diffs from earlier drops; those
-      are intentional archive material, not stale code.)
+      repo root — *finally actually shipped in v9*. Marked done in v7
+      but the file deletion hadn't been applied to the repo until now.
+      The `diffs/` folder still contains historical reference diffs
+      from earlier drops; those are intentional archive material.
 - [x] **Consolidate `CHANGES_*.md` files** into a single
-      `CHANGELOG.md` — *shipped in v7*.
+      `CHANGELOG.md` — *finally actually shipped in v9*. Same story
+      as the diff files; the loose `CHANGES_*.md` files were removed
+      in v9.
 
 ---
 

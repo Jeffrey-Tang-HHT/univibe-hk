@@ -10,6 +10,8 @@
 import Environment3D from '../Environment3D';
 import EntryTrigger from '../EntryTrigger';
 import TapToWalk from '../TapToWalk';
+import FootprintTrail from '../FootprintTrail';
+import AmbientCreatures from '../AmbientCreatures';
 import { INTERIOR_SCENES, SCENES } from '@/lib/scenes';
 
 interface PlazaSceneProps {
@@ -28,6 +30,14 @@ export default function PlazaScene({ lang, currentZone, playerPosRef, onSetWaypo
         currentZone={currentZone}
         playerPosRef={playerPosRef}
       />
+
+      {/* v9: footprint trail behind the player. Pure decoration; reads the
+          shared player position bus and fades discs over 5s. */}
+      <FootprintTrail />
+
+      {/* v9: birds + butterflies. Decorative ambient creatures for the
+          "alive world" feel — only spawn outdoors. */}
+      <AmbientCreatures />
 
       {/* Click / double-tap on the ground → walk there. Same waypoint
           path as MiniMap's click-to-travel. */}
