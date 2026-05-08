@@ -1,10 +1,11 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import Avatar from './Avatar3D';
 import type { AvatarConfig } from '@/lib/plaza';
 import { resolveCollision, PLAYER_RADIUS } from './colliders';
+import { getToken } from '@/lib/auth';
 
 /**
  * NPC (Non-Player Character) population that brings the plaza to life.
@@ -52,6 +53,8 @@ interface NPCData {
   position: [number, number]; // Starting position (x, z)
   behavior: NPCBehavior;
   chatChance: number; // 0-1, probability per chat-tick (every ~10s)
+  /** If set, this NPC supports AI chat via /api/npc-chat. */
+  aiNpcId?: string;
 }
 
 // ───────── Chat line pools (bilingual, context-aware) ─────────
@@ -324,7 +327,83 @@ function generateNPCs(): NPCData[] {
     });
   }
 
-  return npcs;
+  // 4. Inject 5 special AI-capable NPCs at fixed positions. These are
+  //    the "characters you can actually talk to" — styled to stand out
+  //    slightly (expression:1) and always static so they're easy to find.
+  const AI_NPCS: NPCData[] = [
+    {
+      id: 'ai-librarian',
+      name: 'Ms. Chan',
+      zone: 'study',
+      config: {
+        bodyColor: '#5C6BC0', skinColor: '#F4C7A4', hairColor: '#2B1810',
+        hairStyle: 1, shirtColor: '#5C6BC0', pantsColor: '#37474F',
+        accessory: 1, expression: 1,
+      },
+      position: [-17, -18],
+      behavior: { kind: 'static', facing: Math.PI / 8 },
+      chatChance: 0.1,
+      aiNpcId: 'librarian',
+    },
+    {
+      id: 'ai-barista',
+      name: 'Leo',
+      zone: 'cafe',
+      config: {
+        bodyColor: '#FF7043', skinColor: '#D4A574', hairColor: '#1A1A1A',
+        hairStyle: 2, shirtColor: '#FF7043', pantsColor: '#424242',
+        accessory: 0, expression: 1,
+      },
+      position: [17, 20],
+      behavior: { kind: 'static', facing: -Math.PI / 6 },
+      chatChance: 0.1,
+      aiNpcId: 'cafe_barista',
+    },
+    {
+      id: 'ai-social-host',
+      name: 'Mia',
+      zone: 'social',
+      config: {
+        bodyColor: '#EC407A', skinColor: '#F2D6B8', hairColor: '#5D4037',
+        hairStyle: 0, shirtColor: '#EC407A', pantsColor: '#311B92',
+        accessory: 2, expression: 1,
+      },
+      position: [16, -17],
+      behavior: { kind: 'static', facing: Math.PI / 4 },
+      chatChance: 0.1,
+      aiNpcId: 'social_host',
+    },
+    {
+      id: 'ai-dating-advisor',
+      name: 'Uncle Raymond',
+      zone: 'dating',
+      config: {
+        bodyColor: '#AB47BC', skinColor: '#EDC3A3', hairColor: '#4A2E1E',
+        hairStyle: 1, shirtColor: '#AB47BC', pantsColor: '#4A148C',
+        accessory: 3, expression: 1,
+      },
+      position: [-20, 16],
+      behavior: { kind: 'static', facing: -Math.PI / 5 },
+      chatChance: 0.1,
+      aiNpcId: 'dating_advisor',
+    },
+    {
+      id: 'ai-study-buddy',
+      name: 'Kai',
+      zone: 'center',
+      config: {
+        bodyColor: '#26A69A', skinColor: '#FFD5B8', hairColor: '#212121',
+        hairStyle: 0, shirtColor: '#26A69A', pantsColor: '#263238',
+        accessory: 1, expression: 1,
+      },
+      position: [3, -2],
+      behavior: { kind: 'static', facing: 0 },
+      chatChance: 0.1,
+      aiNpcId: 'study_buddy',
+    },
+  ];
+
+  return [...npcs, ...AI_NPCS];
 }
 
 // ───────── Per-NPC runtime state (held outside React) ─────────
@@ -373,6 +452,11 @@ interface NPCAvatarProps {
 function NPCAvatar({ data, lang, registerGroup }: NPCAvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
   const [bubbleLine, setBubbleLine] = useState<ChatLine | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Register/unregister with parent
   useEffect(() => {
@@ -405,12 +489,42 @@ function NPCAvatar({ data, lang, registerGroup }: NPCAvatarProps) {
     };
   }, [data.chatChance, data.zone]);
 
+  const sendAiMessage = useCallback(async () => {
+    if (!data.aiNpcId || !inputValue.trim() || aiLoading) return;
+    const userMsg = inputValue.trim();
+    setInputValue('');
+    const newHistory = [...chatHistory, { role: 'user' as const, content: userMsg }];
+    setChatHistory(newHistory);
+    setAiLoading(true);
+    try {
+      const token = getToken();
+      const res = await fetch('/api/npc-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ npcId: data.aiNpcId, prompt: userMsg, history: chatHistory }),
+      });
+      const json = await res.json();
+      if (json.reply) {
+        setChatHistory([...newHistory, { role: 'assistant', content: json.reply }]);
+      }
+    } catch {
+      setChatHistory([...newHistory, { role: 'assistant', content: lang === 'zh' ? '唔好意思，我唔識答…' : 'Sorry, I couldn\'t respond right now.' }]);
+    } finally {
+      setAiLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [data.aiNpcId, inputValue, aiLoading, chatHistory, lang]);
+
   const isMoving = data.behavior.kind !== 'static';
   const initialPos: [number, number, number] = [data.position[0], 0, data.position[1]];
 
   return (
     <group ref={groupRef} position={initialPos}>
-      <Avatar config={data.config} isMoving={isMoving} />
+      <Avatar
+        config={data.config}
+        isMoving={isMoving}
+        onClick={data.aiNpcId ? () => { setChatOpen(o => !o); setChatHistory([]); } : undefined}
+      />
 
       {/* Nameplate */}
       <Html
@@ -423,10 +537,10 @@ function NPCAvatar({ data, lang, registerGroup }: NPCAvatarProps) {
           style={{
             padding: '2px 8px',
             borderRadius: 999,
-            background: 'rgba(20, 22, 30, 0.7)',
+            background: data.aiNpcId ? 'rgba(108, 99, 255, 0.85)' : 'rgba(20, 22, 30, 0.7)',
             backdropFilter: 'blur(6px)',
             WebkitBackdropFilter: 'blur(6px)',
-            border: '1px solid rgba(255,255,255,0.15)',
+            border: data.aiNpcId ? '1px solid rgba(200,190,255,0.4)' : '1px solid rgba(255,255,255,0.15)',
             color: 'rgba(255,255,255,0.9)',
             fontSize: 10,
             fontWeight: 500,
@@ -436,9 +550,91 @@ function NPCAvatar({ data, lang, registerGroup }: NPCAvatarProps) {
             userSelect: 'none',
           }}
         >
-          {data.name}
+          {data.name}{data.aiNpcId ? ' 💬' : ''}
         </div>
       </Html>
+
+      {/* AI Chat Panel */}
+      {data.aiNpcId && chatOpen && (
+        <Html
+          position={[0, 3.2, 0]}
+          center
+          zIndexRange={[20, 10]}
+        >
+          <div
+            style={{
+              width: 240,
+              background: 'rgba(14, 16, 26, 0.97)',
+              border: '1px solid rgba(108, 99, 255, 0.5)',
+              borderRadius: 14,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              fontFamily: "'Space Grotesk', sans-serif",
+            }}
+            onPointerDown={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '8px 12px', background: 'rgba(108,99,255,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(108,99,255,0.2)' }}>
+              <span style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>Chat with {data.name}</span>
+              <button
+                onClick={() => setChatOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+              >✕</button>
+            </div>
+
+            {/* Messages */}
+            <div style={{ height: 140, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {chatHistory.length === 0 && (
+                <div style={{ color: '#666', fontSize: 11, textAlign: 'center', marginTop: 8 }}>
+                  {lang === 'zh' ? `同 ${data.name} 打招呼吧！` : `Say hello to ${data.name}!`}
+                </div>
+              )}
+              {chatHistory.map((m, i) => (
+                <div key={i} style={{
+                  alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                  background: m.role === 'user' ? 'rgba(108,99,255,0.7)' : 'rgba(255,255,255,0.1)',
+                  color: '#fff',
+                  fontSize: 11,
+                  padding: '5px 9px',
+                  borderRadius: m.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                  maxWidth: '80%',
+                  lineHeight: 1.4,
+                }}>
+                  {m.content}
+                </div>
+              ))}
+              {aiLoading && (
+                <div style={{ alignSelf: 'flex-start', color: '#888', fontSize: 11, padding: '4px 8px' }}>…</div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div style={{ display: 'flex', padding: '6px', borderTop: '1px solid rgba(255,255,255,0.08)', gap: 4 }}>
+              <input
+                ref={inputRef}
+                value={inputValue}
+                onChange={e => setInputValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') sendAiMessage(); e.stopPropagation(); }}
+                placeholder={lang === 'zh' ? '輸入訊息…' : 'Type a message…'}
+                style={{
+                  flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 8, color: '#fff', fontSize: 11, padding: '4px 8px', outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+              <button
+                onClick={sendAiMessage}
+                disabled={aiLoading || !inputValue.trim()}
+                style={{
+                  background: 'rgba(108,99,255,0.8)', border: 'none', borderRadius: 8,
+                  color: '#fff', fontSize: 12, padding: '4px 10px', cursor: 'pointer',
+                  opacity: aiLoading || !inputValue.trim() ? 0.5 : 1,
+                }}
+              >↑</button>
+            </div>
+          </div>
+        </Html>
+      )}
 
       {/* Chat bubble — appears periodically */}
       {bubbleLine && (

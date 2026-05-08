@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import Avatar3D, { type EmoteName } from './Avatar3D';
 import { resolveCollision } from './colliders';
+import { findNearestBench } from './benches';
 import type { AvatarConfig } from '@/lib/plaza';
 
 interface PlayerControllerProps {
@@ -277,6 +278,27 @@ export default function PlayerController({
         (cur === null && prev === null) ||
         (cur !== null && prev !== null && cur.startMs === prev.startMs && cur.name === prev.name);
       if (!sameRef) {
+        // ── Sit emote: snap to nearest bench ──
+        // Only on the START transition (prev was null or different
+        // emote / startMs). Snapping mid-sit would teleport on every
+        // re-render. The bench module returns null if nothing's in
+        // range, in which case the avatar just sits in place — no
+        // worse than the v6 behaviour.
+        if (cur && cur.name === 'sit' && groupRef.current) {
+          const seat = findNearestBench(
+            groupRef.current.position.x,
+            groupRef.current.position.z,
+          );
+          if (seat) {
+            groupRef.current.position.x = seat.x;
+            groupRef.current.position.z = seat.z;
+            // Face the same way as the bench so the avatar's back
+            // rests against the back rest, legs extending forward.
+            currentRotRef.current = seat.rotation;
+            targetRotRef.current = seat.rotation;
+            velocityRef.current.set(0, 0, 0);
+          }
+        }
         setActiveEmote(cur);
       }
     }

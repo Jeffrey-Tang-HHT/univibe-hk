@@ -53,6 +53,10 @@ export interface PlazaPlayer {
   scene: SceneId;
   is_moving: boolean;
   is_me: boolean;
+  /** Currently-active emote broadcast by this player (null = none). */
+  emote: string | null;
+  /** Wall-clock ms when the emote started (server-side). */
+  emote_start_ms: number;
 }
 
 export interface PlazaBubble {
@@ -82,6 +86,8 @@ export async function updatePosition(data: {
   x: number; y: number; z: number;
   rotation: number; zone: string; is_moving: boolean;
   scene: SceneId;
+  emote?: string | null;
+  emote_start_ms?: number;
 }) {
   return plazaFetch('update-position', {
     method: 'POST',

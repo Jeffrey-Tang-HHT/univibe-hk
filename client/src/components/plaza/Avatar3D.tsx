@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import type { AvatarConfig } from '@/lib/plaza';
@@ -156,6 +156,36 @@ const ARM_SWING = 0.55;                    // ± radians
 const LEG_SWING = 0.75;                    // ± radians
 const IDLE_DAMP = 6;                       // how fast limbs return to neutral when stopping
 
+// ─── Reduced-motion mode ──────────────────────────────────────
+// Some students get motion sickness from the bouncy walk cycle. When
+// the OS-level `prefers-reduced-motion` flag is set, we:
+//   • drop the body bounce to ~0,
+//   • halve arm/leg swing,
+//   • shorten emotes' visible bobbing (the pose still plays, but
+//     anything driven by sin(t) inside an emote naturally has less
+//     impact because the swings are halved across the board).
+// The flag is read once via matchMedia and re-read on change events,
+// so toggling the OS setting takes effect without a reload.
+function usePrefersReducedMotion(): boolean {
+  const [reduce, setReduce] = useState(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = (e: MediaQueryListEvent) => setReduce(e.matches);
+    // Safari < 14 only supports addListener; modern browsers have addEventListener.
+    if (mql.addEventListener) mql.addEventListener('change', onChange);
+    else mql.addListener(onChange);
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener('change', onChange);
+      else mql.removeListener(onChange);
+    };
+  }, []);
+  return reduce;
+}
+
 export default function Avatar({
   config = DEFAULT_CONFIG,
   isMoving = false,
@@ -168,6 +198,18 @@ export default function Avatar({
   const rightArmRef = useRef<THREE.Group>(null);
   const leftLegRef = useRef<THREE.Group>(null);
   const rightLegRef = useRef<THREE.Group>(null);
+  // Shadow disc — sibling-style behaviour without actually lifting it
+  // out of the avatar group. Each frame we counter the group's y so
+  // the disc stays at world y ≈ 0.01 even during sit (group y = -0.35)
+  // or cheer (group y > 0). Mat ref lets us also fade with body height.
+  const shadowRef = useRef<THREE.Mesh>(null);
+  const shadowMatRef = useRef<THREE.MeshBasicMaterial>(null);
+
+  // Accessibility: respect the OS reduced-motion preference. Halves
+  // walk amplitudes and zeroes the body bounce. Emotes still play
+  // (they're communicative — the user opted in by tapping a button).
+  const reduceMotion = usePrefersReducedMotion();
+  const motionScale = reduceMotion ? 0.5 : 1;
 
   // Phase accumulator drives the walk cycle. We only advance it when moving
   // so the pose freezes on the last frame when stopping, then eases back
@@ -199,14 +241,16 @@ export default function Avatar({
 
     // ── Overall body bounce (vertical) ──
     bounceRef.current += delta * (isMoving ? 8 : 2);
-    const baseBounce = Math.sin(bounceRef.current) * (isMoving ? 0.08 : 0.03);
+    // motionScale = 0.5 when prefers-reduced-motion is set → halves bob.
+    const baseBounce =
+      Math.sin(bounceRef.current) * (isMoving ? 0.08 : 0.03) * motionScale;
     const targetY = (emotePose?.bodyY ?? 0) + (emoteActive ? 0 : baseBounce);
     groupRef.current.position.y = THREE.MathUtils.lerp(
       groupRef.current.position.y, targetY, Math.min(1, delta * 8),
     );
 
     // ── Body tilt / sway ──
-    const targetTiltZ = emotePose?.bodyTiltZ ?? (isMoving ? Math.sin(bounceRef.current * 0.5) * 0.05 : 0);
+    const targetTiltZ = emotePose?.bodyTiltZ ?? (isMoving ? Math.sin(bounceRef.current * 0.5) * 0.05 * motionScale : 0);
     const targetTiltX = emotePose?.bodyTiltX ?? 0;
     groupRef.current.rotation.z = THREE.MathUtils.lerp(
       groupRef.current.rotation.z, targetTiltZ, Math.min(1, delta * 6),
@@ -221,8 +265,9 @@ export default function Avatar({
     }
 
     const walkPhase = phaseRef.current;
-    const armAmp = (isMoving && !emoteActive) ? ARM_SWING : 0;
-    const legAmp = (isMoving && !emoteActive) ? LEG_SWING : 0;
+    // Reduced motion: halve the limb swings as well.
+    const armAmp = (isMoving && !emoteActive) ? ARM_SWING * motionScale : 0;
+    const legAmp = (isMoving && !emoteActive) ? LEG_SWING * motionScale : 0;
 
     // Walk targets
     const walkLArm = Math.sin(walkPhase) * armAmp;
@@ -254,6 +299,30 @@ export default function Avatar({
       leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, targetLLegX, ease);
     if (rightLegRef.current)
       rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, targetRLegX, ease);
+
+    // ── Shadow disc anchoring ──
+    // The avatar group has scale 0.5, so a shadow at local y=0.01 would
+    // sink into the ground when the group's y goes negative (sit emote)
+    // or float visibly when the body lifts (cheer / jump). Counter the
+    // group y in local space so the disc stays at world y ≈ 0.01.
+    //   world_y = groupY + shadowY * 0.5  →  shadowY = (0.01 - groupY) / 0.5
+    if (shadowRef.current) {
+      const groupY = groupRef.current.position.y;
+      shadowRef.current.position.y = (0.01 - groupY) * 2;
+
+      // Subtle scale + fade with body height so the shadow reads as a
+      // contact patch: larger/softer when the avatar is up off the
+      // ground, smaller/darker when sitting on it. Clamps keep it
+      // sensible for any future bigger emote ranges.
+      const bodyHeight = Math.max(-0.5, Math.min(0.5, groupY));
+      const scale = THREE.MathUtils.clamp(1 + bodyHeight * 0.6, 0.7, 1.4);
+      shadowRef.current.scale.set(scale, scale, 1);
+      if (shadowMatRef.current) {
+        shadowMatRef.current.opacity = THREE.MathUtils.clamp(
+          0.18 - bodyHeight * 0.15, 0.08, 0.22,
+        );
+      }
+    }
   });
 
   const skinMat = useMemo(() => new THREE.MeshToonMaterial({ color: c.skinColor }), [c.skinColor]);
@@ -374,10 +443,11 @@ export default function Avatar({
       {/* Accessory */}
       <Accessory type={c.accessory} />
 
-      {/* Shadow blob */}
-      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* Shadow blob — local y is rewritten each frame so the disc
+          stays glued to the ground even when the body lifts/sits. */}
+      <mesh ref={shadowRef} position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[0.25, 16]} />
-        <meshBasicMaterial color="#000000" transparent opacity={0.15} />
+        <meshBasicMaterial ref={shadowMatRef} color="#000000" transparent opacity={0.15} />
       </mesh>
     </group>
   );

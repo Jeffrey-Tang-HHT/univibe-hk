@@ -1,8 +1,8 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { Text, Billboard } from '@react-three/drei';
-import Avatar3D from './Avatar3D';
+import { Text, Billboard, Html } from '@react-three/drei';
+import Avatar3D, { getEmoteDuration, type EmoteName } from './Avatar3D';
 import type { PlazaPlayer, PlazaBubble } from '@/lib/plaza';
 
 interface OtherPlayersProps {
@@ -10,6 +10,21 @@ interface OtherPlayersProps {
   bubbles: PlazaBubble[];
   onPlayerClick?: (player: PlazaPlayer) => void;
 }
+
+// Emoji glyph for each emote — mirrors EmoteBar's table so the popup
+// matches what the user sees in the picker. Kept in this file (rather
+// than imported from EmoteBar) because EmoteBar is HUD-side and this
+// is scene-side; sharing the constant would create an awkward dep
+// loop. Six entries, one short table — fine to duplicate.
+const EMOTE_EMOJI: Record<EmoteName, string> = {
+  wave:  '👋',
+  cheer: '🙌',
+  dance: '💃',
+  clap:  '👏',
+  bow:   '🙇',
+  point: '👉',
+  sit:   '🪑',
+};
 
 export default function OtherPlayers({ players, bubbles, onPlayerClick }: OtherPlayersProps) {
   return (
@@ -84,6 +99,8 @@ function RemotePlayer({
         config={player.avatar_config}
         isMoving={player.is_moving}
         onClick={onClick}
+        emote={(player.emote as import('./Avatar3D').EmoteName) ?? null}
+        emoteStartMs={player.emote_start_ms ?? 0}
       />
 
       {/* Name tag — billboarded layered planes */}
@@ -144,7 +161,106 @@ function RemotePlayer({
 
       {/* Chat bubble */}
       {bubble && <ChatBubble3D content={bubble.content} />}
+
+      {/* Active-emote emoji popup — pops above the avatar's head when
+          an emote starts and fades out as the emote ends. Lightweight
+          companion to the body animation: even when an emote is hard
+          to read at distance (e.g. a small wave seen from across the
+          plaza), the emoji makes the gesture instantly legible. */}
+      {player.emote && player.emote_start_ms > 0 && (
+        <EmotePopup
+          name={player.emote as EmoteName}
+          startMs={player.emote_start_ms}
+        />
+      )}
     </group>
+  );
+}
+
+// ─── EmotePopup ──────────────────────────────────────────────
+// Small floating emoji rendered via drei <Html> so colour emojis
+// render correctly (drei's <Text> uses Troika SDF, which doesn't
+// handle colour emoji glyphs). Self-expires by checking elapsed
+// time vs the emote's duration. Hides itself after the emote ends
+// so we don't accumulate stale popups on the scene graph.
+//
+// Lifecycle visualised:
+//   start ─[ pop in 200ms ]─[ hold ]─[ fade out 400ms ]─ done
+function EmotePopup({ name, startMs }: { name: EmoteName; startMs: number }) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+
+  useFrame(() => {
+    if (!elRef.current) return;
+    const elapsed = Date.now() - startMs;
+    const duration = getEmoteDuration(name);
+    const totalLife = duration + 400; // emote duration + fade tail
+
+    if (elapsed < 0 || elapsed > totalLife) {
+      // React state flip rather than just hiding via style — once we're
+      // done we want React to drop the <Html> portal entirely.
+      if (visible) setVisible(false);
+      return;
+    }
+
+    let opacity = 1;
+    if (elapsed < 200) opacity = elapsed / 200;
+    else if (elapsed > duration) opacity = Math.max(0, 1 - (elapsed - duration) / 400);
+
+    // Subtle bob — tiny vertical wobble so the popup feels alive.
+    const bob = Math.sin(elapsed * 0.008) * 4; // px, applied via translateY
+    // Pop scale — overshoot then settle.
+    let scale = 1;
+    if (elapsed < 200) scale = THREE.MathUtils.lerp(0.4, 1.1, elapsed / 200);
+    else if (elapsed < 350) scale = THREE.MathUtils.lerp(1.1, 1.0, (elapsed - 200) / 150);
+
+    // We write directly to the element style — useState here would
+    // re-render every frame, defeating the whole point of useFrame.
+    elRef.current.style.opacity = String(opacity);
+    elRef.current.style.transform = `translate(-50%, calc(-50% + ${-bob}px)) scale(${scale})`;
+  });
+
+  // Reset visibility if the parent reuses this component for a new
+  // emote (different startMs) — the popup might have hidden itself
+  // during the previous emote.
+  useEffect(() => { setVisible(true); }, [startMs, name]);
+
+  if (!visible) return null;
+
+  const emoji = EMOTE_EMOJI[name] ?? '✨';
+
+  return (
+    <Html
+      position={[0, 2.95, 0]}
+      center
+      zIndexRange={[20, 0]}
+      style={{ pointerEvents: 'none' }}
+    >
+      <div
+        ref={elRef}
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          transform: 'translate(-50%, -50%)',
+          // Pill backdrop — same vibe as the name tag for visual continuity.
+          padding: '4px 10px',
+          borderRadius: 999,
+          background: 'rgba(15, 17, 25, 0.78)',
+          border: '1px solid rgba(255, 255, 255, 0.18)',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
+          fontSize: 22,
+          lineHeight: 1,
+          // System emoji font stack — matches whatever the user's OS
+          // ships with rather than relying on a webfont.
+          fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+          whiteSpace: 'nowrap',
+          willChange: 'opacity, transform',
+        }}
+      >
+        {emoji}
+      </div>
+    </Html>
   );
 }
 

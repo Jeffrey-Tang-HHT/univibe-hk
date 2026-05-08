@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: 'Too many updates' });
       }
 
-      const { x, y, z, rotation, zone, is_moving, scene } = req.body;
+      const { x, y, z, rotation, zone, is_moving, scene, emote, emote_start_ms } = req.body;
 
       // Validate position bounds
       const px = Math.max(-50, Math.min(50, parseFloat(x) || 0));
@@ -45,6 +45,18 @@ export default async function handler(req, res) {
       // working against the new API without crashing presence.
       const safeScene = normalizeScene(scene);
 
+      // Networked emotes — validate and enforce a 5-second TTL so emotes
+      // don't get stuck on disconnected players (longest emote ~4 s + buffer).
+      const EMOTE_TTL_MS = 5000;
+      const VALID_EMOTES = ['wave', 'dance', 'clap', 'bow', 'cheer', 'sit', 'point'];
+      const now = Date.now();
+      const emoteStartMs = parseInt(emote_start_ms) || 0;
+      const safeEmote =
+        emote && VALID_EMOTES.includes(emote) && now - emoteStartMs < EMOTE_TTL_MS
+          ? emote
+          : null;
+      const safeEmoteStartMs = safeEmote ? emoteStartMs : 0;
+
       // Upsert presence
       const presenceData = {
         user_id: user.userId,
@@ -53,6 +65,8 @@ export default async function handler(req, res) {
         zone: safeZone,
         scene: safeScene,
         is_moving: !!is_moving,
+        emote: safeEmote,
+        emote_start_ms: safeEmoteStartMs,
         updated_at: new Date().toISOString()
       };
 
@@ -122,7 +136,9 @@ export default async function handler(req, res) {
             zone: p.zone,
             scene: p.scene || DEFAULT_SCENE,
             is_moving: p.is_moving,
-            is_me: p.user_id === user.userId
+            is_me: p.user_id === user.userId,
+            emote: p.emote || null,
+            emote_start_ms: p.emote_start_ms || 0,
           });
         } catch (e) {}
       }

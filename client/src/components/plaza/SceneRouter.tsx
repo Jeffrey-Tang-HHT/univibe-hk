@@ -43,6 +43,7 @@ export default function SceneRouter({ lang, currentZone, playerPosRef, onSetWayp
       sceneId={currentScene}
       lang={lang}
       playerPosRef={playerPosRef}
+      onSetWaypoint={onSetWaypoint}
     />
   );
 }

@@ -16,14 +16,17 @@ import { Text } from '@react-three/drei';
 import type { SceneId } from '@/lib/plaza';
 import { getSceneConfig } from '@/lib/scenes';
 import EntryTrigger from '../EntryTrigger';
+import TapToWalk from '../TapToWalk';
 
 interface InteriorSceneProps {
   sceneId: SceneId;
   lang: string;
   playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
+  /** Optional tap-to-walk waypoint setter — same plumbing as PlazaScene. */
+  onSetWaypoint?: (x: number, z: number) => void;
 }
 
-export default function InteriorScene({ sceneId, lang, playerPosRef }: InteriorSceneProps) {
+export default function InteriorScene({ sceneId, lang, playerPosRef, onSetWaypoint }: InteriorSceneProps) {
   const cfg = getSceneConfig(sceneId);
   const { hx, hz } = cfg.bounds;
 
@@ -132,6 +135,9 @@ export default function InteriorScene({ sceneId, lang, playerPosRef }: InteriorS
 
       {/* A general fill light so corners aren't pitch black. */}
       <ambientLight intensity={0.3} color="#FFFFFF" />
+
+      {/* Tap-to-walk — same plumbing as PlazaScene, bounds match the interior. */}
+      {onSetWaypoint && <TapToWalk onSetWaypoint={onSetWaypoint} size={Math.max(hx, hz) * 2 + 4} />}
 
       {/* Exit pad — walking onto it triggers a return to the plaza. */}
       <ExitPad sceneId={sceneId} lang={lang} playerPosRef={playerPosRef} />

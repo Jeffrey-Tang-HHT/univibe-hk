@@ -1,8 +1,16 @@
 # UniGo HK — Follow-up TODO
 
-Curated post-v6 work, ordered by impact / effort. Items marked
+Curated post-v8 work, ordered by impact / effort. Items marked
 `[shippable]` can be tackled in isolation; `[depends-on:X]` need
 another item first.
+
+> **Status note (2026-05-08):** v7 shipped networked emotes,
+> AI-powered NPCs, and tap-to-walk in interiors (the v7 entry in
+> `CHANGELOG.md` covers details; the corresponding `migration-v8-emotes.sql`
+> shipped in v8 to catch up the schema). v8 then shipped the avatar
+> shadow fix, bench-anchored sit, reduced-motion, long-press wave,
+> and the remote-player emoji popup. The remaining items below are
+> still open.
 
 ---
 
@@ -10,35 +18,15 @@ another item first.
 
 ### High impact
 
-- [ ] **Networked emotes** `[shippable]`
-  Right now emotes are local-only. Other players don't see your wave.
-  Plan:
-  1. Extend the position broadcast in `lib/plaza.ts` (`updatePosition`)
-     to include `{ emote: string | null, emoteStartMs: number }`.
-  2. Server-side (`api/plaza.mjs`) — store in the player heartbeat
-     row, return in the `getPlayers` response.
-  3. `OtherPlayers.tsx` — pass `emote` / `emoteStartMs` props down to
-     `<Avatar3D>` (already supported in v6).
-  4. Add a 5-second TTL: the server clears `emote` if `emoteStartMs`
-     is older than the longest emote duration (~4s) plus a small
-     buffer, so emotes don't get stuck on disconnected players.
-  Estimated: 2–3 hours.
+- [x] **Networked emotes** `[shippable]` — *shipped in v7*
+  Emotes now broadcast to all players in the same scene; 5-second
+  TTL prevents stuck emotes on disconnected players. Schema migration
+  shipped in v8 (`migration-v8-emotes.sql`).
 
-- [ ] **AI-powered NPCs** `[shippable]`
-  Replace the canned NPC dialogue in `NPCs.tsx` with on-demand
-  Claude API calls.
-  Plan:
-  1. New `api/npc-chat.mjs` Vercel function — takes `{ npcId, prompt,
-     history }`, returns Claude completion. Apply the existing rate
-     limiter (10 / user / hour is a good start).
-  2. Each NPC gets a personality preamble (system prompt). Store the
-     personalities in `client/src/components/plaza/NPCs.tsx` next to
-     the existing NPC defs.
-  3. Click an NPC → opens a small chat panel (style after the player
-     chat bubble). User messages route through the new endpoint.
-  4. Conversation history stays client-side (no DB) for privacy +
-     simplicity. Resets on plaza reload.
-  Estimated: 1 day.
+- [x] **AI-powered NPCs** `[shippable]` — *shipped in v7*
+  `api/npc-chat.mjs` plus five personality preambles (Ms. Chan, Leo,
+  Mia, Uncle Raymond, Kai). 10 req/user/hour rate limit,
+  client-side history, click-to-chat panel.
 
 - [ ] **Day/night settings panel** `[depends-on: settings menu skeleton]`
   Right now the day/night mode is a single icon that cycles through
@@ -51,17 +39,15 @@ another item first.
   Integrate into the existing AvatarCustomizer dialog as a second
   tab, or create a new "Plaza Settings" dialog.
 
-- [ ] **Sit emote: anchor to benches** `[shippable]`
-  v6 sit emote just lowers the avatar in place. Make it snap to the
-  nearest bench (within 1.5m) when triggered, so players actually
-  appear to be sitting on something. Bench positions are in
-  `Environment3D.tsx` / `ZoneLandmarks.tsx`.
+- [x] **Sit emote: anchor to benches** `[shippable]` — *shipped in v8*
+  New `benches.ts` module with `findNearestBench`. `PlayerController`
+  snaps the player to the closest bench within 1.5m on sit-emote
+  start, plus rotates to match the bench's facing.
 
-- [ ] **Avatar shadow during sit emote**
-  When `bodyY < 0`, the avatar's shadow disc clips into the ground.
-  Move the shadow disc to be a sibling of the avatar group (anchored
-  to world y=0.01) instead of a child, OR scale + fade the shadow
-  with body height.
+- [x] **Avatar shadow during sit emote** — *shipped in v8*
+  Shadow disc now counters the group's y-offset each frame so it
+  stays anchored to world y ≈ 0.01, with subtle scale + opacity
+  ramp tied to body height.
 
 ### Visual / world
 
@@ -121,9 +107,10 @@ another item first.
   Realtime channels. Mute toggle per-pair, plus a global mute in
   the HUD.
 
-- [ ] **Player gestures broadcast** `[depends-on: networked emotes]`
-  Once emotes broadcast, add reactive emojis above the avatar's head
-  (already a pattern in `OtherPlayers.tsx` for chat bubbles).
+- [x] **Player gestures broadcast** `[depends-on: networked emotes]` — *shipped in v8*
+  Reactive emoji popup above the avatar's head when an emote is
+  active. Drei `<Html>` for proper colour-emoji rendering;
+  pop-in / hold / fade lifecycle keyed off the emote's duration.
 
 - [ ] **Spectator mode for first-time visitors**
   Brand-new users (no avatar saved) drop into a no-collision, ghost
@@ -132,19 +119,19 @@ another item first.
 
 ### Mobile
 
-- [ ] **Tap-to-walk inside interiors** `[shippable]`
-  v6 only mounts `TapToWalk` in the outdoor `PlazaScene`. Add it to
-  `InteriorScene` too — the same plumbing should work, just place
-  the catcher to match each interior's bounds.
+- [x] **Tap-to-walk inside interiors** `[shippable]` — *shipped in v7*
+  `InteriorScene.tsx` now mounts `<TapToWalk>` clamped to the
+  scene bounds; `SceneRouter.tsx` forwards `onSetWaypoint`.
 
-- [ ] **Long-press emote shortcut**
-  Long-press the joystick = play "wave" emote. No need to open the
-  emote bar for the most common gesture.
+- [x] **Long-press emote shortcut** — *shipped in v8*
+  `VirtualJoystick` exposes `onLongPress` + `longPressMs` (default
+  500ms). 8px dead-zone; press is consumed once fired so dragging
+  back to centre doesn't retrigger. `Plaza.tsx` plays "wave".
 
-- [ ] **Reduced-motion / accessibility mode**
-  Some students get motion sickness from the bouncy walk cycle.
-  Respect `prefers-reduced-motion` in `Avatar3D.tsx` (skip body
-  bounce, halve walk amplitudes) and reduce camera follow lerp.
+- [x] **Reduced-motion / accessibility mode** — *shipped in v8*
+  `Avatar3D.tsx` reads `(prefers-reduced-motion: reduce)` via
+  matchMedia (Safari < 14 fallback included). Halves bounce/swing;
+  emotes unaffected (opt-in user gesture).
 
 ---
 
@@ -164,6 +151,9 @@ another item first.
 ## 🤖 AI features
 
 - [ ] **AI study buddy** in Study Zone (Claude API).
+  *Note:* infrastructure already in place — `api/npc-chat.mjs` with
+  the `study_buddy` (Kai) personality is the obvious starting point;
+  the gap is a dedicated study-zone UI hooked into it.
 - [ ] **Smart matchmaking** in Dating — embeddings-based compatibility
       scoring on top of MBTI.
 - [ ] **Auto-translate** chat messages between zh/en (you already
@@ -197,10 +187,12 @@ another item first.
 
 - [ ] `npm outdated` — bump `lucide-react` (0.453 → latest), `recharts`
       v2 → v3, `vitest` v2 → v3.
-- [ ] **Remove `Avatar3D.diff` and `PlayerController.diff`** from the
-      repo root — these are leftovers from older drops; the
-      authoritative code is in `client/src/components/plaza/`.
-- [ ] **Consolidate `CHANGES_*.md` files** into a single `CHANGELOG.md`.
+- [x] **Remove `Avatar3D.diff` and `PlayerController.diff`** from the
+      repo root — *shipped in v7*. (The `diffs/` folder still
+      contains historical reference diffs from earlier drops; those
+      are intentional archive material, not stale code.)
+- [x] **Consolidate `CHANGES_*.md` files** into a single
+      `CHANGELOG.md` — *shipped in v7*.
 
 ---
 

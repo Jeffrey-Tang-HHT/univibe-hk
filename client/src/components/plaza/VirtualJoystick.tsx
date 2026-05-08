@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 
 /**
  * Virtual joystick for touch-screen movement.
@@ -18,18 +18,43 @@ interface VirtualJoystickProps {
   className?: string;
   /** Outer diameter in px. Default 120. */
   size?: number;
+  /**
+   * Optional long-press handler. Fires once when the user holds the
+   * joystick down for `longPressMs` *without* moving the knob beyond a
+   * small dead-zone. Used by the plaza HUD to play the "wave" emote
+   * without opening the EmoteBar — long-press is the most-common
+   * gesture, this saves a tap.
+   *
+   * The handler is fired at most once per pointerdown — moving the
+   * knob, lifting the finger, or holding past the threshold and
+   * releasing all consume the press. A second long-press requires a
+   * fresh pointerdown.
+   */
+  onLongPress?: () => void;
+  /** ms to hold without moving before onLongPress fires. Default 500. */
+  longPressMs?: number;
 }
 
 export default function VirtualJoystick({
   dirRef,
   className = '',
   size = 120,
+  onLongPress,
+  longPressMs = 500,
 }: VirtualJoystickProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pointerIdRef = useRef<number | null>(null);
   const centerRef = useRef({ x: 0, y: 0 });
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const [active, setActive] = useState(false);
+
+  // Long-press tracking. The timer is set on pointerdown and cleared
+  // when the knob moves past LONG_PRESS_DEADZONE (in px) or the
+  // pointer is released. Once fired, the press is "consumed" so the
+  // user can't accidentally retrigger by dragging back to centre.
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
+  const LONG_PRESS_DEADZONE = 8; // px
 
   const knobSize = 50;
   const maxDist = size / 2 - knobSize / 2 - 4;
@@ -46,9 +71,24 @@ export default function VirtualJoystick({
       setKnob({ x: kx, y: ky });
       dirRef.current.x = kx / maxDist;
       dirRef.current.z = ky / maxDist;
+
+      // Cancel pending long-press if the user moves outside the dead-zone.
+      // We use raw dist (not clamped) so a finger that grazes the edge
+      // before settling doesn't accidentally trigger a wave.
+      if (longPressTimerRef.current && dist > LONG_PRESS_DEADZONE) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
     },
     [dirRef, maxDist],
   );
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
 
   const release = useCallback(() => {
     pointerIdRef.current = null;
@@ -56,7 +96,13 @@ export default function VirtualJoystick({
     setKnob({ x: 0, y: 0 });
     dirRef.current.x = 0;
     dirRef.current.z = 0;
-  }, [dirRef]);
+    cancelLongPress();
+    longPressFiredRef.current = false;
+  }, [dirRef, cancelLongPress]);
+
+  // Cleanup on unmount — orphaned timers would otherwise fire on a
+  // dead component if the user navigates away mid-press.
+  useEffect(() => () => cancelLongPress(), [cancelLongPress]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -71,8 +117,18 @@ export default function VirtualJoystick({
       containerRef.current.setPointerCapture(e.pointerId);
       setActive(true);
       updateFromPoint(e.clientX, e.clientY);
+
+      // Arm the long-press timer if the caller wired one up.
+      if (onLongPress && !longPressFiredRef.current) {
+        cancelLongPress(); // belt-and-braces — shouldn't already be set
+        longPressTimerRef.current = setTimeout(() => {
+          longPressFiredRef.current = true;
+          longPressTimerRef.current = null;
+          onLongPress();
+        }, longPressMs);
+      }
     },
-    [updateFromPoint],
+    [updateFromPoint, onLongPress, longPressMs, cancelLongPress],
   );
 
   const onPointerMove = useCallback(

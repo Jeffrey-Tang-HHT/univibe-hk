@@ -329,7 +329,11 @@ function PlazaInner() {
     setMyPosition({ x, z });
     setMyRotation(rotation);
     setCurrentZone(zone);
-    updatePosition({ x, y, z, rotation, zone, is_moving: isMoving, scene: currentScene }).catch(() => {});
+    updatePosition({
+      x, y, z, rotation, zone, is_moving: isMoving, scene: currentScene,
+      emote: emoteRef.current?.name ?? null,
+      emote_start_ms: emoteRef.current?.startMs ?? 0,
+    }).catch(() => {});
   }, [currentScene]);
 
   // Click-to-travel: MiniMap hands us a world-space target. We store it in
@@ -766,7 +770,17 @@ function PlazaInner() {
       {/* ─── Virtual Joystick + Emote Bar (v6) ─── */}
       <div className="absolute bottom-24 right-4 z-50 flex flex-col items-end gap-3">
         <EmoteBar emoteRef={emoteRef} lang={lang} />
-        <VirtualJoystick dirRef={touchDirRef} />
+        <VirtualJoystick
+          dirRef={touchDirRef}
+          onLongPress={() => {
+            // Long-press = wave. Skip if another emote is already playing
+            // so we don't yank the user out of, e.g., a sit. Same logic as
+            // EmoteBar.trigger so behaviour is consistent across sources.
+            const cur = emoteRef.current;
+            if (cur && cur.name === 'wave') return;
+            emoteRef.current = { name: 'wave', startMs: Date.now() };
+          }}
+        />
       </div>
 
       {/* ─── Movement instructions (auto-hides) ─── */}

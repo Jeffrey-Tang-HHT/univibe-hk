@@ -6,6 +6,7 @@ import ZoneLandmarks from './ZoneLandmarks';
 import ZoneLabels from './ZoneLabels';
 import FountainCallout from './FountainCallout';
 import NPCs from './NPCs';
+import { BENCH_POSITIONS } from './benches';
 
 interface ZoneConfig {
   position: [number, number, number];
@@ -1439,12 +1440,6 @@ const TREE_POSITIONS: [number, number, number][] = [
   [-25, 0, -25], [25, 0, -25], [-25, 0, 25], [25, 0, 25],
   [-30, 0, 0], [30, 0, 0], [0, 0, -28], [0, 0, 30],
   [-12, 0, 20], [12, 0, -20], [-22, 0, 12], [22, 0, -12],
-];
-
-const BENCH_POSITIONS: [number, number, number, number?][] = [
-  [-5, 0, -5, 0.3], [5, 0, -5, -0.3], [-5, 0, 5, -0.3], [5, 0, 5, 0.3],
-  [-20, 0, -18, Math.PI / 4], [20, 0, -18, -Math.PI / 4],
-  [-20, 0, 20, -Math.PI / 4], [20, 0, 20, Math.PI / 4],
 ];
 
 const LAMP_POSITIONS: [number, number, number][] = [
