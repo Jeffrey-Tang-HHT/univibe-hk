@@ -1,6 +1,6 @@
 # UniGo HK — Follow-up TODO
 
-Curated post-v9 work, ordered by impact / effort. Items marked
+Curated post-v10 work, ordered by impact / effort. Items marked
 `[shippable]` can be tackled in isolation; `[depends-on:X]` need
 another item first.
 
@@ -8,13 +8,13 @@ another item first.
 > AI-powered NPCs, and tap-to-walk in interiors. v8 shipped the
 > avatar shadow fix, bench-anchored sit, reduced-motion, long-press
 > wave, the remote-player emoji popup, and the v7 schema catch-up
-> (`migration-v8-emotes.sql`). v9 (this drop) shipped the day/night
-> settings panel, animated fountain water, distance-culling for
-> NPCs / remote players, LOD trees, footprint trails, birds +
-> butterflies, the lucide-react bundle split, and the housekeeping
-> file cleanup (`Avatar3D.diff` / `PlayerController.diff` /
-> `CHANGES_*.md` finally removed from the repo root). The remaining
-> items below are still open.
+> (`migration-v8-emotes.sql`). v9 shipped the day/night settings
+> panel, animated fountain water, distance-culling, LOD trees,
+> footprint trails, birds + butterflies, the lucide-react bundle
+> split, and housekeeping cleanup. v10 (this drop) shipped the
+> weather system, spectator-style first-visit welcome, PWA
+> manifest + service worker, auto-translate chat (zh↔en), and a
+> minor lucide-react bump. The remaining items below are still open.
 
 ---
 
@@ -66,12 +66,14 @@ another item first.
   the water inside each bowl. Same uniforms object shared across
   tiers so the time scroll stays in sync.
 
-- [ ] **Weather system**
-  Optional per-day weather: clear / cloudy / light rain. Cloudy =
-  more `CLOUD_POSITIONS` rendered + sun intensity ×0.7. Rain = a
-  `<Points>` rain particle system + slight fog colour shift.
-  Could roll a daily seed off the date so all players see the same
-  weather on the same day.
+- [x] **Weather system** — *shipped in v10*
+  Deterministic per-day HK weather rolled from a date hash —
+  ~60% clear, ~25% cloudy, ~15% rain. New `weather.ts` (resolver
+  + dev override hook), `Weather.tsx` (rain particles that follow
+  the player + extra cloud puffs), and `DayNightCycle.tsx`
+  extended with `sunMultiplier` + `fogTint` props. Cloudy /
+  rainy days dim the sun ×0.7 / ×0.45 and tint fog grey. Small
+  HUD pill shows the current weather on non-clear days.
 
 - [x] **Footprint / dust trail** — *shipped in v9*
   `FootprintTrail.tsx` — ring buffer of 24 fading discs allocated
@@ -129,10 +131,16 @@ another item first.
   active. Drei `<Html>` for proper colour-emoji rendering;
   pop-in / hold / fade lifecycle keyed off the emote's duration.
 
-- [ ] **Spectator mode for first-time visitors**
-  Brand-new users (no avatar saved) drop into a no-collision, ghost
-  camera that watches the plaza for 30 seconds before being prompted
-  to customize their avatar. Reduces first-impression bounce.
+- [x] **Spectator mode for first-time visitors** — *shipped in v10
+      (lighter interpretation)*
+  Original ask was a no-collision ghost camera for 30s; that's a
+  bigger refactor than warranted. Shipped instead: a soft welcome
+  card (`SpectatorWelcome.tsx`) that overlays the live scene for
+  30s with a countdown, a "Customize now" CTA, and a "Just look
+  around" dismiss. Auto-opens AvatarCustomizer when the timer
+  expires. Detection: `!user.avatar_config && !localStorage
+  .plaza:hasVisited`. Returning users skip it. The component file
+  has a comment block explaining the deviation.
 
 ### Mobile
 
@@ -173,19 +181,45 @@ another item first.
   the gap is a dedicated study-zone UI hooked into it.
 - [ ] **Smart matchmaking** in Dating — embeddings-based compatibility
       scoring on top of MBTI.
-- [ ] **Auto-translate** chat messages between zh/en (you already
-      have `LanguageContext`).
+- [x] **Auto-translate** chat messages between zh/en — *shipped in v10*
+  New `api/translate.mjs` (Claude Haiku, HK-Cantonese-flavoured
+  zh output, casual student-register en output, 60/user/hour
+  rate limit, per-instance LRU cache) + `client/src/lib/translate.ts`
+  helper with session cache. Opt-in toggle in the chat panel
+  (persisted to `plaza:autoTranslate`). New `<ChatBubbleLine>`
+  subcomponent shows `↻` while pending, `(✦)` next to translated
+  bubbles, original on hover via `title`. Source-language
+  detected by CJK glyph ratio; same-language requests skip the
+  API entirely.
 
 ---
 
 ## 📱 PWA / mobile
 
-- [ ] **Add manifest.json + service worker** so `.edu.hk` students
-      can install the app.
+- [x] **Add manifest.json + service worker** — *shipped in v10*
+  `client/public/manifest.webmanifest` (name, theme-color,
+  shortcuts to plaza/feed/dating, three icon refs) and
+  `client/public/sw.js` (versioned cache, app-shell pre-cache,
+  stale-while-revalidate for navigation, cache-first for hashed
+  `/assets/*`, network-only for `/api/*`). Registered in
+  `main.tsx` production-only. **Caveat**: the icon PNGs
+  themselves (`icon-192.png`, `icon-512.png`,
+  `icon-maskable-512.png`) need to be added to `client/public/`
+  for a clean install prompt — until then the install prompt
+  may show a generic icon.
 - [ ] **Push notifications** for new chat messages / matches /
       nearby plaza users.
-- [ ] **Offline shell** — landing page renders from cache so the app
-      never shows a connection error on first load.
+- [x] **Offline shell** — *partly shipped in v10*
+  The service worker pre-caches `/`, `/index.html`, and the
+  manifest, and serves the cached shell as a fallback when the
+  user navigates while offline. SPA routes still resolve because
+  index.html is served for any navigation request. Hashed
+  `/assets/*` build artifacts are cached on first fetch so a
+  return visit while offline shows the full UI. Not "true"
+  offline — `/api/*` is intentionally never cached, so any
+  data-driven page (feed, plaza presence, chat) shows empty
+  state offline. That's the right tradeoff: stale data is
+  worse than no data for those views.
 
 ---
 
@@ -202,8 +236,14 @@ another item first.
 
 ## ⚙️ Tech stack housekeeping
 
-- [ ] `npm outdated` — bump `lucide-react` (0.453 → latest), `recharts`
-      v2 → v3, `vitest` v2 → v3.
+- [~] `npm outdated` — partial. v10 bumped `lucide-react`
+      `^0.453.0` → `^0.548.0` (all minor within 0.x; the per-icon
+      alias is unaffected). **Skipped** the lucide v1.x bump
+      (icon renames + alias path may have moved — needs a
+      dedicated housekeeping ticket) and **skipped** recharts v2
+      → v3 (documented breaking changes in `Customized` and
+      `CategoricalChartState`; needs a focused review of the
+      analytics/dating pages first). Vitest v3 still pending.
 - [x] **Remove `Avatar3D.diff` and `PlayerController.diff`** from the
       repo root — *finally actually shipped in v9*. Marked done in v7
       but the file deletion hadn't been applied to the repo until now.

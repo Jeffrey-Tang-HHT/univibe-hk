@@ -1,0 +1,54 @@
+{
+  "name": "UniGo HK",
+  "short_name": "UniGo",
+  "description": "Hong Kong's student-only campus universe — social, dating, and 3D plaza for .edu.hk students.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1119",
+  "theme_color": "#6C63FF",
+  "lang": "zh-HK",
+  "dir": "auto",
+  "categories": ["social", "education", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "3D Plaza",
+      "short_name": "Plaza",
+      "url": "/plaza",
+      "description": "Enter the live 3D campus plaza."
+    },
+    {
+      "name": "Feed",
+      "short_name": "Feed",
+      "url": "/feed",
+      "description": "Open the social feed."
+    },
+    {
+      "name": "Dating",
+      "short_name": "Dating",
+      "url": "/dating",
+      "description": "Browse matches."
+    }
+  ]
+}

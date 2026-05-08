@@ -38,6 +38,18 @@ interface DayNightCycleProps {
    * each frame so the user can flip the switch without remounting.
    */
   starsEnabled?: boolean;
+  /**
+   * v10: weather-driven sun-intensity multiplier. 1.0 = clear, ~0.7 = cloudy,
+   * ~0.45 = heavy rain. Applied on top of the keyframe-derived sunIntensity
+   * so the day/night arc is preserved (just dimmer overall on bad weather).
+   */
+  sunMultiplier?: number;
+  /**
+   * v10: weather-driven fog tint. When present, fog colour lerps toward this
+   * (and fog far is pulled in slightly) to reinforce the overcast/rainy look.
+   * Skip for clear weather; that defers to the keyframe fog colour.
+   */
+  fogTint?: string | null;
 }
 
 // ── Phase keyframes ────────────────────────────────────────────
@@ -225,6 +237,8 @@ export default function DayNightCycle({
   fixedHour = 13,
   isMobile = false,
   starsEnabled = true,
+  sunMultiplier = 1,
+  fogTint = null,
 }: DayNightCycleProps) {
   const ambientRef = useRef<THREE.AmbientLight>(null);
   const sunRef = useRef<THREE.DirectionalLight>(null);
@@ -313,11 +327,14 @@ export default function DayNightCycle({
 
     // Apply
     if (ambientRef.current) {
-      ambientRef.current.intensity = ambInt;
+      // Weather dampens ambient slightly less than the sun — overcast
+      // light is diffuse, so ambient stays mostly intact.
+      const ambMult = 1 - (1 - sunMultiplier) * 0.5;
+      ambientRef.current.intensity = ambInt * ambMult;
       ambientRef.current.color.copy(tmp.ambCol);
     }
     if (sunRef.current) {
-      sunRef.current.intensity = sunInt;
+      sunRef.current.intensity = sunInt * sunMultiplier;
       sunRef.current.color.copy(tmp.sunCol);
       sunRef.current.position.set(
         Math.cos(az) * Math.cos(el) * SUN_DIST,
@@ -334,9 +351,22 @@ export default function DayNightCycle({
       hemiRef.current.intensity = hemiInt;
     }
     if (fogRef.current) {
-      fogRef.current.color.copy(tmp.fogCol);
-      fogRef.current.near = fogN;
-      fogRef.current.far = fogF;
+      // Lerp fog toward the weather tint (if any). Strength scales with
+      // how dim the weather is — a 0.7 multiplier (mild cloudy) gives a
+      // gentle tint, 0.45 (heavy rain) pulls the fog noticeably grey.
+      if (fogTint) {
+        const tintCol = getColor(fogTint);
+        const lerpStrength = Math.min(1, (1 - sunMultiplier) * 1.4);
+        fogRef.current.color.copy(tmp.fogCol).lerp(tintCol, lerpStrength);
+        // Pull fog far in slightly on bad weather so distant landmarks
+        // fade — adds atmosphere without making the plaza unplayable.
+        fogRef.current.near = fogN;
+        fogRef.current.far = fogF * (1 - 0.25 * (1 - sunMultiplier));
+      } else {
+        fogRef.current.color.copy(tmp.fogCol);
+        fogRef.current.near = fogN;
+        fogRef.current.far = fogF;
+      }
     }
     if (skyMatRef.current) {
       const u = skyMatRef.current.uniforms;

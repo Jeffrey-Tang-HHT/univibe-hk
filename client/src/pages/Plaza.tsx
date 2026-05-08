@@ -36,6 +36,9 @@ import Volume2 from 'lucide-react/icons/volume-2';
 import VolumeX from 'lucide-react/icons/volume-x';
 import Sunrise from 'lucide-react/icons/sunrise';
 import FastForward from 'lucide-react/icons/fast-forward';
+// v10
+import Cloud from 'lucide-react/icons/cloud';
+import CloudRain from 'lucide-react/icons/cloud-rain';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -63,6 +66,11 @@ import DayNightSettings, {
 } from '@/components/plaza/DayNightSettings';
 import EmoteBar from '@/components/plaza/EmoteBar';
 import type { EmoteName } from '@/components/plaza/Avatar3D';
+// v10 additions
+import Weather from '@/components/plaza/Weather';
+import { resolveWeather, weatherSunMultiplier, type WeatherState } from '@/components/plaza/weather';
+import SpectatorWelcome from '@/components/plaza/SpectatorWelcome';
+import { translateText } from '@/lib/translate';
 
 // Whether NPCs count toward the displayed "online students" number in the
 // top-right HUD pill. Set to `false` to show only real, authenticated users
@@ -201,6 +209,46 @@ function PlazaInner() {
   }, [dayNightSettings]);
 
   const [showDayNightSettings, setShowDayNightSettings] = useState(false);
+
+  // ── v10: Weather ──
+  // Deterministic per-day weather, resolved on mount. Re-checked at the top
+  // of every hour so a midnight visitor doesn't stay on yesterday's weather
+  // forever. The resolver function reads localStorage for dev overrides
+  // (`plaza:weatherOverride`) so QA can force a state without waiting for
+  // the daily seed to roll.
+  const [weather, setWeather] = useState<WeatherState>(() => resolveWeather());
+  useEffect(() => {
+    // Cheap hourly tick. Aligned to the next wall-clock hour so the change
+    // visibly happens on the hour.
+    const now = Date.now();
+    const msToNextHour = 3_600_000 - (now % 3_600_000);
+    const timeout = setTimeout(() => {
+      setWeather(resolveWeather());
+      const interval = setInterval(() => setWeather(resolveWeather()), 3_600_000);
+      // Stash the interval id on the closure for cleanup.
+      (timeout as any)._interval = interval;
+    }, msToNextHour);
+    return () => {
+      clearTimeout(timeout);
+      const interval = (timeout as any)._interval;
+      if (interval) clearInterval(interval);
+    };
+  }, []);
+  const weatherFogTint = weather.mode === 'rain' ? '#5C6470' : weather.mode === 'cloudy' ? '#8E96A2' : null;
+
+  // ── v10: Auto-translate chat ──
+  // Persisted preference: whether to auto-translate other players' chat
+  // bubbles into the current UI language. Off by default so users opt in
+  // (translation costs API calls). Survives reloads.
+  const [autoTranslate, setAutoTranslate] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('plaza:autoTranslate') === '1';
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('plaza:autoTranslate', autoTranslate ? '1' : '0');
+    } catch { /* private mode */ }
+  }, [autoTranslate]);
 
   useEffect(() => {
     // SceneContext exposes the canonical spawn for the *current* scene
@@ -526,14 +574,20 @@ function PlazaInner() {
             <hemisphereLight>/<fog> block + the sky dome that lived in
             Environment3D.
             v9: cycleMinutes / fixedHour / starsEnabled are all driven
-            by user-facing settings via the <DayNightSettings> dialog. */}
+            by user-facing settings via the <DayNightSettings> dialog.
+            v10: sunMultiplier + fogTint react to today's weather. */}
         <DayNightCycle
           mode={dayNightSettings.mode}
           cycleMinutes={dayNightSettings.cycleMinutes}
           fixedHour={dayNightSettings.fixedHour}
           starsEnabled={dayNightSettings.starsEnabled}
+          sunMultiplier={weatherSunMultiplier(weather)}
+          fogTint={weatherFogTint}
           isMobile={IS_MOBILE}
         />
+
+        {/* v10: rain particles + extra clouds. Self-noops when weather is clear. */}
+        <Weather weather={weather} />
 
         <Suspense fallback={null}>
           <SceneRouter
@@ -594,6 +648,18 @@ function PlazaInner() {
 
       {/* ─── Ambient sound (mounts an invisible audio crossfade) ─── */}
       <AmbientSound />
+
+      {/* v10: First-time-visitor welcome card. Auto-opens AvatarCustomizer
+          after 30s. Shows only when the authenticated user has no saved
+          avatar AND the localStorage hasVisited flag is missing. The
+          original welcome heading still shows for the first 3.5s; this
+          slides in over the top once that fades. */}
+      <SpectatorWelcome
+        isFirstTime={!((user as any)?.avatar_config && Object.keys((user as any).avatar_config).length > 0)}
+        onComplete={(open) => {
+          if (open) setShowCustomizer(true);
+        }}
+      />
 
       {/* ─── Welcome overlay (fades after 3.5s) ─── */}
       <AnimatePresence>
@@ -693,6 +759,30 @@ function PlazaInner() {
           >
             <Globe className="w-3.5 h-3.5" />
           </Button>
+          {/* v10: Weather pill — non-interactive indicator for today's HK
+              weather. Hidden on clear days to avoid HUD clutter. Clicking
+              cycles a help-style toast since we don't expose user weather
+              control (the seed is shared across all players). */}
+          {weather.mode !== 'clear' && (
+            <button
+              type="button"
+              className="h-8 px-2 rounded-md bg-black/40 backdrop-blur-xl border border-white/15 shadow-lg text-white/80 hover:text-white hover:bg-black/60 text-xs font-medium flex items-center gap-1.5"
+              title={
+                weather.mode === 'rain'
+                  ? (lang === 'zh' ? '今日香港落雨' : 'Rainy in HK today')
+                  : (lang === 'zh' ? '今日香港多雲' : 'Cloudy in HK today')
+              }
+              onClick={() => toast(
+                weather.mode === 'rain'
+                  ? (lang === 'zh' ? '今日香港落雨 ☔️' : 'Rainy in HK today ☔️')
+                  : (lang === 'zh' ? '今日香港多雲 ☁️' : 'Cloudy in HK today ☁️'),
+              )}
+            >
+              {weather.mode === 'rain'
+                ? <CloudRain className="w-3.5 h-3.5" />
+                : <Cloud className="w-3.5 h-3.5" />}
+            </button>
+          )}
           {/* v9: Day/night settings opener — replaces v6's three-state cycler.
               Icon reflects current mode; tap opens the full settings panel. */}
           <Button
@@ -1026,12 +1116,41 @@ function PlazaInner() {
           className="absolute bottom-24 lg:bottom-20 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-md"
         >
           <div className="bg-card/95 backdrop-blur-xl rounded-2xl border border-border/50 shadow-2xl p-3">
+            {/* v10: Auto-translate toggle. Persisted to localStorage so the
+                preference survives reloads. When on, every chat bubble is
+                run through /api/translate (the helper short-circuits if
+                source matches target so it's cheap). */}
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                {lang === 'zh' ? '聊天' : 'Chat'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAutoTranslate((v) => !v)}
+                className={`text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                  autoTranslate
+                    ? 'bg-neon-coral/15 border-neon-coral/40 text-neon-coral'
+                    : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
+                }`}
+                aria-pressed={autoTranslate}
+                title={
+                  lang === 'zh'
+                    ? (autoTranslate ? '關閉自動翻譯' : '開啟自動翻譯')
+                    : (autoTranslate ? 'Auto-translate: on' : 'Auto-translate: off')
+                }
+              >
+                {lang === 'zh' ? '自動翻譯' : 'Translate'} {autoTranslate ? '✓' : ''}
+              </button>
+            </div>
             <div className="max-h-48 overflow-y-auto mb-3 space-y-2">
               {bubbles.slice(0, 10).map(b => (
-                <div key={b.id} className="flex items-start gap-2">
-                  <span className="text-xs font-medium text-neon-coral shrink-0">{b.display_name}</span>
-                  <span className="text-xs text-foreground">{b.content}</span>
-                </div>
+                <ChatBubbleLine
+                  key={b.id}
+                  displayName={b.display_name}
+                  content={b.content}
+                  autoTranslate={autoTranslate}
+                  targetLang={lang as 'zh' | 'en'}
+                />
               ))}
               {bubbles.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">
@@ -1193,6 +1312,71 @@ function PlazaInner() {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── v10: ChatBubbleLine ───
+// Small subcomponent so each bubble owns its own translation state and
+// fires the API call independently. We could use a parent-level Map keyed
+// on bubble.id, but per-bubble useEffect is simpler and the translation
+// helper has its own session cache so we don't double-fetch.
+//
+// Behaviour:
+//   - autoTranslate off → render `content` as-is.
+//   - autoTranslate on → kick off translateText() once, swap to the
+//     translated string when it resolves. Show a tiny ↻ marker while
+//     pending so the user knows something's loading.
+function ChatBubbleLine({
+  displayName,
+  content,
+  autoTranslate,
+  targetLang,
+}: {
+  displayName: string;
+  content: string;
+  autoTranslate: boolean;
+  targetLang: 'zh' | 'en';
+}) {
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!autoTranslate) {
+      setTranslated(null);
+      setPending(false);
+      return;
+    }
+    let cancelled = false;
+    setPending(true);
+    translateText(content, targetLang).then((t) => {
+      if (cancelled) return;
+      // If translation equals original (skipped path), show original — no
+      // visual shimmer for content already in the user's language.
+      setTranslated(t === content ? null : t);
+      setPending(false);
+    });
+    return () => { cancelled = true; };
+  }, [content, autoTranslate, targetLang]);
+
+  const display = translated ?? content;
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-xs font-medium text-neon-coral shrink-0">{displayName}</span>
+      <span className="text-xs text-foreground">
+        {display}
+        {pending && translated == null && (
+          <span className="ml-1 text-[10px] text-muted-foreground/70">↻</span>
+        )}
+        {translated != null && (
+          <span
+            className="ml-1 text-[9px] text-muted-foreground/70 align-middle"
+            title={`Original: ${content}`}
+          >
+            (✦)
+          </span>
+        )}
+      </span>
     </div>
   );
 }
